@@ -312,18 +312,21 @@ def train_chain(get_model, chain_config, display_every, save_path, experiment, t
         rmse = tester.rmse
         brmse = tester.brmse
         mse = float(rmse) ** 2 if np.isfinite(rmse) else float("inf")
+        l2re = getattr(tester, "l2re", float("inf"))
+        bc_l2re = getattr(tester, "bc_l2re", float("inf"))
 
-        print(f"After {opt_type} (stage {stage_idx}): MSE={mse}, RMSE={rmse}, BRMSE={brmse}")
+        print(f"After {opt_type} (stage {stage_idx}): MSE={mse}, RMSE={rmse}, BRMSE={brmse}, L2RE={l2re}, BC_L2RE={bc_l2re}")
 
         tag = f"stage_{stage_idx}_{opt_type.lower()}"
         _comet_log_metric(experiment, f"rmse_after_{tag}", rmse, step=trial_number)
         _comet_log_metric(experiment, f"brmse_after_{tag}", brmse, step=trial_number)
+        _comet_log_metric(experiment, f"l2re_after_{tag}", l2re, step=trial_number)
 
         if not np.isfinite(rmse) or not np.isfinite(brmse):
             print(f"NaN/Inf detected after {opt_type}. Stopping chain early.")
             break
 
-    return mse, rmse, brmse
+    return mse, rmse, brmse, l2re, bc_l2re
 
 
 def suggest_chain_config(
@@ -447,7 +450,7 @@ def create_optuna_objective(
         print(f"Chain config: {chain_config}")
         print(f"{'#'*70}\n")
 
-        mse, rmse, brmse = train_chain(
+        mse, rmse, brmse, l2re, bc_l2re = train_chain(
             get_model=get_model,
             chain_config=chain_config,
             display_every=display_every,
@@ -459,6 +462,8 @@ def create_optuna_objective(
         trial.set_user_attr("last_mse", float(mse) if np.isfinite(mse) else None)
         trial.set_user_attr("last_rmse", float(rmse) if np.isfinite(rmse) else None)
         trial.set_user_attr("last_brmse", float(brmse) if np.isfinite(brmse) else None)
+        trial.set_user_attr("last_l2re", float(l2re) if np.isfinite(l2re) else None)
+        trial.set_user_attr("last_bc_l2re", float(bc_l2re) if np.isfinite(bc_l2re) else None)
 
         obj_value = rmse + brmse if (np.isfinite(rmse) and np.isfinite(brmse)) else float("inf")
 
@@ -468,6 +473,8 @@ def create_optuna_objective(
                 "final_mse": mse if np.isfinite(mse) else -1,
                 "final_rmse": rmse if np.isfinite(rmse) else -1,
                 "final_brmse": brmse if np.isfinite(brmse) else -1,
+                "final_l2re": l2re if np.isfinite(l2re) else -1,
+                "final_bc_l2re": bc_l2re if np.isfinite(bc_l2re) else -1,
                 "final_objective": obj_value if np.isfinite(obj_value) else -1,
             },
             step=trial.number,
@@ -515,9 +522,9 @@ def write_results_csv(
     path,
     rows,
 ):
-    """rows: list of dicts with keys phase, run_id, mse, rmse, brmse, trajectory_json"""
+    """rows: list of dicts with keys phase, run_id, mse, rmse, brmse, l2re, bc_l2re, trajectory_json"""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    fieldnames = ["phase", "run_id", "mse", "rmse", "brmse", "trajectory_json"]
+    fieldnames = ["phase", "run_id", "mse", "rmse", "brmse", "l2re", "bc_l2re", "trajectory_json"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -552,7 +559,7 @@ def run_eval_trajectories(
         if seeds is not None:
             seed_k = int(seeds[k])
 
-        mse, rmse, brmse = train_chain(
+        mse, rmse, brmse, l2re, bc_l2re = train_chain(
             get_model=get_model,
             chain_config=chain_config,
             display_every=display_every,
@@ -561,16 +568,22 @@ def run_eval_trajectories(
             trial_number=eval_offset + k,
             seed=seed_k,
         )
-        results.append((mse, rmse, brmse))
-        print(f"Eval {k}: MSE={mse}, RMSE={rmse}, BRMSE={brmse}")
+        results.append((mse, rmse, brmse, l2re, bc_l2re))
+        print(f"Eval {k}: MSE={mse}, RMSE={rmse}, BRMSE={brmse}, L2RE={l2re}, BC_L2RE={bc_l2re}")
 
     if results:
         ms = [r[0] for r in results if np.isfinite(r[0])]
         brs = [r[2] for r in results if np.isfinite(r[2])]
+        l2res = [r[3] for r in results if np.isfinite(r[3])]
+        bc_l2res = [r[4] for r in results if np.isfinite(r[4])]
         if ms:
             _comet_log_metric(experiment, "eval_mean_mse", float(np.mean(ms)))
         if brs:
             _comet_log_metric(experiment, "eval_mean_brmse", float(np.mean(brs)))
+        if l2res:
+            _comet_log_metric(experiment, "eval_mean_l2re", float(np.mean(l2res)))
+        if bc_l2res:
+            _comet_log_metric(experiment, "eval_mean_bc_l2re", float(np.mean(bc_l2res)))
 
     return results
 
@@ -685,6 +698,8 @@ def run_optuna_study(
     best_mse = best_trial.user_attrs.get("last_mse")
     best_rmse = best_trial.user_attrs.get("last_rmse")
     best_brmse = best_trial.user_attrs.get("last_brmse")
+    best_l2re = best_trial.user_attrs.get("last_l2re")
+    best_bc_l2re = best_trial.user_attrs.get("last_bc_l2re")
 
     eval_save = os.path.join(save_base_path, "best_chain_eval")
     eval_results = run_eval_trajectories(
@@ -697,7 +712,7 @@ def run_optuna_study(
     )
 
     rows = []
-    # Optuna-best row: objective from study; mse/rmse/brmse from best trial attrs or NaN
+    # Optuna-best row: objective from study; metrics from best trial attrs
     rows.append(
         {
             "phase": "optuna_best",
@@ -705,11 +720,13 @@ def run_optuna_study(
             "mse": best_mse if best_mse is not None else "",
             "rmse": best_rmse if best_rmse is not None else "",
             "brmse": best_brmse if best_brmse is not None else "",
+            "l2re": best_l2re if best_l2re is not None else "",
+            "bc_l2re": best_bc_l2re if best_bc_l2re is not None else "",
             "trajectory_json": traj_json,
         }
     )
 
-    for k, (mse, rmse, brmse) in enumerate(eval_results):
+    for k, (mse, rmse, brmse, l2re, bc_l2re) in enumerate(eval_results):
         rows.append(
             {
                 "phase": "eval",
@@ -717,6 +734,8 @@ def run_optuna_study(
                 "mse": mse,
                 "rmse": rmse,
                 "brmse": brmse,
+                "l2re": l2re,
+                "bc_l2re": bc_l2re,
                 "trajectory_json": traj_json,
             }
         )
@@ -724,6 +743,8 @@ def run_optuna_study(
     if eval_results:
         mses = [r[0] for r in eval_results if np.isfinite(r[0])]
         brmses = [r[2] for r in eval_results if np.isfinite(r[2])]
+        l2res = [r[3] for r in eval_results if np.isfinite(r[3])]
+        bc_l2res = [r[4] for r in eval_results if np.isfinite(r[4])]
         rows.append(
             {
                 "phase": "eval_summary",
@@ -733,6 +754,8 @@ def run_optuna_study(
                 if eval_results
                 else "",
                 "brmse": float(np.mean(brmses)) if brmses else "",
+                "l2re": float(np.mean(l2res)) if l2res else "",
+                "bc_l2re": float(np.mean(bc_l2res)) if bc_l2res else "",
                 "trajectory_json": traj_json,
             }
         )

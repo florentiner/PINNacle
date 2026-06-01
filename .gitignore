@@ -169,3 +169,9 @@ cython_debug/
 .vscode/
 .idea/
 *csv
+
+# Local run artifacts
+runs_optuna/
+optuna_studies/
+*.db
+kaggle_test_*.ipynb

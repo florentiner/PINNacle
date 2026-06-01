@@ -348,6 +348,8 @@ class TesterCallback(Callback):
             # No validation epochs logged (training shorter than log_every cadence).
             self.rmse = float("inf")
             self.brmse = float("inf")
+            self.l2re = float("inf")
+            self.bc_l2re = float("inf")
             self._reset_lists()
             return
 
@@ -401,6 +403,8 @@ class TesterCallback(Callback):
         
         self.rmse = np.sqrt(self.mses[-1])
         self.brmse = self.bc_rmses[-1] if self.bc_rmses else float("inf")
+        self.l2re = float(self.l2res[-1]) if self.l2res else float("inf")
+        self.bc_l2re = float(self.bc_l2res[-1]) if self.bc_l2res else float("inf")
 
         self._reset_lists()
 
