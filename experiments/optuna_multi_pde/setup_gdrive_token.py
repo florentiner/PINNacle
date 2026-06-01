@@ -14,11 +14,17 @@ Steps:
 The token never expires as long as it is used at least once every 6 months.
 """
 
-import json
+import json, sys, os
 
-# ── Fill these in from your GCP OAuth2 Desktop app credentials ────────────────
-CLIENT_ID     = "PASTE_YOUR_CLIENT_ID_HERE"
-CLIENT_SECRET = "PASTE_YOUR_CLIENT_SECRET_HERE"
+# ── Pass the downloaded JSON file as argument, or fill in manually ─────────────
+if len(sys.argv) > 1:
+    _raw = json.load(open(sys.argv[1]))
+    _cfg = _raw.get("installed") or _raw.get("web")
+    CLIENT_ID     = _cfg["client_id"]
+    CLIENT_SECRET = _cfg["client_secret"]
+else:
+    CLIENT_ID     = "PASTE_YOUR_CLIENT_ID_HERE"
+    CLIENT_SECRET = "PASTE_YOUR_CLIENT_SECRET_HERE"
 # ─────────────────────────────────────────────────────────────────────────────
 
 SCOPES    = ["https://www.googleapis.com/auth/drive"]
