@@ -1,0 +1,48 @@
+{
+  "trial_number": 0,
+  "objective_rmse_plus_brmse": Infinity,
+  "params": {
+    "step_0_type": "LBFGS",
+    "step_0_lr": 0.8854820772958851,
+    "step_0_epochs": 3,
+    "step_1_type": "LBFGS",
+    "step_1_lr": 0.08893802295994357,
+    "step_1_epochs": 3,
+    "step_2_type": "Adam",
+    "step_2_lr": 0.2883698571194301,
+    "step_2_epochs": 3,
+    "step_3_type": "Adam",
+    "step_3_lr": 0.6144323748886419,
+    "step_3_epochs": 3,
+    "step_4_type": "LBFGS",
+    "step_4_lr": 0.8789762407364188,
+    "step_4_epochs": 3
+  },
+  "chain_config": [
+    {
+      "optimizer": "LBFGS",
+      "lr": 0.8969338695662966,
+      "epochs": 3
+    },
+    {
+      "optimizer": "LBFGS",
+      "lr": 0.1800442206639492,
+      "epochs": 3
+    },
+    {
+      "optimizer": "Adam",
+      "lr": 0.002954861585482358,
+      "epochs": 3
+    },
+    {
+      "optimizer": "Adam",
+      "lr": 0.006182880511397555,
+      "epochs": 3
+    },
+    {
+      "optimizer": "LBFGS",
+      "lr": 0.8910786166627769,
+      "epochs": 3
+    }
+  ]
+}
