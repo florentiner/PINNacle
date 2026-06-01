@@ -283,9 +283,12 @@ class Model:
             if not isinstance(losses, list):
                 losses = [losses]
             losses = torch.stack(losses)
-            # Weighted losses
+            # Weighted losses (match dtype/device: MPS has no float64)
             if loss_weights is not None:
-                losses *= torch.as_tensor(loss_weights)
+                lw = torch.as_tensor(
+                    loss_weights, dtype=losses.dtype, device=losses.device
+                )
+                losses *= lw
             # Clear cached Jacobians and Hessians.
             grad.clear()
             return outputs_, losses

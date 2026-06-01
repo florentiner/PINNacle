@@ -1,10 +1,9 @@
-# run_burgers1d_rl.py
 import os, sys
 os.environ["DDEBACKEND"] = "pytorch"
 from comet_ml import start
 from comet_ml.integration.pytorch import log_model
 
-proj_name = "rlpinn-kuramoto-sivashinsky-optimization"
+proj_name = "rlpinn-ns2d-longtime-optimization"
 experiment = start(
   api_key="aP71fQTYPNqfsYWvudPPmoBl5",
   project_name=proj_name,
@@ -21,8 +20,7 @@ import numpy as np
 import torch
 import deepxde as dde
 
-
-from src.pde.chaotic import KuramotoSivashinskyEquation
+from src.pde.ns import NS2D_LongTime
 from src.utils.args import parse_hidden_layers, parse_loss_weight
 from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback, ModelSaverCallback
 from rl_trainer import train_process_rl
@@ -30,7 +28,7 @@ from rl_trainer import train_process_rl
 experiment.log_parameters({
     "param": "v_1",
     "reward_function": "v_2",
-    "description": "optimization_kuramoto_sivashinsky_basic_RL_optimizer"
+    "description": "optimization_ns2d_longtime_basic_RL_optimizer"
 })
 
 def str2bool(v):
@@ -39,28 +37,20 @@ def str2bool(v):
     val = str(v).strip().lower()
     if val in {"true", "True", "1", "yes", "y", "on"}:
         return True
-    if val in {"false", "False","0", "no", "n", "off"}:
+    if val in {"false", "False", "0", "no", "n", "off"}:
         return False
     raise argparse.ArgumentTypeError(f"Invalid boolean value: {v}")
 
 
-
-def build_get_model_kuramoto_sivashinsky(hidden_layers: str):
-    """
-    Возвращает функцию get_model() как в benchmark_xxx.py, но только для Burgers1D. :contentReference[oaicite:1]{index=1}
-    """
-
+def build_get_model_ns2d_longtime(hidden_layers: str, datapath: str):
     def get_model():
-        pde = KuramotoSivashinskyEquation()
+        pde = NS2D_LongTime(datapath=datapath)
 
         layers = [pde.input_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
         net = dde.nn.FNN(layers, "tanh", "Glorot normal")
-
         net = net.float()
 
-                # loss weights
         loss_weights = np.ones(pde.num_loss, dtype=float)
-
         for i, c in enumerate(pde.loss_config):
             t = c.get("type", "")
             if t in ("boundary", "initial", "ic"):
@@ -68,16 +58,9 @@ def build_get_model_kuramoto_sivashinsky(hidden_layers: str):
             elif t == "pde":
                 loss_weights[i] = 1.0
             else:
-                # на всякий случай: оставляем 1 для прочих типов (например, gepinn/data/regularization)
                 loss_weights[i] = 1.0
 
-
         model = pde.create_model(net)
-        # model.compile(opt, loss_weights=loss_weights)
-
-        # ВАЖНО: ModelSaverCallback здесь нужен именно для RL, чтобы после каждого chunk получать список моделей
-        # RL-тренер добавит свой saver на каждый шаг, но базовый можно оставить для “обычных” логов, если хочешь.
-
         return model, loss_weights
 
     return get_model
@@ -85,43 +68,33 @@ def build_get_model_kuramoto_sivashinsky(hidden_layers: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name", type=str, default="kuramoto_sivashinsky_rl")
-    parser.add_argument("--device", type=str, default="0")  # "cpu" or cuda index
+    parser.add_argument("--name", type=str, default="ns2d_longtime_rl")
+    parser.add_argument("--device", type=str, default="0")
     parser.add_argument("--seed", type=int, default=1234)
-
-    # модель/обычный train
     parser.add_argument("--hidden-layers", type=str, default="100*5")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--plot-every", type=int, default=2000)
-
-    # RL config
     parser.add_argument("--n-trajectories", type=int, default=100)
     parser.add_argument("--n-steps-max", type=int, default=1000)
     parser.add_argument("--state-h", type=int, default=26)
     parser.add_argument("--state-w", type=int, default=26)
     parser.add_argument("--n-save-models", type=int, default=10)
     parser.add_argument("--log_key", type=str2bool, nargs="?", const=True, default=False)
-
-    # куда писать
     parser.add_argument("--out", type=str, default="runs_single")
-
+    parser.add_argument("--datapath", type=str, default="ref/ns_long.dat")
     args = parser.parse_args()
 
-    # --- папка эксперимента ---
     date_str = time.strftime("%m.%d-%H.%M.%S", time.localtime())
     save_path = os.path.join(args.out, f"{date_str}-{args.name}")
     os.makedirs(save_path, exist_ok=True)
 
-    # --- get_model / train_args как в benchmark_xxx.py :contentReference[oaicite:5]{index=5} ---
-    get_model = build_get_model_kuramoto_sivashinsky(args.hidden_layers)
-    get_model_rec = build_get_model_kuramoto_sivashinsky(args.hidden_layers)
+    get_model = build_get_model_ns2d_longtime(args.hidden_layers, args.datapath)
+    get_model_rec = build_get_model_ns2d_longtime(args.hidden_layers, args.datapath)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     train_args = {
-        # В RL-режиме iterations тут не главный (чанки задаёт action["epochs"]),
-        # но display_every/callbacks используются.
         "iterations": 1,
         "display_every": args.log_every,
         "callbacks": [
@@ -133,32 +106,27 @@ def main():
         "n_save_models": 10,
         "operator_coeff": 1,
         "bnd_coeff": 1,
-
     }
+
     optimizers = {
-        'Adam':{
-            'lr':[1e-2, 1e-3, 1e-4],
-            'epochs':[100, 1000, 2500]
-            # 'epochs':[500, 500, 500]
+        'Adam': {
+            'lr': [1e-2, 1e-3, 1e-4],
+            'epochs': [100, 1000, 2500],
         },
-        'LBFGS':{
-            'lr':[1, 5e-1, 1e-1],
-            'epochs':[100, 500, 1500]
+        'LBFGS': {
+            'lr': [1, 5e-1, 1e-1],
+            'epochs': [100, 500, 1500],
         },
-        'PSO':{
-            'lr':[0.0, 1e-3, 1e-4],
-            'epochs':[100, 200, 300]
+        'PSO': {
+            'lr': [0.0, 1e-3, 1e-4],
+            'epochs': [100, 200, 300],
         },
     }
 
     AE_model_params = {
         "mode": "NN",
         "num_of_layers": 3,
-        "layers_AE": [
-            991,
-            125,
-            15
-        ],
+        "layers_AE": [991, 125, 15],
         "num_models": None,
         "from_last": False,
         "prefix": "model-",
@@ -172,7 +140,7 @@ def main():
         "polars_weight": 0.0,
         "wellspacedtrajectory_weight": 0.0,
         "gridscaling_weight": 0.0,
-        "device": device
+        "device": device,
     }
 
     AE_train_params = {
@@ -191,18 +159,14 @@ def main():
         "learning_rate": 5e-4,
         "resume": True,
         "finetune_AE_model": False,
-        "log_key": args.log_key
+        "log_key": args.log_key,
     }
 
     loss_surface_params = {
         "loss_types": ["loss_total", "loss_oper", "loss_bnd"],
         "every_nth": 1,
         "num_of_layers": 3,
-        "layers_AE": [
-            991,
-            125,
-            15
-        ],
+        "layers_AE": [991, 125, 15],
         "batch_size": 32,
         "num_models": None,
         "from_last": False,
@@ -220,22 +184,22 @@ def main():
         "density_vmin": -1,
         "colorFromGridOnly": True,
         "img_dir": '',
-        "dde_pde_model": get_model_rec
+        "dde_pde_model": get_model_rec,
     }
 
     rl_agent_params = {
         "n_save_models": 10,
         "n_trajectories": 1000,
-        "tolerance": 1.67, 
+        "tolerance": 0.000063,
         "prev_tol": 0,
         "use_tol": False,
         "new_tol": 0,
-        "stuck_threshold": 10,  # Число эпох без значительного изменения прогресса
+        "stuck_threshold": 10,
         "min_loss_change": 1e-7,
         "min_grad_norm": 1e-5,
         "rl_buffer_size": 10000,
         "rl_batch_size": 32,
-        "n_transitions_reinit" : 2000,
+        "n_transitions_reinit": 2000,
         "gamma": 0.9,
         "rl_reward_method": "absolute",
         "reward_operator_coeff": 1,
@@ -245,23 +209,17 @@ def main():
         "lr": 1e-3,
         "exp": experiment,
         "log_key": args.log_key,
-        "proj_name": "rlpinn-ks-farm-transitions"
+        "proj_name": "rlpinn-ns2d-longtime-farm-transitions",
     }
+
     print(args.log_key)
-    # backup_params = {
-    #     "experiment_key" : "b0dae86c42924e4484b8bd194e2d58d9",
-    # }
     backup_params = None
 
     experiment.log_parameters(rl_agent_params)
-    # experiment.log_parameters(backup_params)
-    # --- вызов train_process_rl ---
-
-    # --- вызов train_process_rl ---
 
     data = dill.dumps((get_model, train_args, optimizers, AE_model_params, AE_train_params, loss_surface_params))
     train_process_rl(data=data, save_path=save_path, device=0, seed=args.seed, rl_agent_params=rl_agent_params)
 
+
 if __name__ == "__main__":
     main()
-
