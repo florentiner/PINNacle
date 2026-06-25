@@ -1,0 +1,920 @@
+{
+  "burgers_2d_continuous": [
+    {
+      "epochs": 118,
+      "lr": 0.21284487394037527,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.3139311629525616,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5361586958937653,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1049,
+      "lr": 0.23644272272549657,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 249,
+      "lr": 0.00011639656484354133,
+      "optimizer": "PSO"
+    }
+  ],
+  "burgers_2d_fixed": [
+    {
+      "epochs": 100,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 200,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.1,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "grayscott_continuous": [
+    {
+      "epochs": 1500,
+      "lr": 0.6702382640452342,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1447,
+      "lr": 0.008473150680901114,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2495,
+      "lr": 0.002015599433782934,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1381,
+      "lr": 0.5441296330087863,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 2027,
+      "lr": 0.0007387376635121558,
+      "optimizer": "Adam"
+    }
+  ],
+  "grayscott_fixed": [
+    {
+      "epochs": 500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1000,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1000,
+      "lr": 0.01,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    }
+  ],
+  "heat2d_complexgeometry_continuous": [
+    {
+      "epochs": 2423,
+      "lr": 0.00982638959992579,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0007689703164613702,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.2304783374524009,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.9840623410798778,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0008389269224783238,
+      "optimizer": "PSO"
+    }
+  ],
+  "heat2d_complexgeometry_fixed": [
+    {
+      "epochs": 100,
+      "lr": 0.1,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 200,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "heat2d_longtime_continuous": [
+    {
+      "epochs": 801,
+      "lr": 0.009605745032859334,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 892,
+      "lr": 0.00035778463476144093,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 367,
+      "lr": 0.0018804169524988296,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0007682268496640676,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0007861875534040072,
+      "optimizer": "PSO"
+    }
+  ],
+  "heat2d_longtime_fixed": [
+    {
+      "epochs": 1000,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 200,
+      "lr": 0.001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.001,
+      "optimizer": "PSO"
+    }
+  ],
+  "heat2d_multiscale_continuous": [
+    {
+      "epochs": 300,
+      "lr": 0.0009392894798810427,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 332,
+      "lr": 0.004912503172081666,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2412,
+      "lr": 0.0011625167166355696,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 501,
+      "lr": 0.8822894141632758,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.4430167383718925,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "heat2d_multiscale_fixed": [
+    {
+      "epochs": 1000,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1000,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "heat2d_varyingcoef_continuous": [
+    {
+      "epochs": 300,
+      "lr": 0.0008911387610520138,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 2056,
+      "lr": 0.0018414926068050588,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 749,
+      "lr": 0.3184849889164505,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.8857647498905935,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1480,
+      "lr": 0.42586586898249723,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "heat2d_varyingcoef_fixed": [
+    {
+      "epochs": 300,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "heatnd_continuous": [
+    {
+      "epochs": 2091,
+      "lr": 0.00213816199111207,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1711,
+      "lr": 0.00889149280479083,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2204,
+      "lr": 0.0010398482255409933,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0008375510481968578,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 993,
+      "lr": 0.8694035019785588,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "heatnd_fixed": [
+    {
+      "epochs": 100,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    }
+  ],
+  "ns2d_backstep_continuous": [
+    {
+      "epochs": 1612,
+      "lr": 0.007935838720887347,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.00019436122518362432,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 211,
+      "lr": 0.000576322868305407,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.7530360450326978,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5376811483381111,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "ns2d_backstep_fixed": [
+    {
+      "epochs": 200,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    }
+  ],
+  "ns2d_classic_continuous": [
+    {
+      "epochs": 913,
+      "lr": 0.005249602756827975,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1093,
+      "lr": 0.4282202038215175,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.00039806753700545594,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.8065788378526919,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5811621218103028,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "ns2d_classic_fixed": [
+    {
+      "epochs": 500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.01,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "poisson2d_classic_continuous": [
+    {
+      "epochs": 1511,
+      "lr": 0.0029301791658074092,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 2360,
+      "lr": 0.0007970009985381572,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0009493338727052394,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.19005168253268317,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.00011924076460671432,
+      "optimizer": "PSO"
+    }
+  ],
+  "poisson2d_classic_fixed": [
+    {
+      "epochs": 300,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "poisson2d_manyarea_continuous": [
+    {
+      "epochs": 227,
+      "lr": 0.000695671751220116,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.20579456136436225,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 460,
+      "lr": 0.5628825876797668,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 766,
+      "lr": 0.8154717686576477,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 734,
+      "lr": 0.5869789272923888,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "poisson2d_manyarea_fixed": [
+    {
+      "epochs": 1500,
+      "lr": 0.1,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1000,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    }
+  ],
+  "poissonboltzmann2d_continuous": [
+    {
+      "epochs": 300,
+      "lr": 0.0005729755350934611,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1161,
+      "lr": 0.5714292525143012,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0002505658061943473,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.3842903636117515,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.23345036949469172,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "poissonboltzmann2d_fixed": [
+    {
+      "epochs": 200,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.01,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    }
+  ],
+  "poissoninv_continuous": [
+    {
+      "epochs": 1503,
+      "lr": 0.006330026836880135,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.7672819215528235,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 588,
+      "lr": 0.006351422096209964,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1236,
+      "lr": 0.17923640510138783,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1421,
+      "lr": 0.007970384688825884,
+      "optimizer": "Adam"
+    }
+  ],
+  "poissoninv_fixed": [
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.1,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.01,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1500,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "poissonnd_continuous": [
+    {
+      "epochs": 2371,
+      "lr": 0.004849844625053517,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 1613,
+      "lr": 0.007385063466941565,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 724,
+      "lr": 0.4714647057009095,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0007117161231558569,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0009597689289741865,
+      "optimizer": "PSO"
+    }
+  ],
+  "poissonnd_fixed": [
+    {
+      "epochs": 100,
+      "lr": 0.001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 200,
+      "lr": 0.001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "wave1d_continuous": [
+    {
+      "epochs": 300,
+      "lr": 0.0005431393115168514,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.7804861716228377,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0008528889152350692,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 307,
+      "lr": 0.713808402526179,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1040,
+      "lr": 0.5127913843640607,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "wave1d_fixed": [
+    {
+      "epochs": 100,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1500,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    }
+  ],
+  "wave2d_heterogeneous_continuous": [
+    {
+      "epochs": 237,
+      "lr": 0.0006174307831705594,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0001737935825201077,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 1316,
+      "lr": 0.0036594251522910786,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 514,
+      "lr": 0.005136326198058822,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 571,
+      "lr": 0.0036090045962815713,
+      "optimizer": "Adam"
+    }
+  ],
+  "wave2d_heterogeneous_fixed": [
+    {
+      "epochs": 300,
+      "lr": 0.0001,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 2500,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 200,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.0001,
+      "optimizer": "Adam"
+    }
+  ],
+  "wave2d_longtime_continuous": [
+    {
+      "epochs": 522,
+      "lr": 0.5681658026711583,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 1979,
+      "lr": 0.003287010682693368,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0003106244837892307,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 531,
+      "lr": 0.005691896456950259,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 562,
+      "lr": 0.003939701006485361,
+      "optimizer": "Adam"
+    }
+  ],
+  "wave2d_longtime_fixed": [
+    {
+      "epochs": 100,
+      "lr": 1.0,
+      "optimizer": "LBFGS"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.01,
+      "optimizer": "Adam"
+    },
+    {
+      "epochs": 300,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 200,
+      "lr": 0.0,
+      "optimizer": "PSO"
+    },
+    {
+      "epochs": 100,
+      "lr": 0.5,
+      "optimizer": "LBFGS"
+    }
+  ]
+}
