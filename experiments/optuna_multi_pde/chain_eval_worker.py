@@ -26,6 +26,33 @@ if (
 import deepxde as dde
 
 
+# Extra kwargs to pass to build_get_model() beyond hidden_layers.
+# None means the function takes no arguments at all.
+_PDE_EXTRA_KWARGS: dict = {
+    "grayscott":              {"datapath": "ref/grayscott.dat"},
+    "heat2d_complexgeometry": {"datapath": "ref/heat_complex.dat"},
+    "heat2d_longtime":        {"datapath": "ref/heat_longtime.dat"},
+    "heat2d_varyingcoef":     {"datapath": "ref/heat_darcy.dat"},
+    "ns2d_backstep":          {"datapath": "ref/ns_0_obstacle.dat"},
+    "ns2d_classic":           {"datapath": "ref/ns2d.dat"},
+    "ns2d_longtime":          {"datapath": "ref/ns_long.dat"},
+    "poisson2d_classic":      {"datapath": "ref/poisson1_cg_data.dat"},
+    "poisson2d_manyarea":     {"datapath": "ref/poisson_manyarea.dat"},
+    "poissonboltzmann2d":     {"datapath": "ref/poisson_boltzmann2d.dat"},
+    "poisson3d_complexgeometry": {"datapath": "ref/poisson_3d.dat"},
+    "wave2d_heterogeneous":   {"datapath": "ref/wave_darcy.dat"},
+    "burgers_2d": {
+        "datapath": "ref/burgers2d_0.dat",
+        "icpath_u": "ref/burgers2d_init_u_0.dat",
+        "icpath_v": "ref/burgers2d_init_v_0.dat",
+    },
+    "heatnd":    {"dim": 5},
+    "poissonnd": {"dim": 5},
+    "poissoninv": None,
+    "heatinv":    None,
+}
+
+
 def _load_get_model(pde_name: str, hidden_layers: str = "100*5"):
     """Dynamically import build_get_model from the PDE's optuna script."""
     import importlib.util
@@ -39,7 +66,10 @@ def _load_get_model(pde_name: str, hidden_layers: str = "100*5"):
     spec.loader.exec_module(mod)
     if not hasattr(mod, "build_get_model"):
         raise AttributeError(f"{script} has no build_get_model()")
-    return mod.build_get_model(hidden_layers)
+    extra = _PDE_EXTRA_KWARGS.get(pde_name, {})
+    if extra is None:
+        return mod.build_get_model()
+    return mod.build_get_model(hidden_layers, **extra)
 
 
 def main():
