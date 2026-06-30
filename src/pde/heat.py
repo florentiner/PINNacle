@@ -226,6 +226,27 @@ class Heat2D_LongTime(baseclass.BaseTimePDE):
 
         self.load_ref_data(datapath)
 
+        # ref_sol via NearestND interpolation so TesterCallback can sample
+        # boundary points and compute brmse.  The Dirichlet BC is u=0 on the
+        # spatial boundary, so boundary points get value 0 (exact).
+        _X_ref = self.ref_data[:, :3].copy()
+        _u_ref = self.ref_data[:, 3:].copy()
+        import scipy.interpolate as _sci
+        _interp = _sci.NearestNDInterpolator(_X_ref, _u_ref)
+        _b = bbox
+
+        def ref_sol(x):
+            vals = _interp(x)
+            # Dirichlet BC: u=0 on spatial boundary (x0 or x1 at domain edge)
+            on_bnd = (
+                np.isclose(x[:, 0], _b[0], atol=1e-4) | np.isclose(x[:, 0], _b[1], atol=1e-4) |
+                np.isclose(x[:, 1], _b[2], atol=1e-4) | np.isclose(x[:, 1], _b[3], atol=1e-4)
+            )
+            vals[on_bnd] = 0.0
+            return vals
+
+        self.ref_sol = ref_sol
+
         # BCs
         def f_func(x):
             return np.sin(INITIAL_COEF_1 * x[:, 0:1]) * np.sin(INITIAL_COEF_2 * x[:, 1:2])
