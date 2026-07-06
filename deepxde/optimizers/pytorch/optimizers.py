@@ -117,5 +117,19 @@ def _get_learningrate_scheduler(optim, decay):
     if decay[0] == "step":
         return torch.optim.lr_scheduler.StepLR(optim, step_size=decay[1], gamma=decay[2])
 
+    if decay[0] == "warmup_step":
+        # Linear warmup from ~0 to the base lr over `warmup_steps`, then StepLR(step_size, gamma)
+        # decay thereafter. Matches the SOAP-for-PINNs recipe in "Gradient Alignment in PINNs: A
+        # Second-Order Optimization Perspective" (arXiv:2502.00604): warmup 0->1e-3 over 5000
+        # steps, then exponential decay.
+        _, warmup_steps, step_size, gamma = decay
+        warmup = torch.optim.lr_scheduler.LinearLR(
+            optim, start_factor=1e-8, end_factor=1.0, total_iters=warmup_steps
+        )
+        after_warmup = torch.optim.lr_scheduler.StepLR(optim, step_size=step_size, gamma=gamma)
+        return torch.optim.lr_scheduler.SequentialLR(
+            optim, schedulers=[warmup, after_warmup], milestones=[warmup_steps]
+        )
+
     # TODO: More learning rate scheduler
     raise NotImplementedError(f"{decay[0]} learning rate scheduler to be implemented for backend pytorch.")

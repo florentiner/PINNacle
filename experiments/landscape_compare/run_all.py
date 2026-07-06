@@ -39,8 +39,18 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 RUN_EXPERIMENT = os.path.join(os.path.dirname(__file__), "run_experiment.py")
 
 ALL_PDES = ["kuramoto_sivashinsky", "grayscott", "burgers1d"]
-DEFAULT_METHODS = ["adam_baseline", "lbfgs_baseline", "frozen"]
-ALL_METHODS = ["adam_baseline", "lbfgs_baseline", "causal", "soap", "soap_causal", "frozen"]
+# Default comparison, four methods covering the three candidate fixes from the literature plus
+# the failure baseline -- see METHOD_SPEC in run_experiment.py for the exact paper-backed configs:
+#   origin       - the failure case: Adam + lr-decay, plain MSE loss.
+#   causal       - same Adam pipeline, causal time-weighted loss (Wang et al. 2022, 2203.07404).
+#   soap_causal  - SOAP (Shampoo-preconditioned Adam) + causal loss, tuned per the paper that
+#                  benchmarks SOAP on KS/Grey-Scott directly (arXiv:2502.00604); this IS "the
+#                  SOAP/second-order option" -- not the same thing as `lbfgs_baseline` (Adam->
+#                  L-BFGS), which is a different, weaker-on-chaotic optimizer axis kept only to
+#                  confirm that plain L-BFGS underperforms.
+#   frozen       - gradient-free control (Frozen-PINN).
+DEFAULT_METHODS = ["origin", "causal", "soap_causal", "frozen"]
+ALL_METHODS = ["origin", "causal", "adam_baseline", "lbfgs_baseline", "soap", "soap_causal", "frozen"]
 
 
 def main():

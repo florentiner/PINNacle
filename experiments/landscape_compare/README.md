@@ -11,10 +11,34 @@ run the matrix on one machine and analyze it anywhere.
 
 ## What runs
 
-Default matrix = `{kuramoto_sivashinsky, grayscott, burgers1d} × {adam_baseline,
-lbfgs_baseline, frozen}`. `burgers1d` is the **control** (a PDE PINNs solve well, and where
-Frozen-PINN is known-accurate). Optional one-flag methods: `causal`, `soap`, `soap_causal`
-(already wired, off by default).
+Default matrix = `{kuramoto_sivashinsky, grayscott, burgers1d} × {origin, causal, frozen}`.
+`burgers1d` is the **control** (a PDE PINNs solve well, and where Frozen-PINN is
+known-accurate). `origin` = plain MSE loss, `causal` = causal time-weighted loss — **both use
+the same paper-backed optimizer pipeline** (below), so the loss is the only variable. `frozen`
+is the gradient-free control. Optional one-flag methods: `adam_baseline` (alias of `origin`),
+`lbfgs_baseline` (Adam→L-BFGS), `soap`, `soap_causal`.
+
+### Optimizer pipeline (used by every gradient method)
+
+Chosen from the literature, not guessed: both the causal paper (Wang, Sankaran & Perdikaris,
+"Respecting causality is all you need…", 2022, arXiv:2203.07404) and the "Expert's Guide to
+Training PINNs" (Wang et al. 2023, arXiv:2308.08468) use **Adam only — *not* L-BFGS** for
+stiff/chaotic time-dependent PDEs (the Expert's Guide recommends *"Adam exclusively"*), with
+**lr 1e-3 and exponential (step) decay ×0.9 every 2000 iterations**, default betas
+(0.9, 0.999). Causal loss uses a fixed **ε = 1.0** (Expert's-Guide default, so all temporal
+weights converge to 1; the causal paper's alternative anneals ε through [1e-2, 1e-1, 1, 10,
+100]) with `num_causal_buckets = 32`. `lbfgs_baseline` keeps an L-BFGS tail on purpose — the
+literature says it's *worse* on chaotic, so it's there to confirm that, not as a recommendation.
+The papers use ≥1e4 iterations, so pass `--iterations 15000` (or more) for real runs.
+
+### Controlled weight initialization
+
+Every gradient method at a given seed starts from the **same** network weights (a deterministic
+seed-derived Glorot-normal init, independent of loss type), so any difference between `origin`
+and `causal` is due to the *method*, not the starting point. Different seeds start from
+*different* weights, so `--n-repeats` gives a genuine spread. (Collocation points are likewise
+shared across methods within a seed.) `frozen` has no network; its Gray-Scott/Burgers random
+features are seeded instead, and KS-frozen is deterministic by construction.
 
 ## Requirements
 
@@ -39,12 +63,12 @@ Numbers from `--quick` are meaningless — it exists only to validate plumbing.
 
 **2. The real run:**
 ```bash
-# full default matrix (gradient methods train for --iterations; tune to your budget)
+# full default matrix {origin, causal, frozen} (gradient methods train for --iterations)
 python experiments/landscape_compare/run_all.py --iterations 15000
 
-# add the optional fixes if you want them in the comparison:
+# add optimizer-variant methods if you also want the "which optimizer" comparison:
 python experiments/landscape_compare/run_all.py \
-    --methods adam_baseline lbfgs_baseline causal soap soap_causal frozen \
+    --methods origin causal lbfgs_baseline soap soap_causal frozen \
     --iterations 15000
 
 # analyze:

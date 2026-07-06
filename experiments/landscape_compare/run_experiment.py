@@ -100,12 +100,40 @@ PDE_REGISTRY = {
 
 # method -> (loss_type, optimizer schedule). schedule = list of (opt_name, lr, frac)
 # where frac is the fraction of --iterations spent in that phase. frozen has no schedule.
+# Paper-backed "best" gradient pipeline for chaotic PINNs, applied to *every* gradient method
+# so the loss/approach is the only variable. Both the causal paper (Wang, Sankaran & Perdikaris,
+# "Respecting causality...", 2022, arXiv:2203.07404) and the "Expert's Guide to Training PINNs"
+# (Wang et al. 2023, arXiv:2308.08468) use **Adam only -- NOT L-BFGS** for stiff/chaotic
+# time-dependent PDEs (the Expert's Guide recommends "Adam exclusively"), with lr 1e-3 and an
+# exponential (step) learning-rate decay of x0.9 every 2000 iterations. Causal loss uses a fixed,
+# moderately large eps=1.0 (Expert's Guide default, so all temporal weights converge to 1; the
+# causal paper's alternative is to anneal eps through [1e-2, 1e-1, 1, 10, 100]).
+# Second pipeline: SOAP (Shampoo-preconditioned Adam), per "Gradient Alignment in Physics-
+# informed Neural Networks: A Second-Order Optimization Perspective" (arXiv:2502.00604), the
+# paper that actually benchmarks SOAP on Kuramoto-Sivashinsky AND Grey-Scott (30.6x lower error
+# than Adam on Grey-Scott). Their recipe: lr warmup 0->1e-3 over 5000 steps then x0.9 decay,
+# precondition_frequency=2 (not the SOAP default of 10), high momentum beta1=0.99. Their own
+# baseline pipeline runs causal training by default, so the paper's "SOAP" result is really
+# SOAP+causal -- that combination is what `soap_causal` below is meant to reproduce.
+SOAP_P = ("soap", 1e-3, ("warmup_step", 5000, 2000, 0.9))
+
+# Each schedule phase is (opt_name, lr, decay, frac_of_total_iterations).
+ADAM_P = ("adam", 1e-3, ("step", 2000, 0.9))   # the shared best pipeline P*
+
 METHOD_SPEC = {
-    "adam_baseline":  {"loss_type": "origin", "schedule": [("adam", 1e-3, 1.0)]},
-    "lbfgs_baseline": {"loss_type": "origin", "schedule": [("adam", 1e-3, 0.5), ("lbfgs", 1.0, 0.5)]},
-    "causal":         {"loss_type": "causal", "schedule": [("adam", 1e-3, 1.0)]},
-    "soap":           {"loss_type": "origin", "schedule": [("soap", 3e-3, 1.0)]},
-    "soap_causal":    {"loss_type": "causal", "schedule": [("soap", 3e-3, 1.0)]},
+    # -- recommended comparison: identical best pipeline P*, differing ONLY in the loss --
+    "origin":         {"loss_type": "origin", "schedule": [(*ADAM_P, 1.0)]},
+    "causal":         {"loss_type": "causal", "schedule": [(*ADAM_P, 1.0)]},
+    # -- SOAP/second-order: the paper-tuned config above, on both losses --
+    "soap":           {"loss_type": "origin", "schedule": [(*SOAP_P, 1.0)]},
+    "soap_causal":    {"loss_type": "causal", "schedule": [(*SOAP_P, 1.0)]},
+    # -- optimizer-variant methods kept for the "which optimizer" question; the causal-paper /
+    #    Expert's-Guide literature says plain L-BFGS is worse on chaotic, so lbfgs_baseline
+    #    mainly exists to confirm that (see also arXiv:2501.16371, which finds *self-scaled*
+    #    quasi-Newton variants like SSBroyden far outperform plain L-BFGS on Kuramoto-Sivashinsky
+    #    -- not implemented here, but worth knowing plain L-BFGS is not the strongest QN baseline) --
+    "adam_baseline":  {"loss_type": "origin", "schedule": [(*ADAM_P, 1.0)]},   # alias of `origin`
+    "lbfgs_baseline": {"loss_type": "origin", "schedule": [(*ADAM_P, 0.5), ("lbfgs", 1.0, None, 0.5)]},
     "frozen":         {"loss_type": "origin", "schedule": None},
 }
 
@@ -134,17 +162,44 @@ def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_b
 # =========================================================================== #
 # Optimizer compilation (mirrors rl_trainer._build_torch_optimizer)
 # =========================================================================== #
-def compile_optimizer(model, opt_name, lr, loss_weights):
+def compile_optimizer(model, opt_name, lr, loss_weights, decay=None):
+    """decay: a DeepXDE decay spec e.g. ("step", step_size, gamma) for StepLR, or None.
+    Applied to Adam/SOAP (the paper recipe's x0.9-every-2000 schedule); L-BFGS ignores it."""
     if opt_name == "adam":
-        model.compile(torch.optim.Adam(model.net.parameters(), lr=lr), loss_weights=loss_weights)
+        model.compile(torch.optim.Adam(model.net.parameters(), lr=lr), decay=decay, loss_weights=loss_weights)
     elif opt_name == "lbfgs":
         opt = torch.optim.LBFGS(model.net.parameters(), lr=lr, line_search_fn="strong_wolfe", max_iter=10)
         model.compile(opt, loss_weights=loss_weights)
     elif opt_name == "soap":
-        set_SOAP_options(lr=lr)
-        model.compile("SOAP", loss_weights=loss_weights)
+        # precondition_frequency=2 and betas=(0.99, 0.999) per arXiv:2502.00604's ablation
+        # (their default SOAP_options in deepxde/optimizers/config.py use frequency=10, beta1=0.95
+        # -- untuned for PINNs); shampoo_beta left at its class default (not specified by the paper).
+        set_SOAP_options(lr=lr, betas=(0.99, 0.999), precondition_frequency=2)
+        model.compile("SOAP", decay=decay, loss_weights=loss_weights)
     else:
         raise ValueError(f"Unknown optimizer '{opt_name}'")
+
+
+def seed_init_network(net, seed):
+    """(Re)initialize an FNN's weights deterministically from `seed` ALONE.
+
+    Guarantees the controlled-experiment property the comparison needs: every method at a given
+    seed starts from the *same* weights (so the method is the only variable), while different
+    seeds start from *different* weights (so repeats give a genuine spread). Reproduces DeepXDE's
+    "Glorot normal" (Xavier-normal, gain=1) with zero biases, using a dedicated CPU Generator so
+    the result depends only on the seed -- not on the device, the loss type, or how much RNG the
+    rest of model construction happened to consume first.
+    """
+    g = torch.Generator(device="cpu").manual_seed(int(seed))
+    with torch.no_grad():
+        for m in net.modules():
+            if isinstance(m, torch.nn.Linear):
+                fan_out, fan_in = m.weight.shape[0], m.weight.shape[1]
+                std = (2.0 / (fan_in + fan_out)) ** 0.5  # Xavier/Glorot normal, gain=1
+                w = torch.randn(m.weight.shape, generator=g) * std
+                m.weight.copy_(w.to(m.weight.device, m.weight.dtype))
+                if m.bias is not None:
+                    m.bias.zero_()
 
 
 # =========================================================================== #
@@ -462,15 +517,18 @@ def main():
         get_model_rec = build_get_model(args.pde, hidden_layers, spec["loss_type"],
                                         args.causal_eps, args.num_causal_buckets)
         model, loss_weights = get_model()
+        # Shared, method-independent starting point: identical weights for every method at this
+        # seed, different weights across seeds (see seed_init_network).
+        seed_init_network(model.net, args.seed)
 
         n_phases = len(spec["schedule"])
         saves_per_phase = max(1, args.n_save_models // n_phases)
         solver_models = []
-        for (opt_name, lr, frac) in spec["schedule"]:
+        for (opt_name, lr, decay, frac) in spec["schedule"]:
             phase_iters = max(1, int(round(args.iterations * frac)))
-            compile_optimizer(model, opt_name, lr, loss_weights)
+            compile_optimizer(model, opt_name, lr, loss_weights, decay=decay)
             saver = ModelSaverCallback(total_iterations=phase_iters, n_save_models=saves_per_phase)
-            print(f"--- phase: {opt_name} lr={lr} iters={phase_iters} ---")
+            print(f"--- phase: {opt_name} lr={lr} decay={decay} iters={phase_iters} ---")
             model.train(iterations=phase_iters, display_every=args.display_every,
                         callbacks=[saver], model_save_path=run_dir, save_model=False)
             solver_models.extend(saver.saved_models)
