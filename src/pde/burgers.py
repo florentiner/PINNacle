@@ -7,8 +7,10 @@ from . import baseclass
 
 class Burgers1D(baseclass.BaseTimePDE):
 
-    def __init__(self, datapath="ref/burgers1d.dat", geom=[-1, 1], time=[0, 1], nu=0.01 / np.pi):
+    def __init__(self, datapath="ref/burgers1d.dat", geom=[-1, 1], time=[0, 1], nu=0.01 / np.pi,
+                 loss_type="origin", causal_eps=1.0, num_causal_buckets=32):
         super().__init__()
+        self.set_loss_type(loss_type=loss_type, causal_eps=causal_eps, num_causal_buckets=num_causal_buckets)
         # output dim
         self.output_dim = 1
         # domain

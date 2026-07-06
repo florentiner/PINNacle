@@ -3,7 +3,7 @@ import numpy as np
 from .data import Data
 from .. import backend as bkd
 from .. import config
-from ..backend import backend_name
+from ..backend import backend_name, torch
 from ..utils import get_num_args, run_if_all_none
 
 
@@ -30,6 +30,19 @@ class PDE(Data):
             If ``None``, then the training points will be used for testing.
         auxiliary_var_function: A function that inputs `train_x` or `test_x` and outputs
             auxiliary variables.
+        loss_type (string): "origin" (default) uses the plain, unweighted mean over PDE
+            residual points. "causal" applies the causal-training weighting of Wang et al.,
+            "Respecting causality is all you need for training physics-informed neural
+            networks" (2022): PDE points are bucketed by their time coordinate (last input
+            dimension) and each bucket's mean-squared residual is weighted by
+            ``exp(-causal_eps * cumulative residual of earlier buckets)``, so the network is
+            pushed to fit earlier times before later ones. Requires a time-dependent
+            geometry (``GeometryXTime``); BC/IC losses are unaffected. Only supported on
+            the PyTorch backend.
+        causal_eps (float): Steepness of the causal weighting (only used if
+            ``loss_type == "causal"``). Larger values enforce stricter causality.
+        num_causal_buckets (int): Number of time buckets used for causal weighting (only
+            used if ``loss_type == "causal"``).
 
     Warning:
         The testing points include points inside the domain and points on the boundary,
@@ -84,6 +97,9 @@ class PDE(Data):
         solution=None,
         num_test=None,
         auxiliary_var_function=None,
+        loss_type="origin",
+        causal_eps=1.0,
+        num_causal_buckets=32,
     ):
         self.geom = geometry
         self.pde = pde
@@ -97,6 +113,12 @@ class PDE(Data):
 
         self.soln = solution
         self.num_test = num_test
+
+        if loss_type not in ("origin", "causal"):
+            raise ValueError(f"loss_type must be 'origin' or 'causal', got {loss_type!r}")
+        self.loss_type = loss_type
+        self.causal_eps = causal_eps
+        self.num_causal_buckets = num_causal_buckets
 
         self.auxiliary_var_fn = auxiliary_var_function
 
@@ -147,15 +169,60 @@ class PDE(Data):
         bcs_start = np.cumsum([0] + self.num_bcs)
         bcs_start = list(map(int, bcs_start))
         error_f = [fi[bcs_start[-1] :] for fi in f]
-        losses = [
-            loss_fn[i](bkd.zeros_like(error), error) for i, error in enumerate(error_f)
-        ]
+        if self.loss_type == "causal":
+            pde_t = self._causal_time_coords(inputs[bcs_start[-1] :])
+            losses = [self._causal_pde_loss(error, pde_t) for error in error_f]
+        else:
+            losses = [
+                loss_fn[i](bkd.zeros_like(error), error) for i, error in enumerate(error_f)
+            ]
         for i, bc in enumerate(self.bcs):
             beg, end = bcs_start[i], bcs_start[i + 1]
             # The same BC points are used for training and testing.
             error = bc.error(self.train_x, inputs, outputs, beg, end)
             losses.append(loss_fn[len(error_f) + i](bkd.zeros_like(error), error))
         return losses
+
+    def _causal_time_coords(self, inputs):
+        """Time coordinate (last input dim) of PDE points, or None without a time axis."""
+        if not hasattr(self.geom, "timedomain"):
+            return None
+        return inputs[:, -1]
+
+    def _causal_pde_loss(self, error, t):
+        """Causal-weighted MSE of a PDE residual (Wang et al., 2022).
+
+        Buckets `error` by time `t`, weights each bucket's mean-squared residual by
+        exp(-causal_eps * cumulative mean-squared residual of earlier buckets) with the
+        weights detached from autograd, and returns the weighted mean over buckets.
+        Falls back to the plain (unweighted) MSE if there is no time axis to bucket by.
+        """
+        if backend_name != "pytorch":
+            raise NotImplementedError("loss_type='causal' is only implemented for the pytorch backend.")
+        if t is None:
+            return bkd.reduce_mean(bkd.square(error))
+
+        sq_error = torch.square(error)
+        if sq_error.dim() > 1:
+            sq_error = sq_error.reshape(sq_error.shape[0], -1).mean(dim=1)
+        t = t.reshape(-1).contiguous()
+
+        t0, t1 = self.geom.timedomain.t0, self.geom.timedomain.t1
+        num_buckets = self.num_causal_buckets
+        edges = torch.linspace(t0, t1, num_buckets + 1, device=sq_error.device, dtype=sq_error.dtype)
+        bucket_idx = torch.bucketize(t, edges[1:-1])
+
+        bucket_losses = sq_error.new_zeros(num_buckets)
+        bucket_counts = sq_error.new_zeros(num_buckets)
+        bucket_losses.scatter_add_(0, bucket_idx, sq_error)
+        bucket_counts.scatter_add_(0, bucket_idx, torch.ones_like(sq_error))
+        bucket_means = bucket_losses / bucket_counts.clamp(min=1.0)
+
+        with torch.no_grad():
+            cumulative_prior_loss = torch.cumsum(bucket_means, dim=0) - bucket_means
+            weights = torch.exp(-self.causal_eps * cumulative_prior_loss)
+
+        return (weights * bucket_means).sum() / weights.sum().clamp(min=1e-12)
 
     @run_if_all_none("train_x", "train_y", "train_aux_vars")
     def train_next_batch(self, batch_size=None):
@@ -291,6 +358,9 @@ class TimePDE(PDE):
         solution=None,
         num_test=None,
         auxiliary_var_function=None,
+        loss_type="origin",
+        causal_eps=1.0,
+        num_causal_buckets=32,
     ):
         self.num_initial = num_initial
         super().__init__(
@@ -305,6 +375,9 @@ class TimePDE(PDE):
             solution=solution,
             num_test=num_test,
             auxiliary_var_function=auxiliary_var_function,
+            loss_type=loss_type,
+            causal_eps=causal_eps,
+            num_causal_buckets=num_causal_buckets,
         )
 
     @run_if_all_none("train_x_all")

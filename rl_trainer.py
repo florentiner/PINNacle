@@ -16,7 +16,7 @@ import deepxde as dde
 from RL.rl_environment import EnvRLOptimizer
 from RL.rl_algorithms import DQNAgent
 from src.utils.callbacks import ModelSaverCallback  
-from deepxde.optimizers.config import set_LBFGS_options, set_PSO_options, LBFGS_options, PSO_options
+from deepxde.optimizers.config import set_LBFGS_options, set_PSO_options, set_SOAP_options, LBFGS_options, PSO_options, SOAP_options
 from typing import Any, Dict
 
 # Enforce single-precision defaults before any model/layer creation.
@@ -97,7 +97,14 @@ def _build_torch_optimizer(opt_name: str, params, action: Dict[str, Any]):
         )
         return "PSO"  # deepxde/optimizers/pytorch/pso.PSO
 
-    raise ValueError(f"Unknown optimizer type: {opt_name}. Expected Adam / LBFGS / PSO.")
+    if name == "soap":
+        # Second-order optimizer; hyperparameters passed via global SOAP_options
+        set_SOAP_options(
+            lr=float(opt_params.get("lr", 3e-3)),
+        )
+        return "SOAP"  # deepxde/optimizers/pytorch/soap.SOAP
+
+    raise ValueError(f"Unknown optimizer type: {opt_name}. Expected Adam / LBFGS / PSO / SOAP.")
 
 
 def run_deepxde_rl_training(

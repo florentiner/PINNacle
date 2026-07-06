@@ -19,8 +19,7 @@ experiment = start(
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.append(PROJECT_ROOT)
-import time
+sys.path.insert(0, PROJECT_ROOT)  # insert (not append) so local landscape_visualization/src shadow any same-named packages in site-packagesimport time
 import argparse
 import dill
 import numpy as np

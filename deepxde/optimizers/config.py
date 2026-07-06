@@ -1,4 +1,4 @@
-__all__ = ["set_LBFGS_options", "set_NNCG_options", "set_PSO_options", "set_hvd_opt_options"]
+__all__ = ["set_LBFGS_options", "set_NNCG_options", "set_PSO_options", "set_SOAP_options", "set_hvd_opt_options"]
 
 from ..backend import backend_name
 # from ..config import hvd
@@ -6,6 +6,7 @@ from ..backend import backend_name
 LBFGS_options = {}
 NNCG_options = {}
 PSO_options = {}
+SOAP_options = {}
 hvd = None
 if hvd is not None:
     hvd_opt_options = {}
@@ -160,6 +161,50 @@ def set_PSO_options(
     PSO_options["n_iter"] = n_iter
 
 
+def set_SOAP_options(
+    lr=3e-3,
+    betas=(0.95, 0.95),
+    shampoo_beta=0.95,
+    eps=1e-8,
+    weight_decay=0.01,
+    precondition_frequency=10,
+    max_precond_dim=10000,
+    precondition_1d=False,
+    correct_bias=True,
+):
+    """Sets the hyperparameters of SOAP (second-order optimizer).
+
+    The SOAP optimizer only supports PyTorch. See "SOAP: Improving and Stabilizing
+    Shampoo using Adam" (Vyas et al., 2024), https://arxiv.org/abs/2409.11321.
+
+    Args:
+        lr (float): Learning rate.
+        betas (tuple): Adam-style momentum coefficients, applied in the preconditioner's
+            eigenbasis.
+        shampoo_beta (float): Momentum coefficient for the Shampoo preconditioner
+            (G G^T, G^T G) statistics.
+        eps (float): Numerical-stability constant added to the denominator.
+        weight_decay (float): Decoupled weight decay coefficient.
+        precondition_frequency (int): Number of steps between refreshes of the
+            preconditioner's eigenbasis.
+        max_precond_dim (int): Parameter dimensions larger than this are left
+            unpreconditioned (to bound the cost of the eigendecomposition).
+        precondition_1d (bool): Whether to also precondition 1D parameters (e.g.
+            biases). Defaults to `False`, in which case they use plain Adam.
+        correct_bias (bool): Whether to apply Adam-style bias correction.
+    """
+    global SOAP_options
+    SOAP_options["lr"] = lr
+    SOAP_options["betas"] = betas
+    SOAP_options["shampoo_beta"] = shampoo_beta
+    SOAP_options["eps"] = eps
+    SOAP_options["weight_decay"] = weight_decay
+    SOAP_options["precondition_frequency"] = precondition_frequency
+    SOAP_options["max_precond_dim"] = max_precond_dim
+    SOAP_options["precondition_1d"] = precondition_1d
+    SOAP_options["correct_bias"] = correct_bias
+
+
 def set_hvd_opt_options(
     compression=None,
     op=None,
@@ -193,6 +238,7 @@ def set_hvd_opt_options(
 set_LBFGS_options()
 set_NNCG_options()
 set_PSO_options()
+set_SOAP_options()
 if hvd is not None:
     set_hvd_opt_options()
 

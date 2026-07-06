@@ -26,6 +26,19 @@ class BasePDE():
 
         self.recommend_net = None
 
+        self.loss_type = "origin"
+        self.causal_eps = 1.0
+        self.num_causal_buckets = 32
+
+    def set_loss_type(self, loss_type="origin", causal_eps=1.0, num_causal_buckets=32):
+        """Selects the PDE-residual loss: "origin" (plain mean) or "causal" (Wang et
+        al. 2022 causal-training weighting, requires a time-dependent PDE)."""
+        if loss_type not in ("origin", "causal"):
+            raise ValueError(f"loss_type must be 'origin' or 'causal', got {loss_type!r}")
+        self.loss_type = loss_type
+        self.causal_eps = causal_eps
+        self.num_causal_buckets = num_causal_buckets
+
     @property
     def input_dim(self):
         return self.geom.dim
@@ -190,6 +203,9 @@ class BasePDE():
             num_domain=self.num_domain_points,
             num_boundary=self.num_boundary_points,
             num_test=self.num_test_points,
+            loss_type=self.loss_type,
+            causal_eps=self.causal_eps,
+            num_causal_buckets=self.num_causal_buckets,
         )
         self.model = dde.Model(self.data, net)
         self.model.pde = self
@@ -236,7 +252,10 @@ class BaseTimePDE(BasePDE):
             num_domain=self.num_domain_points,
             num_boundary=self.num_boundary_points,
             num_initial=self.num_initial_points,
-            num_test=self.num_test_points
+            num_test=self.num_test_points,
+            loss_type=self.loss_type,
+            causal_eps=self.causal_eps,
+            num_causal_buckets=self.num_causal_buckets,
         )
         self.model = dde.Model(self.data, net)
         self.model.pde = self

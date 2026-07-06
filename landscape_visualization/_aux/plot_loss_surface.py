@@ -260,6 +260,12 @@ class PlotLossSurface:
         trajectory_models = trajectory_models * self.transform.std.cpu() + self.transform.mean.cpu()
         original_models = original_models * self.transform.std.cpu() + self.transform.mean.cpu()
 
+        # Stash the raw high-dimensional (original/reconstructed) and 2D latent
+        # trajectory data so callers can persist it alongside the plots.
+        self.trajectory_coordinates_2d = trajectory_coordinates
+        self.trajectory_original_nd = original_models
+        self.trajectory_reconstructed_nd = trajectory_models
+
         # Вычисление ошибки для моделей в траектории
         trajectory_losses = self.compute_losses(trajectory_models)
         original_trajectory_losses = self.compute_losses(original_models)

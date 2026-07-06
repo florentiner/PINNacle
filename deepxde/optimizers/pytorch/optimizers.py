@@ -4,7 +4,8 @@ import torch
 
 # from .nncg import NNCG
 from .pso import PSO
-from ..config import LBFGS_options, NNCG_options, PSO_options
+from .soap import SOAP
+from ..config import LBFGS_options, NNCG_options, PSO_options, SOAP_options
 
 
 # NOTE: edited
@@ -48,6 +49,25 @@ def get(params, optimizer, learning_rate=None, decay=None, weight_decay=0):
             cg_max_iters=NNCG_options["cgmaxiter"],
             line_search_fn=NNCG_options["lsfun"],
             verbose=NNCG_options["verbose"],
+        )
+    elif optimizer == "SOAP":
+        if weight_decay > 0:
+            raise ValueError(
+                "weight_decay is ignored for SOAP; set it via dde.optimizers.set_SOAP_options(weight_decay=...)"
+            )
+        if learning_rate is not None or decay is not None:
+            print("Warning: learning rate is ignored for {}; set it via dde.optimizers.set_SOAP_options(lr=...)".format(optimizer))
+        optim = SOAP(
+            params,
+            lr=SOAP_options["lr"],
+            betas=SOAP_options["betas"],
+            shampoo_beta=SOAP_options["shampoo_beta"],
+            eps=SOAP_options["eps"],
+            weight_decay=SOAP_options["weight_decay"],
+            precondition_frequency=SOAP_options["precondition_frequency"],
+            max_precond_dim=SOAP_options["max_precond_dim"],
+            precondition_1d=SOAP_options["precondition_1d"],
+            correct_bias=SOAP_options["correct_bias"],
         )
     elif optimizer == "PSO":
         if weight_decay > 0:

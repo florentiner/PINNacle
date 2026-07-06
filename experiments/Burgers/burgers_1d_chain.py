@@ -16,8 +16,7 @@ experiment = start(
 )
 
 
-sys.path.append(PROJECT_ROOT)
-
+sys.path.insert(0, PROJECT_ROOT)  # insert (not append) so local landscape_visualization/src shadow any same-named packages in site-packages
 import time
 import argparse
 import dill
@@ -29,6 +28,7 @@ import deepxde as dde
 from src.pde.burgers import Burgers1D
 from src.utils.args import parse_hidden_layers
 from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback
+from src.frozen_pinn import solve_burgers1d_frozen
 from rl_trainer import train_process_rl
 
 
@@ -63,6 +63,50 @@ def build_get_model_burgers1d(hidden_layers: str, **pde_kwargs):
     return get_model
 
 
+def run_frozen_pinn(args, save_path):
+    """Gradient-free solve via Frozen-PINN, bypassing the RL/optimizer training pipeline."""
+    pde = Burgers1D(datapath=args.datapath, nu=args.nu)
+
+    t0 = time.time()
+    sol, features, predict = solve_burgers1d_frozen(
+        geom=(pde.geom.l, pde.geom.r),
+        time=(pde.geomtime.timedomain.t0, pde.geomtime.timedomain.t1),
+        nu=args.nu,
+        num_features=args.frozen_num_features,
+        num_collocation=args.frozen_num_collocation,
+        eta=args.frozen_eta,
+        seed=args.seed,
+        num_time_eval=args.frozen_num_time_eval,
+    )
+    elapsed = time.time() - t0
+
+    u_pred = predict(pde.ref_data[:, 0], pde.ref_data[:, 1])
+    u_true = pde.ref_data[:, 2]
+    rmse = float(np.sqrt(np.mean((u_pred - u_true) ** 2)))
+
+    print(f"\nFrozen-PINN solve finished in {elapsed:.3f}s ({sol.nfev} RHS evaluations).")
+    print(f"RMSE vs reference data: {rmse:.6f}")
+
+    np.savez(
+        os.path.join(save_path, "frozen_pinn_solution.npz"),
+        x_ref=pde.ref_data[:, 0],
+        t_ref=pde.ref_data[:, 1],
+        u_true=u_true,
+        u_pred=u_pred,
+        rmse=rmse,
+        solve_time=elapsed,
+    )
+
+    experiment.log_parameters({
+        "pinn_mode": "frozen",
+        "frozen_num_features": args.frozen_num_features,
+        "frozen_num_collocation": args.frozen_num_collocation,
+        "frozen_eta": args.frozen_eta,
+        "frozen_num_time_eval": args.frozen_num_time_eval,
+    })
+    experiment.log_metrics({"frozen_rmse": rmse, "frozen_solve_time": elapsed})
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", type=str, default="burgers1d_rl")
@@ -79,15 +123,37 @@ def main():
     parser.add_argument("--datapath", type=str, default="ref/burgers1d.dat", help="Reference data path")
     parser.add_argument("--nu", type=float, default=float(0.01 / np.pi), help="Viscosity")
 
+    parser.add_argument("--loss-type", type=str, choices=["origin", "causal"], default="origin",
+                         help="'origin' for the plain mean PDE loss, 'causal' for causal-training weighting (Wang et al. 2022)")
+    parser.add_argument("--causal-eps", type=float, default=1.0, help="Causal weighting steepness (only used if --loss-type=causal)")
+    parser.add_argument("--num-causal-buckets", type=int, default=32, help="Number of time buckets for causal weighting (only used if --loss-type=causal)")
+    parser.add_argument("--optimizer-type", type=str, choices=["origin", "second-order"], default="origin",
+                         help="'origin' for the current RL-driven Adam/LBFGS/PSO optimizer schedule, 'second-order' to use the SOAP optimizer")
+
+    parser.add_argument("--pinn-mode", type=str, choices=["origin", "frozen"], default="origin",
+                         help="'origin' for the current RL-driven gradient-descent PINN pipeline, "
+                              "'frozen' to solve with Frozen-PINN (frozen random features + gradient-free ODE-in-time solve, arXiv:2405.20836) instead")
+    parser.add_argument("--frozen-num-features", type=int, default=2000, help="Number of frozen random features (only used if --pinn-mode=frozen)")
+    parser.add_argument("--frozen-num-collocation", type=int, default=4000, help="Number of spatial collocation points (only used if --pinn-mode=frozen)")
+    parser.add_argument("--frozen-eta", type=float, default=2.0, help="Random-feature bias range [-eta, eta] (only used if --pinn-mode=frozen)")
+    parser.add_argument("--frozen-num-time-eval", type=int, default=201, help="Number of time points to evaluate the ODE solution at (only used if --pinn-mode=frozen)")
+
     args = parser.parse_args()
 
     date_str = time.strftime("%m.%d-%H.%M.%S", time.localtime())
     save_path = os.path.join(args.out, f"{date_str}-{args.name}")
     os.makedirs(save_path, exist_ok=True)
 
+    if args.pinn_mode == "frozen":
+        run_frozen_pinn(args, save_path)
+        return
+
     pde_kwargs = dict(
         datapath=args.datapath,
         nu=args.nu,
+        loss_type=args.loss_type,
+        causal_eps=args.causal_eps,
+        num_causal_buckets=args.num_causal_buckets,
     )
 
     get_model = build_get_model_burgers1d(args.hidden_layers, **pde_kwargs)
@@ -109,11 +175,16 @@ def main():
         "bnd_coeff": 1,
     }
 
-    optimizers = {
+    optimizers_origin = {
         "Adam": {"lr": [1e-2, 1e-3, 1e-4], "epochs": [100, 1000, 2500]},
         "LBFGS": {"lr": [1, 5e-1, 1e-1], "epochs": [100, 500, 1500]},
         "PSO": {"lr": [0.0, 1e-3, 1e-4], "epochs": [100, 200, 300]},
     }
+    optimizers_second_order = {
+        "Adam": {"lr": [1e-2, 1e-3], "epochs": [100, 1000]},
+        "SOAP": {"lr": [3e-3, 1e-3], "epochs": [500, 2000]},
+    }
+    optimizers = optimizers_second_order if args.optimizer_type == "second-order" else optimizers_origin
 
     AE_model_params = {
         "mode": "NN",
@@ -200,6 +271,12 @@ def main():
     }
 
     experiment.log_parameters(rl_agent_params)
+    experiment.log_parameters({
+        "loss_type": args.loss_type,
+        "causal_eps": args.causal_eps,
+        "num_causal_buckets": args.num_causal_buckets,
+        "optimizer_type": args.optimizer_type,
+    })
 
     data = dill.dumps((get_model, train_args, optimizers, AE_model_params, AE_train_params, loss_surface_params))
     train_process_rl(data=data, save_path=save_path, device=args.device, seed=args.seed, rl_agent_params=rl_agent_params)

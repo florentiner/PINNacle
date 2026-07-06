@@ -1,0 +1,115 @@
+# Chaotic-PDE method comparison via loss-landscape visualization
+
+Controlled experiments to understand **why vanilla PINNs fail on the chaotic PDEs**
+(Kuramoto–Sivashinsky, Gray–Scott) and which fixes recover a good solution — using the
+repo's loss-landscape visualization to explain the difference. See
+[`HYPOTHESIS.md`](HYPOTHESIS.md) for the scientific design; this file is the run guide.
+
+Everything here is **self-contained**: no Comet, no RL, no `.env`, deterministic seed. Each
+(pde, method) cell runs in its own process and writes all of its data to disk, so you can
+run the matrix on one machine and analyze it anywhere.
+
+## What runs
+
+Default matrix = `{kuramoto_sivashinsky, grayscott, burgers1d} × {adam_baseline,
+lbfgs_baseline, frozen}`. `burgers1d` is the **control** (a PDE PINNs solve well, and where
+Frozen-PINN is known-accurate). Optional one-flag methods: `causal`, `soap`, `soap_causal`
+(already wired, off by default).
+
+## Requirements
+
+Same environment as PINNacle (PyTorch backend). The analysis step needs only
+numpy/scipy/matplotlib.
+
+```bash
+export DDEBACKEND=pytorch
+export KMP_DUPLICATE_LIB_OK=TRUE      # the scripts also set these defaults themselves
+# GPU is used automatically if torch.cuda.is_available(); otherwise CPU.
+```
+
+## Run it
+
+**1. Smoke-test the whole pipeline first (tiny settings, minutes):**
+```bash
+python experiments/landscape_compare/run_all.py --quick
+python experiments/landscape_compare/compare_landscapes.py --runs runs_landscape_compare
+```
+This confirms every cell writes its full layout and the analysis produces a CSV + figures.
+Numbers from `--quick` are meaningless — it exists only to validate plumbing.
+
+**2. The real run:**
+```bash
+# full default matrix (gradient methods train for --iterations; tune to your budget)
+python experiments/landscape_compare/run_all.py --iterations 15000
+
+# add the optional fixes if you want them in the comparison:
+python experiments/landscape_compare/run_all.py \
+    --methods adam_baseline lbfgs_baseline causal soap soap_causal frozen \
+    --iterations 15000
+
+# analyze:
+python experiments/landscape_compare/compare_landscapes.py --runs runs_landscape_compare
+```
+
+`run_all.py` is **resumable** — a cell whose `metrics.json` exists is skipped (use `--force`
+to redo). You can also run a single cell directly:
+```bash
+python experiments/landscape_compare/run_experiment.py --pde grayscott --method frozen
+```
+
+**3. Repeat trials (recommended — checks a result is robust, not a fluke):**
+```bash
+python experiments/landscape_compare/run_all.py --pdes kuramoto_sivashinsky grayscott --n-repeats 3
+python experiments/landscape_compare/compare_landscapes.py --runs runs_landscape_compare
+```
+`--n-repeats 3` runs every requested `(pde, method)` cell 3x with seeds `1234, 1235, 1236`
+(or `base, base+1, base+2` if you also pass `--seed base`; use `--seeds 7 42 99` for full
+control). Repeats nest under `<out>/seed_<N>/<pde>/<method>/`; `compare_landscapes.py`
+detects this automatically and reports **mean ± std across seeds** — a small std means the
+result is robust, a large one (or a sign flip) means the single-seed number was noise.
+Note: KS-frozen and the fully-deterministic parts of a run are bit-identical across seeds by
+construction (no randomness to vary) — that's expected, not a bug; only the network-init/
+collocation-sampling (gradient methods) and the random-feature draw (Gray–Scott/Burgers
+frozen) actually change with the seed.
+
+### Useful flags (passed through `run_all.py`)
+`--pdes`, `--methods`, `--iterations`, `--hidden-layers 100*5`, `--n-save-models 10`,
+`--grid-xnum 25` (landscape grid resolution), `--ae-epochs 10000`, `--seed 1234`,
+`--n-repeats`, `--seeds`, `--causal-eps`, `--num-causal-buckets`, `--quick`, `--force`.
+
+## Outputs (per cell: `runs_landscape_compare/<pde>/<method>/`)
+
+```
+config.json           # every hyperparameter, seed, git commit, timestamps
+metrics.json          # relative-L2, MSE/MAE, IC/boundary error, Fourier low/mid/high, wall-clock
+solution/fields.npz   # coords, pred, ref, abs_error on the full reference grid  (ALL methods)
+loss_history.csv      # per-display-step loss components                          (gradient)
+trajectory_error.csv  # relative-L2 at each landscape checkpoint                  (gradient)
+checkpoints/model-*.pt# the saved trajectory of network weights                   (gradient)
+landscape/            # 2D-embedded loss landscape                                (gradient)
+  trajectory_2d.npy, trajectory_original_nd.npy, trajectory_reconstructed_nd.npy
+  grid_2d.npz               # grid_xx, grid_yy, grid_losses (loss_total)
+  grid_losses_all.npz       # loss_total, loss_oper, loss_bnd grids
+  trajectory_losses.npz     # per-checkpoint losses
+  map_*.pdf                 # rendered landscape / error maps + CKA density
+frozen/               # coefficients.npz (C(t)); feature_spectrum.npz (conditioning)  (frozen)
+```
+With `--n-repeats`/`--seeds` > 1, everything above nests one level deeper under
+`seed_<N>/<pde>/<method>/...`. Top level: `MANIFEST.json` (status + key metric per cell,
+written by `run_all.py`), `compare_summary.csv` (one row per run), `compare_summary_agg.csv`
+(one row per `(pde, method)`, mean ± std across seeds) and `comparison_figures/*.pdf`
+(bars show std as error bars) — all written by `compare_landscapes.py`.
+
+## Runtime notes / knobs
+
+- **KS Frozen** is a spectral solve — very accurate (relative-L2 ≈ 3e-5) and fast (~7 s; an
+  analytic Jacobian tames the stiff BDF integration). `--quick` shrinks modes/tolerances.
+- **Gray–Scott Frozen** is *best-effort* (2D tanh features, no exact BC, horizon T=200): it
+  runs in ~30 s and captures `u` reasonably but `v` poorly — an expected limitation, and a
+  data point in its own right (see H5 in `HYPOTHESIS.md`).
+- **Gradient landscapes** are the heavy part: the loss grid is `(grid_xnum+1)²` full PINN
+  loss evaluations, and the trajectory autoencoder trains for `--ae-epochs`. Lower
+  `--grid-xnum` and `--ae-epochs` if you are CPU-bound; Gray–Scott (2D, ~32k points) is the
+  slowest.
+- Because each cell is a subprocess, a failure in one cell (e.g. an integrator blow-up) is
+  recorded in `MANIFEST.json` and does **not** stop the rest of the matrix.

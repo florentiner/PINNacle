@@ -17,8 +17,7 @@ experiment = start(
 )
 
 
-sys.path.append(PROJECT_ROOT)
-
+sys.path.insert(0, PROJECT_ROOT)  # insert (not append) so local landscape_visualization/src shadow any same-named packages in site-packages
 
 import time
 import argparse
