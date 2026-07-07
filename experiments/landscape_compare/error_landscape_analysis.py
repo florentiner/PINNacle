@@ -39,10 +39,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 EPS = 1e-12
-GRADIENT_METHODS = ["origin", "causal", "soap", "soap_causal", "adam_baseline", "lbfgs_baseline"]
+GRADIENT_METHODS = ["origin", "causal", "soap", "soap_causal", "best_practice",
+                    "adam_baseline", "lbfgs_baseline"]
 METHOD_COLORS = {"origin": "tab:red", "causal": "tab:blue", "soap": "tab:orange",
-                 "soap_causal": "tab:green", "adam_baseline": "tab:brown",
-                 "lbfgs_baseline": "tab:purple"}
+                 "soap_causal": "tab:green", "best_practice": "tab:cyan",
+                 "adam_baseline": "tab:brown", "lbfgs_baseline": "tab:purple"}
 
 
 # --------------------------------------------------------------------------- #
@@ -55,6 +56,9 @@ PERIODIC_SPEC = {"kuramoto_sivashinsky": (1, 1.0), "grayscott": (2, np.pi), "bur
 
 
 def load_state(path):
+    """Returns ("fnn", layers) or ("modified_mlp", (enc_u, enc_v, layers)) from a checkpoint;
+    layers/encoders are (W, b) numpy pairs. Architecture is detected from the state-dict keys
+    (ModifiedMLP additionally has encoder_u/encoder_v)."""
     import torch  # local import: only used to deserialize; math below is numpy
     sd = torch.load(path, map_location="cpu")
     layers = []
@@ -64,8 +68,14 @@ def load_state(path):
                        sd[f"linears.{i}.bias"].numpy().astype(np.float64)))
         i += 1
     if not layers:
-        raise ValueError(f"No 'linears.*' keys in {path} -- not a DeepXDE FNN state dict")
-    return layers
+        raise ValueError(f"No 'linears.*' keys in {path} -- not a recognized checkpoint")
+    if "encoder_u.weight" in sd:
+        enc_u = (sd["encoder_u.weight"].numpy().astype(np.float64),
+                 sd["encoder_u.bias"].numpy().astype(np.float64))
+        enc_v = (sd["encoder_v.weight"].numpy().astype(np.float64),
+                 sd["encoder_v.bias"].numpy().astype(np.float64))
+        return ("modified_mlp", (enc_u, enc_v, layers))
+    return ("fnn", layers)
 
 
 def embed_inputs(x, pde, fourier_modes):
@@ -83,23 +93,48 @@ def embed_inputs(x, pde, fourier_modes):
     return np.concatenate(feats, axis=1)
 
 
-def forward(layers, x, pde=None, fourier_modes=0):
-    """x: (N, in_dim) float64 raw coords -> (N, out_dim). Applies the periodic embedding when
-    the run was trained with one, then tanh on all but the last layer (dde FNN)."""
+def forward(net, x, pde=None, fourier_modes=0):
+    """net: the (arch, params) pair from load_state. x: (N, in_dim) float64 raw coords ->
+    (N, out_dim). Applies the periodic embedding when the run was trained with one, then the
+    architecture's forward pass (tanh FNN, or the modified MLP's encoder-gated layers)."""
+    arch, params = net
     h = embed_inputs(x, pde, fourier_modes) if fourier_modes else x
-    if h.shape[1] != layers[0][0].shape[1]:
-        raise ValueError(f"input dim {h.shape[1]} != first-layer dim {layers[0][0].shape[1]} "
-                         f"(fourier_modes={fourier_modes} mismatch with checkpoint?)")
-    for k, (W, b) in enumerate(layers):
-        h = h @ W.T + b
-        if k < len(layers) - 1:
-            h = np.tanh(h)
-    return h
+    if arch == "fnn":
+        layers = params
+        if h.shape[1] != layers[0][0].shape[1]:
+            raise ValueError(f"input dim {h.shape[1]} != first-layer dim {layers[0][0].shape[1]} "
+                             f"(fourier_modes={fourier_modes} mismatch with checkpoint?)")
+        for k, (W, b) in enumerate(layers):
+            h = h @ W.T + b
+            if k < len(layers) - 1:
+                h = np.tanh(h)
+        return h
+    # modified MLP (Wang et al. 2021): encoder-gated hidden chain -- mirror of
+    # run_experiment.ModifiedMLP.forward
+    (Wu, bu), (Wv, bv), layers = params
+    U = np.tanh(h @ Wu.T + bu)
+    V = np.tanh(h @ Wv.T + bv)
+    H = np.tanh(h @ layers[0][0].T + layers[0][1])
+    for (W, b) in layers[1:-1]:
+        Z = np.tanh(H @ W.T + b)
+        H = (1 - Z) * U + Z * V
+    return H @ layers[-1][0].T + layers[-1][1]
 
 
-def lerp_layers(a, b, lam):
+def _lerp_pairs(a, b, lam):
     return [(Wa * (1 - lam) + Wb * lam, ba * (1 - lam) + bb * lam)
             for (Wa, ba), (Wb, bb) in zip(a, b)]
+
+
+def lerp_nets(a, b, lam):
+    """Interpolate two load_state results of the same architecture."""
+    arch, pa = a
+    _, pb = b
+    if arch == "fnn":
+        return (arch, _lerp_pairs(pa, pb, lam))
+    (ua, va, la), (ub, vb, lb) = pa, pb
+    return (arch, (_lerp_pairs([ua], [ub], lam)[0], _lerp_pairs([va], [vb], lam)[0],
+                   _lerp_pairs(la, lb, lam)))
 
 
 def rel_l2(pred, ref):
@@ -151,7 +186,7 @@ def analyze_run(run_dir, n_ref=4000, n_lambda=5, rng=None):
     path_x, path_err = [0.0], [errs[0]]
     for i in range(len(nets) - 1):
         for lam in lam_grid:
-            P = forward(lerp_layers(nets[i], nets[i + 1], lam), X, pde_name, fmodes).reshape(Y.shape)
+            P = forward(lerp_nets(nets[i], nets[i + 1], lam), X, pde_name, fmodes).reshape(Y.shape)
             path_x.append(i + lam)
             path_err.append(rel_l2(P, Y))
         path_x.append(float(i + 1))

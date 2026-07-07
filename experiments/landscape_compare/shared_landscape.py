@@ -50,8 +50,8 @@ from landscape_visualization._aux.early_stopping_plot import EarlyStopping
 from landscape_visualization._aux.plot_loss_surface import PlotLossSurface
 
 METHOD_COLORS = {"origin": "tab:red", "causal": "tab:blue", "soap": "tab:orange",
-                 "soap_causal": "tab:green", "adam_baseline": "tab:brown",
-                 "lbfgs_baseline": "tab:purple"}
+                 "soap_causal": "tab:green", "best_practice": "tab:cyan",
+                 "adam_baseline": "tab:brown", "lbfgs_baseline": "tab:purple"}
 GRADIENT_METHODS = list(METHOD_COLORS)
 
 
@@ -83,6 +83,20 @@ def build_shared(pde, seed, seed_dir, methods, args, out_root):
     if len(cfgs) < 2:
         print(f"[skip] {pde}@seed{seed}: fewer than 2 gradient runs with configs")
         return
+    # Methods with a different parameter space (e.g. best_practice's modified MLP) cannot live
+    # in the same autoencoder embedding as the plain-FNN methods: drop them with a note instead
+    # of failing the whole build, then require the remaining runs to match exactly.
+    archs = {m: c.get("arch", "fnn") for m, c in cfgs.items()}
+    majority_arch = max(set(archs.values()), key=list(archs.values()).count)
+    dropped = [m for m, a in archs.items() if a != majority_arch]
+    if dropped:
+        print(f"[note] {pde}@seed{seed}: excluding {dropped} (arch != '{majority_arch}'); a "
+              f"shared landscape requires one parameter space")
+        for m in dropped:
+            cfgs.pop(m)
+    if len(cfgs) < 2:
+        print(f"[skip] {pde}@seed{seed}: fewer than 2 same-architecture gradient runs")
+        return
     fmodes = {c.get("fourier_modes", 0) for c in cfgs.values()}
     hiddens = {c.get("hidden_layers") for c in cfgs.values()}
     if len(fmodes) > 1 or len(hiddens) > 1:
@@ -92,7 +106,8 @@ def build_shared(pde, seed, seed_dir, methods, args, out_root):
     fourier_modes, hidden = fmodes.pop(), hiddens.pop()
 
     # -- template model (ORIGIN loss = neutral shared yardstick for the loss grid) --
-    get_model = rex.build_get_model(pde, hidden, "origin", 1.0, 32, fourier_modes=fourier_modes)
+    get_model = rex.build_get_model(pde, hidden, "origin", 1.0, 32, fourier_modes=fourier_modes,
+                                    arch=majority_arch)
 
     # -- union of checkpoints, remembering per-method slices --
     tmpl_model, _ = get_model()

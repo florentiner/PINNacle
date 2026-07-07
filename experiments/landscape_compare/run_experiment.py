@@ -51,6 +51,7 @@ from src.utils.args import parse_hidden_layers
 from src.utils.callbacks import ModelSaverCallback
 from src import frozen_pinn
 from deepxde.optimizers.config import set_SOAP_options
+from deepxde.nn.pytorch.nn import NN as DDENNBase
 from landscape_visualization._aux.visualization_model import VisualizationModel
 from landscape_visualization._aux.early_stopping_plot import EarlyStopping
 from landscape_visualization._aux.plot_loss_surface import PlotLossSurface
@@ -136,6 +137,54 @@ def make_periodic_transform(spatial_dims, base_k, n_modes):
         return torch.cat(feats, dim=1)
     return transform
 
+
+class ModifiedMLP(DDENNBase):
+    """Modified MLP of Wang, Teng & Perdikaris 2021 (arXiv:2001.04536), the architecture the
+    Expert's Guide (arXiv:2308.08468) and the causal paper use for their chaotic-PDE results.
+
+    Two encoders U = act(W_u x + b_u), V = act(W_v x + b_v) gate every hidden layer:
+        H_1 = act(L_0 x);   H_{l+1} = (1 - Z_l) * U + Z_l * V,  Z_l = act(L_l H_l)
+    with a plain linear output layer. The hidden chain lives in `self.linears` (like DeepXDE's
+    FNN) so the landscape machinery's generic flatten/repopulate and the fallback in
+    extract_layers_from_dde_fnn both keep working; the encoders are separate submodules.
+    Supports apply_feature_transform (needed for the exact-periodicity Fourier embedding).
+    """
+
+    def __init__(self, layer_sizes, activation="tanh"):
+        super().__init__()
+        if len(layer_sizes) < 3:
+            raise ValueError("ModifiedMLP needs at least [in, hidden, out]")
+        widths = set(layer_sizes[1:-1])
+        if len(widths) != 1:
+            raise ValueError("ModifiedMLP requires equal hidden widths")
+        in_dim, width, out_dim = layer_sizes[0], layer_sizes[1], layer_sizes[-1]
+        self.activation = torch.tanh if activation == "tanh" else getattr(torch, activation)
+        self.encoder_u = torch.nn.Linear(in_dim, width)
+        self.encoder_v = torch.nn.Linear(in_dim, width)
+        self.linears = torch.nn.ModuleList(
+            [torch.nn.Linear(in_dim, width)]
+            + [torch.nn.Linear(width, width) for _ in range(len(layer_sizes) - 3)]
+            + [torch.nn.Linear(width, out_dim)]
+        )
+        for m in [self.encoder_u, self.encoder_v, *self.linears]:
+            torch.nn.init.xavier_normal_(m.weight)
+            torch.nn.init.zeros_(m.bias)
+
+    def forward(self, inputs):
+        x = inputs
+        if self._input_transform is not None:
+            x = self._input_transform(x)
+        U = self.activation(self.encoder_u(x))
+        V = self.activation(self.encoder_v(x))
+        H = self.activation(self.linears[0](x))
+        for linear in self.linears[1:-1]:
+            Z = self.activation(linear(H))
+            H = (1 - Z) * U + Z * V
+        out = self.linears[-1](H)
+        if self._output_transform is not None:
+            out = self._output_transform(inputs, out)
+        return out
+
 # method -> (loss_type, optimizer schedule). schedule = list of (opt_name, lr, frac)
 # where frac is the fraction of --iterations spent in that phase. frozen has no schedule.
 # Paper-backed "best" gradient pipeline for chaotic PINNs, applied to *every* gradient method
@@ -172,6 +221,23 @@ METHOD_SPEC = {
     #    -- not implemented here, but worth knowing plain L-BFGS is not the strongest QN baseline) --
     "adam_baseline":  {"loss_type": "origin", "schedule": [(*ADAM_P, 1.0)]},   # alias of `origin`
     "lbfgs_baseline": {"loss_type": "origin", "schedule": [(*ADAM_P, 0.5), ("lbfgs", 1.0, None, 0.5)]},
+    # -- best_practice: the FULL literature stack for chaotic PINNs, everything the papers'
+    #    successful chaotic runs combine (not any single fix):
+    #      * causal loss + eps annealing            (arXiv:2203.07404, wired like `causal`)
+    #      * time-marching over 10 windows          (the causal paper's chaotic-KS setting;
+    #                                                 forced by the method, no flag needed)
+    #      * modified MLP architecture              (arXiv:2001.04536; used by both papers)
+    #      * grad-norm loss balancing               (Expert's Guide arXiv:2308.08468: update
+    #                                                 every 1000 steps, moving average 0.9,
+    #                                                 weights start at 1)
+    #      * exact-periodicity Fourier embedding    (already default for KS/GS)
+    #      * Adam 1e-3 + x0.9/2000 step decay       (the shared pipeline P*)
+    #    NOTE: the modified-MLP architecture has a different parameter space than the plain
+    #    FNN, so best_practice cannot share the same-init/shared-landscape overlay with the
+    #    other methods (shared_landscape.py skips mismatched architectures gracefully); it is
+    #    compared on the solution-accuracy tier + its own landscape.
+    "best_practice":  {"loss_type": "causal", "schedule": [(*ADAM_P, 1.0)],
+                       "arch": "modified_mlp", "grad_norm_weights": True, "time_windows": 10},
     "frozen":         {"loss_type": "origin", "schedule": None},
 }
 
@@ -180,9 +246,10 @@ METHOD_SPEC = {
 # Model builder (closure, as PlotLossSurface / VisualizationModel expect)
 # =========================================================================== #
 def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_buckets,
-                    fourier_modes=0, time_range=None, ic_func=None):
+                    fourier_modes=0, time_range=None, ic_func=None, arch="fnn"):
     """fourier_modes > 0 applies the exact-periodicity Fourier embedding (see PDE_REGISTRY);
-    time_range/ic_func restrict the PDE to one time-marching window with a handed-off IC."""
+    time_range/ic_func restrict the PDE to one time-marching window with a handed-off IC;
+    arch selects the network: "fnn" (DeepXDE FNN) or "modified_mlp" (Wang et al. 2021)."""
     entry = PDE_REGISTRY[pde_name]
 
     def get_model():
@@ -191,7 +258,12 @@ def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_b
         sd = entry["spatial_dims"]
         in_dim = 2 * fourier_modes * sd + (pde.input_dim - sd) if fourier_modes > 0 else pde.input_dim
         layers = [in_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
-        net = dde.nn.FNN(layers, "tanh", "Glorot normal").float()
+        if arch == "modified_mlp":
+            net = ModifiedMLP(layers, "tanh").float()
+        elif arch == "fnn":
+            net = dde.nn.FNN(layers, "tanh", "Glorot normal").float()
+        else:
+            raise ValueError(f"Unknown arch '{arch}'")
         if fourier_modes > 0:
             net.apply_feature_transform(make_periodic_transform(sd, entry["periodic"]["base_k"], fourier_modes))
 
@@ -278,6 +350,47 @@ class CausalEpsAdvance(dde.callbacks.Callback):
             self.model.stop_training = True
 
 
+class GradNormLossWeights(dde.callbacks.Callback):
+    """Gradient-norm loss balancing of the Expert's Guide (arXiv:2308.08468, Algorithm 1):
+    every `update_every` steps, set lambda_hat_i = (sum_j ||grad L_j||) / ||grad L_i|| and move
+    the weights by lambda_i <- alpha*lambda_i + (1-alpha)*lambda_hat_i (their defaults: update
+    every 1000 iterations, alpha = 0.9, weights initialized to 1).
+
+    `weights` must be the SAME torch tensor that was passed to model.compile(loss_weights=...):
+    DeepXDE's compiled loss closure does `losses *= torch.as_tensor(loss_weights)`, and
+    torch.as_tensor returns the tensor itself (no copy) when given a tensor of matching
+    dtype/device, so in-place updates here take effect on the very next training step.
+    """
+
+    def __init__(self, weights, update_every=1000, alpha=0.9):
+        super().__init__()
+        self.weights = weights
+        self.update_every = update_every
+        self.alpha = alpha
+        self.n = 0
+
+    def on_epoch_end(self):
+        self.n += 1
+        if self.n % self.update_every:
+            return
+        m = self.model
+        _, losses = m.outputs_losses_train(m.train_state.X_train, m.train_state.y_train)
+        params = [p for p in m.net.parameters() if p.requires_grad]
+        norms = []
+        for i in range(len(losses)):
+            grads = torch.autograd.grad(losses[i], params,
+                                        retain_graph=(i < len(losses) - 1), allow_unused=True)
+            sq = sum((g ** 2).sum() for g in grads if g is not None)
+            # losses come back already weighted; ||grad(w_i L_i)|| = w_i ||grad L_i||
+            norms.append(torch.sqrt(sq) / self.weights[i].clamp(min=1e-12))
+        norms = torch.stack(norms).detach()
+        lam_hat = norms.sum() / norms.clamp(min=1e-12)
+        with torch.no_grad():
+            self.weights.mul_(self.alpha).add_((1 - self.alpha) * lam_hat)
+        print(f"[grad-norm] step {self.n}: loss weights -> "
+              + np.array2string(self.weights.detach().cpu().numpy(), precision=2))
+
+
 METRIC_COLUMNS = ["mse", "mae", "mxe", "l1re", "l2re", "crmse", "ic_mse", "bc_mse", "bc_rmse", "bc_l2re"]
 
 
@@ -346,7 +459,8 @@ class PerEpochMetricsCallback(dde.callbacks.Callback):
 
 
 def train_one_model(model, loss_weights, spec, iterations, n_saves, display_every, run_dir,
-                    causal_eps_schedule=None, causal_delta=0.99, step_offset=0.0, metrics_cb=None):
+                    causal_eps_schedule=None, causal_delta=0.99, step_offset=0.0, metrics_cb=None,
+                    extra_callbacks=None):
     """Run the method's optimizer schedule on `model` (already seed-initialized/warm-started).
 
     For causal-loss methods with an eps schedule, each optimizer phase is split into annealing
@@ -386,6 +500,8 @@ def train_one_model(model, loss_weights, spec, iterations, n_saves, display_ever
             callbacks.append(CausalEpsAdvance(delta=causal_delta))
         if metrics_cb is not None:
             callbacks.append(metrics_cb)
+        if extra_callbacks:
+            callbacks.extend(extra_callbacks)
         tag = f"causal_eps={causal_eps} " if causal_eps is not None else ""
         print(f"--- phase: {opt_name} lr={lr} decay={decay} {tag}iters<={phase_iters} "
               f"(steps {step_offset:.0f}+) ---")
@@ -720,11 +836,20 @@ def main():
     causal_eps_schedule = [args.causal_eps] if args.causal_eps is not None else list(CAUSAL_EPS_SCHEDULE)
     causal_eps0 = causal_eps_schedule[0]
 
-    if args.time_windows > 1 and (args.pde == "burgers1d" or args.method == "frozen"):
+    # method-level architecture / loss weighting (best_practice) -- see METHOD_SPEC
+    arch = spec.get("arch", "fnn")
+    grad_norm_weights = bool(spec.get("grad_norm_weights", False))
+
+    # time-marching windows: explicit CLI flag wins; otherwise the method's own default
+    # (best_practice forces 10 windows, everything else defaults to 1)
+    time_windows = args.time_windows if args.time_windows > 1 else int(spec.get("time_windows", 1))
+    if time_windows > 1 and (args.pde == "burgers1d" or args.method == "frozen"):
         # marching applies only to gradient methods on the chaotic PDEs; downgrade quietly so
         # run_all.py can pass --time-windows to the whole matrix
-        print(f"[note] --time-windows ignored for {args.pde}/{args.method}")
-        args.time_windows = 1
+        print(f"[note] time-windows ignored for {args.pde}/{args.method}")
+        time_windows = 1
+    if args.quick and time_windows > 2:
+        time_windows = 2  # keep smoke tests fast; real runs use the full window count
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -740,7 +865,8 @@ def main():
         "n_save_models": args.n_save_models, "seed": args.seed, "quick": args.quick,
         "causal_eps_schedule": causal_eps_schedule, "causal_delta": args.causal_delta,
         "num_causal_buckets": args.num_causal_buckets,
-        "fourier_modes": fourier_modes, "time_windows": args.time_windows,
+        "fourier_modes": fourier_modes, "time_windows": time_windows,
+        "arch": arch, "grad_norm_weights": grad_norm_weights,
         "ae_epochs": args.ae_epochs, "grid_xnum": args.grid_xnum, "device": device,
         "git_commit": git_commit(), "started_at": datetime.now().isoformat(),
     }
@@ -770,7 +896,7 @@ def main():
         metrics["integrator_success"] = bool(diag.get("integrator_success", True))
     else:
         # ---- gradient path (optionally time-marched over sequential windows) ----
-        W = max(1, args.time_windows)
+        W = max(1, time_windows)
         t_lo, t_hi = entry["time_bbox"]
         edges = np.linspace(t_lo, t_hi, W + 1)
         iters_per_window = max(1, args.iterations // W)
@@ -779,7 +905,7 @@ def main():
         # "how does the full-domain loss see each visited point", comparable across methods)
         get_model_rec = build_get_model(args.pde, hidden_layers, spec["loss_type"],
                                         causal_eps0, args.num_causal_buckets,
-                                        fourier_modes=fourier_modes)
+                                        fourier_modes=fourier_modes, arch=arch)
 
         # A validation metric evaluated against the PDE's ref_data only means what it looks like
         # when the model being scored was trained over ref_data's whole time range: with time-
@@ -801,8 +927,17 @@ def main():
             ic_func = make_ic_handoff(prev_model, len(output_names)) if w > 0 else None
             gm = build_get_model(args.pde, hidden_layers, spec["loss_type"],
                                  causal_eps0, args.num_causal_buckets,
-                                 fourier_modes=fourier_modes, time_range=time_range, ic_func=ic_func)
+                                 fourier_modes=fourier_modes, time_range=time_range, ic_func=ic_func,
+                                 arch=arch)
             model, loss_weights = gm()
+            extra_cbs = None
+            if grad_norm_weights:
+                # Expert's Guide grad-norm balancing: weights start at 1 and adapt; must be a
+                # torch tensor so the in-place callback updates reach the compiled loss closure
+                # (see GradNormLossWeights). Fresh per window -- the balance re-adapts to each
+                # window's problem, and a window is its own training run under time-marching.
+                loss_weights = torch.ones(len(loss_weights))
+                extra_cbs = [GradNormLossWeights(loss_weights, update_every=1000, alpha=0.9)]
             if w == 0:
                 # Shared, method-independent starting point: identical weights for every method
                 # at this seed, different weights across seeds (see seed_init_network).
@@ -825,7 +960,8 @@ def main():
             new_models, loss_rows, step_offset = train_one_model(
                 model, loss_weights, spec, iters_per_window, max(1, args.n_save_models // W),
                 args.display_every, run_dir, causal_eps_schedule=causal_eps_schedule,
-                causal_delta=args.causal_delta, step_offset=step_offset, metrics_cb=metrics_cb)
+                causal_delta=args.causal_delta, step_offset=step_offset, metrics_cb=metrics_cb,
+                extra_callbacks=extra_cbs)
             solver_models += new_models
             all_loss_rows += loss_rows
             window_models.append(model)

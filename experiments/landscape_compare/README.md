@@ -11,12 +11,33 @@ run the matrix on one machine and analyze it anywhere.
 
 ## What runs
 
-Default matrix = `{kuramoto_sivashinsky, grayscott, burgers1d} × {origin, causal, frozen}`.
-`burgers1d` is the **control** (a PDE PINNs solve well, and where Frozen-PINN is
-known-accurate). `origin` = plain MSE loss, `causal` = causal time-weighted loss — **both use
-the same paper-backed optimizer pipeline** (below), so the loss is the only variable. `frozen`
+Default matrix = `{kuramoto_sivashinsky, grayscott, burgers1d} × {origin, causal, soap,
+soap_causal, best_practice, frozen}`. `burgers1d` is the **control** (a PDE PINNs solve well,
+and where Frozen-PINN is known-accurate). `origin` = plain MSE loss, `causal` = causal
+time-weighted loss — **both use the same paper-backed optimizer pipeline** (below), so the loss
+is the only variable. `soap`/`soap_causal` swap in the SOAP second-order optimizer. `frozen`
 is the gradient-free control. Optional one-flag methods: `adam_baseline` (alias of `origin`),
-`lbfgs_baseline` (Adam→L-BFGS), `soap`, `soap_causal`.
+`lbfgs_baseline` (Adam→L-BFGS).
+
+### `best_practice` — the full literature stack in one method
+
+The papers' successful chaotic results never come from a single fix: they combine the whole
+stack. `best_practice` reproduces that combination:
+
+| ingredient | source |
+|---|---|
+| causal loss + ε-annealing {1e-2…1e2}, advance at min wᵢ > 0.99 | arXiv:2203.07404 |
+| **time-marching, 10 sequential windows** (forced by the method) | arXiv:2203.07404 (their chaotic-KS setting) |
+| **modified MLP** (encoder-gated hidden layers) | arXiv:2001.04536; used by both papers |
+| **grad-norm loss balancing** (update every 1000 steps, moving avg 0.9, weights start at 1) | Expert's Guide arXiv:2308.08468 |
+| exact-periodicity Fourier embedding | arXiv:2203.07404 (default here for KS/GS) |
+| Adam 1e-3 + ×0.9/2000 step decay | both papers |
+
+Caveat: the modified MLP has a **different parameter space** than the plain FNN, so
+`best_practice` cannot share the same-init/shared-landscape overlay with the other methods
+(`shared_landscape.py` excludes it with a note). It is compared on the solution-accuracy tier
+and on its own per-run landscape; that is the honest trade-off between "best chance to solve"
+and "fully controlled comparison".
 
 ### Optimizer pipeline (used by every gradient method)
 
@@ -106,12 +127,12 @@ Numbers from `--quick` are meaningless — it exists only to validate plumbing.
 
 **2. The real run:**
 ```bash
-# full default matrix {origin, causal, frozen} (gradient methods train for --iterations)
+# full default matrix {origin, causal, soap, soap_causal, best_practice, frozen}
 python experiments/landscape_compare/run_all.py --iterations 15000
 
-# add optimizer-variant methods if you also want the "which optimizer" comparison:
+# add the L-BFGS baseline too if you also want that optimizer comparison:
 python experiments/landscape_compare/run_all.py \
-    --methods origin causal lbfgs_baseline soap soap_causal frozen \
+    --methods origin causal lbfgs_baseline soap soap_causal best_practice frozen \
     --iterations 15000
 
 # analyze:

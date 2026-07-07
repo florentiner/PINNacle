@@ -49,10 +49,17 @@ ALL_PDES = ["kuramoto_sivashinsky", "grayscott", "burgers1d"]
 #                  L-BFGS), which is a different, weaker-on-chaotic optimizer axis kept only to
 #                  confirm that plain L-BFGS underperforms.
 #   frozen       - gradient-free control (Frozen-PINN).
+#   best_practice- the FULL literature stack in one method: causal loss + eps annealing +
+#                  time-marching (10 windows, forced by the method) + modified MLP +
+#                  grad-norm loss balancing + Fourier embedding + Adam/decay -- what the
+#                  papers actually combine for their successful chaotic results. Different
+#                  architecture than the others, so it is compared on the solution tier and
+#                  its own landscape (shared_landscape.py skips it gracefully).
 # `soap` (SOAP + origin loss) is also in the defaults so the SOAP ablation without causal is
 # available, matching the matrix actually run for the first analysis.
-DEFAULT_METHODS = ["origin", "causal", "soap", "soap_causal", "frozen"]
-ALL_METHODS = ["origin", "causal", "adam_baseline", "lbfgs_baseline", "soap", "soap_causal", "frozen"]
+DEFAULT_METHODS = ["origin", "causal", "soap", "soap_causal", "best_practice", "frozen"]
+ALL_METHODS = ["origin", "causal", "adam_baseline", "lbfgs_baseline", "soap", "soap_causal",
+               "best_practice", "frozen"]
 
 
 def main():
