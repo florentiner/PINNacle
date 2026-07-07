@@ -29,14 +29,35 @@ requested -- a plain single-seed run keeps the original flat <out>/<pde>/<method
 compare_landscapes.py detects the nesting automatically and reports mean +/- std across seeds.
 """
 import argparse
+import itertools
 import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RUN_EXPERIMENT = os.path.join(os.path.dirname(__file__), "run_experiment.py")
+
+# Mirrors run_experiment.py's ABLATION_METHODS naming (kept as a plain string generator here,
+# not an import, so this lightweight orchestrator never has to load torch/deepxde just to read
+# a list of names). Full power set of the 4 best_practice ingredients (C=causal, W=time-marching,
+# A=modified-MLP, G=grad-norm): ablation_none(==origin) .. ablation_all(==best_practice).
+_INGREDIENT_LETTERS = ["C", "W", "A", "G"]
+
+
+def _ablation_name(combo):
+    if not combo:
+        return "ablation_none"
+    if len(combo) == len(_INGREDIENT_LETTERS):
+        return "ablation_all"
+    return "ablation_" + "".join(combo)
+
+
+ABLATION_METHODS = [_ablation_name(c) for r in range(len(_INGREDIENT_LETTERS) + 1)
+                    for c in itertools.combinations(_INGREDIENT_LETTERS, r)]
 
 ALL_PDES = ["kuramoto_sivashinsky", "grayscott", "burgers1d"]
 # Default comparison, four methods covering the three candidate fixes from the literature plus
@@ -58,17 +79,27 @@ ALL_PDES = ["kuramoto_sivashinsky", "grayscott", "burgers1d"]
 # `soap` (SOAP + origin loss) is also in the defaults so the SOAP ablation without causal is
 # available, matching the matrix actually run for the first analysis.
 DEFAULT_METHODS = ["origin", "causal", "soap", "soap_causal", "best_practice", "frozen"]
-ALL_METHODS = ["origin", "causal", "adam_baseline", "lbfgs_baseline", "soap", "soap_causal",
-               "best_practice", "frozen"]
+ALL_METHODS = (["origin", "causal", "adam_baseline", "lbfgs_baseline", "soap", "soap_causal",
+                "best_practice", "frozen"]
+               + [m for m in ABLATION_METHODS if m not in ("ablation_none", "ablation_C", "ablation_all")])
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pdes", nargs="+", default=ALL_PDES, choices=ALL_PDES)
     parser.add_argument("--methods", nargs="+", default=DEFAULT_METHODS, choices=ALL_METHODS)
+    parser.add_argument("--ablation", action="store_true",
+                        help="run the full 16-way ablation sweep over best_practice's 4 "
+                             "ingredients (causal, time-marching, modified-MLP, grad-norm) "
+                             "instead of --methods, to see which one drives the improvement")
     parser.add_argument("--out", type=str, default=os.path.join(PROJECT_ROOT, "runs_landscape_compare"))
     parser.add_argument("--force", action="store_true", help="rerun cells even if metrics.json already exists")
     parser.add_argument("--quick", action="store_true", help="tiny smoke-test settings (passed through)")
+    parser.add_argument("--parallel", type=int, default=1,
+                        help="run this many cells concurrently, each as a fully isolated "
+                             "subprocess (own process, own CUDA context, own output "
+                             "directory) -- safe to raise on a single GPU with enough VRAM "
+                             "for that many concurrent small-net trainings (e.g. 3 on 32GB)")
     # passthrough knobs
     parser.add_argument("--iterations", type=int, default=None)
     parser.add_argument("--hidden-layers", type=str, default=None)
@@ -89,6 +120,14 @@ def main():
     parser.add_argument("--time-windows", type=int, default=None,
                         help="time-marching windows for the chaotic PDEs (paper setting: 10)")
     args = parser.parse_args()
+
+    if args.ablation:
+        # Bypasses --methods' argparse `choices` entirely (only checked against values given
+        # literally on the command line), so ablation_none/ablation_C/ablation_all -- excluded
+        # from ALL_METHODS above to avoid duplicate-looking choices -- are still valid here.
+        args.methods = ABLATION_METHODS
+    if args.parallel < 1:
+        raise SystemExit("--parallel must be >= 1")
 
     os.makedirs(args.out, exist_ok=True)
     manifest_path = os.path.join(args.out, "MANIFEST.json")
@@ -122,12 +161,20 @@ def main():
         passthrough.append("--quick")
 
     cells = [(p, m, s) for p in args.pdes for m in args.methods for s in seeds]
-    print(f"Running {len(cells)} cells: pdes={args.pdes} methods={args.methods} seeds={seeds}\n")
+    print(f"Running {len(cells)} cells: pdes={args.pdes} methods={args.methods} seeds={seeds} "
+          f"(parallel={args.parallel})\n")
 
     def cell_key(pde, method, seed):
         return f"{pde}/{method}/seed_{seed}" if multi_seed else f"{pde}/{method}"
 
-    for idx, (pde, method, seed) in enumerate(cells, 1):
+    # Cells are fully independent (own run_dir, own subprocess, own CUDA context -- verified no
+    # shared/fixed-path writes anywhere in the landscape/autoencoder machinery when run this
+    # way), so concurrent cells only ever race on ONE shared piece of state: the in-memory
+    # `manifest` dict + MANIFEST.json file this driver itself maintains. `manifest_lock` protects
+    # every read-modify-write of that pair; each cell's own subprocess never touches it.
+    manifest_lock = threading.Lock()
+
+    def run_cell(idx, pde, method, seed):
         seed_out = os.path.join(args.out, f"seed_{seed}") if multi_seed else args.out
         key = cell_key(pde, method, seed)
         run_dir = os.path.join(seed_out, pde, method)
@@ -136,37 +183,60 @@ def main():
         if os.path.exists(metrics_path) and not args.force:
             with open(metrics_path) as f:
                 m = json.load(f)
-            manifest[key] = {"status": "skipped (exists)", "relative_l2": m.get("relative_l2"),
-                             "wall_clock_sec": m.get("wall_clock_sec")}
+            with manifest_lock:
+                manifest[key] = {"status": "skipped (exists)", "relative_l2": m.get("relative_l2"),
+                                 "wall_clock_sec": m.get("wall_clock_sec")}
+                with open(manifest_path, "w") as f:
+                    json.dump(manifest, f, indent=2)
             print(f"[{idx}/{len(cells)}] {key}: SKIP (metrics.json exists)")
-            continue
+            return
 
         cell_args = list(passthrough)
         if seed is not None:
             cell_args += ["--seed", str(seed)]
         cmd = [sys.executable, RUN_EXPERIMENT, "--pde", pde, "--method", method, "--out", seed_out] + cell_args
-        print(f"[{idx}/{len(cells)}] {key}: RUN  ({' '.join(cmd[2:])})")
         t0 = time.time()
-        proc = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        if args.parallel > 1:
+            # Concurrent cells' inherited stdout would interleave into an unreadable mess, so
+            # each cell's full output goes to its own log file instead (sequential mode below
+            # keeps the original live-terminal behavior, unchanged).
+            os.makedirs(run_dir, exist_ok=True)
+            log_path = os.path.join(run_dir, "run_all.log")
+            print(f"[{idx}/{len(cells)}] {key}: RUN (parallel)  [log: {log_path}]")
+            with open(log_path, "w") as logf:
+                proc = subprocess.run(cmd, cwd=PROJECT_ROOT, stdout=logf, stderr=subprocess.STDOUT)
+        else:
+            print(f"[{idx}/{len(cells)}] {key}: RUN  ({' '.join(cmd[2:])})")
+            proc = subprocess.run(cmd, cwd=PROJECT_ROOT)
         dt = round(time.time() - t0, 1)
 
-        if proc.returncode == 0 and os.path.exists(metrics_path):
-            with open(metrics_path) as f:
-                m = json.load(f)
-            manifest[key] = {
-                "status": "ok", "seed": seed, "relative_l2": m.get("relative_l2"),
-                "wall_clock_sec": m.get("wall_clock_sec"),
-                "condition_number": m.get("condition_number"),
-                "fourier_low": m.get("fourier_low"), "fourier_mid": m.get("fourier_mid"),
-                "fourier_high": m.get("fourier_high"),
-            }
-            print(f"        -> ok  relative_l2={m.get('relative_l2')}  ({dt}s)")
-        else:
-            manifest[key] = {"status": f"failed (code {proc.returncode})", "driver_sec": dt}
-            print(f"        -> FAILED (return code {proc.returncode})")
+        with manifest_lock:
+            if proc.returncode == 0 and os.path.exists(metrics_path):
+                with open(metrics_path) as f:
+                    m = json.load(f)
+                manifest[key] = {
+                    "status": "ok", "seed": seed, "relative_l2": m.get("relative_l2"),
+                    "wall_clock_sec": m.get("wall_clock_sec"),
+                    "condition_number": m.get("condition_number"),
+                    "fourier_low": m.get("fourier_low"), "fourier_mid": m.get("fourier_mid"),
+                    "fourier_high": m.get("fourier_high"),
+                }
+                print(f"        -> ok  {key}  relative_l2={m.get('relative_l2')}  ({dt}s)")
+            else:
+                manifest[key] = {"status": f"failed (code {proc.returncode})", "driver_sec": dt}
+                print(f"        -> FAILED  {key}  (return code {proc.returncode})")
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f, indent=2)
 
-        with open(manifest_path, "w") as f:
-            json.dump(manifest, f, indent=2)
+    if args.parallel == 1:
+        for idx, (pde, method, seed) in enumerate(cells, 1):
+            run_cell(idx, pde, method, seed)
+    else:
+        with ThreadPoolExecutor(max_workers=args.parallel) as ex:
+            futures = [ex.submit(run_cell, idx, pde, method, seed)
+                      for idx, (pde, method, seed) in enumerate(cells, 1)]
+            for fut in as_completed(futures):
+                fut.result()  # re-raise so a worker exception isn't silently swallowed
 
     # summary table
     print("\n==================== SUMMARY ====================")

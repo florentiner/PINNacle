@@ -36,6 +36,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 import argparse
 import copy
+import itertools
 import json
 import subprocess
 import time
@@ -240,6 +241,45 @@ METHOD_SPEC = {
                        "arch": "modified_mlp", "grad_norm_weights": True, "time_windows": 10},
     "frozen":         {"loss_type": "origin", "schedule": None},
 }
+
+
+# --------------------------------------------------------------------------- #
+# Ablation sweep: which single best_practice ingredient (or pair, or triple) actually drives
+# the improvement over `origin`? Full power set of the 4 binary ingredients:
+#   C = causal loss + eps annealing        W = time-marching (10 windows)
+#   A = modified-MLP Architecture          G = Grad-norm loss balancing
+# `ablation_none` == `origin`, `ablation_C` == `causal`, `ablation_all` == `best_practice`
+# (all three kept under both names on purpose: the plain names for readability elsewhere in
+# this file/README, the systematic names for scripting a full sweep with `--ablation`).
+# --------------------------------------------------------------------------- #
+INGREDIENT_LETTERS = ["C", "W", "A", "G"]
+
+
+def _ablation_spec(letters):
+    spec = {"loss_type": "causal" if "C" in letters else "origin", "schedule": [(*ADAM_P, 1.0)]}
+    if "A" in letters:
+        spec["arch"] = "modified_mlp"
+    if "G" in letters:
+        spec["grad_norm_weights"] = True
+    if "W" in letters:
+        spec["time_windows"] = 10
+    return spec
+
+
+def _ablation_name(combo):
+    if not combo:
+        return "ablation_none"
+    if len(combo) == len(INGREDIENT_LETTERS):
+        return "ablation_all"
+    return "ablation_" + "".join(combo)
+
+
+ABLATION_METHODS = []
+for _r in range(len(INGREDIENT_LETTERS) + 1):
+    for _combo in itertools.combinations(INGREDIENT_LETTERS, _r):
+        _name = _ablation_name(_combo)
+        METHOD_SPEC[_name] = _ablation_spec(set(_combo))
+        ABLATION_METHODS.append(_name)
 
 
 # =========================================================================== #
