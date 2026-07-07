@@ -31,6 +31,34 @@ weights converge to 1; the causal paper's alternative anneals ε through [1e-2, 
 literature says it's *worse* on chaotic, so it's there to confirm that, not as a recommendation.
 The papers use ≥1e4 iterations, so pass `--iterations 15000` (or more) for real runs.
 
+### Fixes after the first full run (why causal wasn't beating origin)
+
+The first 30k-iteration run showed every gradient method collapsing to the trivial exact
+solution (see `ANALYSIS.md`). Root-causing that against the causal paper's setup found three
+gaps, now fixed:
+
+1. **Missing periodicity (a genuine setup bug).** The PINNacle KS/Gray–Scott definitions
+   impose *only the IC* — no spatial BC at all — while the reference solutions are exactly
+   periodic (edge mismatch = 0, verified). An unconstrained 4th-order PDE is ill-posed: zero
+   residual does not pin the network to the periodic reference. Fix: **exact periodicity via a
+   Fourier feature embedding** of the spatial inputs (`--fourier-modes`, default ON: KS 10
+   modes, GS 5; `0` disables), the hard-constraint approach of the causal paper.
+2. **Causal ε was fixed.** Now uses the paper's **annealing schedule** ε ∈ {1e-2, 1e-1, 1, 10,
+   100}, advancing when every causal weight exceeds `--causal-delta` (0.99). A fixed moderate ε
+   under-weights late times all run when residuals start large — and at the trivial attractor
+   (residuals ≈ 0) *any* fixed-ε causal loss degenerates to the origin loss.
+   `--causal-eps X` still forces a fixed value.
+3. **No time-marching.** `--time-windows N` trains the chaotic PDEs over N sequential time
+   windows, warm-starting each window from the previous one and handing the IC across the
+   interface — the setting the causal paper actually used for chaotic KS (their Δt = 0.1 ⇒
+   `--time-windows 10`). Gradient methods on chaotic PDEs only; ignored elsewhere.
+
+Recommended chaotic rerun:
+```bash
+python experiments/landscape_compare/run_all.py \
+    --pdes kuramoto_sivashinsky grayscott --n-repeats 3 --iterations 30000 --time-windows 10
+```
+
 ### Controlled weight initialization
 
 Every gradient method at a given seed starts from the **same** network weights (a deterministic

@@ -71,8 +71,14 @@ def main():
                         help="explicit seed list, overrides --n-repeats; implies the nested seed_<N>/ layout")
     parser.add_argument("--ae-epochs", type=int, default=None)
     parser.add_argument("--grid-xnum", type=int, default=None)
-    parser.add_argument("--causal-eps", type=float, default=None)
+    parser.add_argument("--causal-eps", type=float, default=None,
+                        help="fixed causal eps (default: paper's annealing schedule)")
+    parser.add_argument("--causal-delta", type=float, default=None)
     parser.add_argument("--num-causal-buckets", type=int, default=None)
+    parser.add_argument("--fourier-modes", type=int, default=None,
+                        help="exact-periodicity embedding modes (default: per-PDE; 0 disables)")
+    parser.add_argument("--time-windows", type=int, default=None,
+                        help="time-marching windows for the chaotic PDEs (paper setting: 10)")
     args = parser.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -98,7 +104,9 @@ def main():
     for flag, val in [("--iterations", args.iterations), ("--hidden-layers", args.hidden_layers),
                       ("--n-save-models", args.n_save_models),
                       ("--ae-epochs", args.ae_epochs), ("--grid-xnum", args.grid_xnum),
-                      ("--causal-eps", args.causal_eps), ("--num-causal-buckets", args.num_causal_buckets)]:
+                      ("--causal-eps", args.causal_eps), ("--causal-delta", args.causal_delta),
+                      ("--num-causal-buckets", args.num_causal_buckets),
+                      ("--fourier-modes", args.fourier_modes), ("--time-windows", args.time_windows)]:
         if val is not None:
             passthrough += [flag, str(val)]
     if args.quick:

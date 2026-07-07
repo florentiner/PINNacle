@@ -6,7 +6,11 @@ from . import baseclass
 
 class GrayScottEquation(baseclass.BaseTimePDE):
 
-    def __init__(self, datapath="ref/grayscott.dat", bbox=[-1, 1, -1, 1, 0, 200], b=0.04, d=0.1, epsilon=(1e-5, 5e-6)):
+    def __init__(self, datapath="ref/grayscott.dat", bbox=[-1, 1, -1, 1, 0, 200], b=0.04, d=0.1, epsilon=(1e-5, 5e-6),
+                 ic_func=None):
+        """ic_func: optional callable (x, component) -> values overriding the default analytic
+        initial condition; x is the full coordinate array (N, 3). Used for time-marching, where
+        window k's IC is window k-1's prediction at the interface time."""
         super().__init__()
         # output dim
         self.output_dim = 2
@@ -39,11 +43,12 @@ class GrayScottEquation(baseclass.BaseTimePDE):
         def boundary_ic(x, on_initial):
             return on_initial and np.isclose(x[2], bbox[4])
 
-        def ic_func(x, component):
-            if component == 0:
-                return 1 - np.exp(-80 * ((x[:, 0] + 0.05)**2 + (x[:, 1] + 0.02)**2))
-            else:
-                return np.exp(-80 * ((x[:, 0] - 0.05)**2 + (x[:, 1] - 0.02)**2))
+        if ic_func is None:
+            def ic_func(x, component):
+                if component == 0:
+                    return 1 - np.exp(-80 * ((x[:, 0] + 0.05)**2 + (x[:, 1] + 0.02)**2))
+                else:
+                    return np.exp(-80 * ((x[:, 0] - 0.05)**2 + (x[:, 1] - 0.02)**2))
 
         self.add_bcs([{
             'component': 0,
@@ -62,7 +67,10 @@ class GrayScottEquation(baseclass.BaseTimePDE):
 
 class KuramotoSivashinskyEquation(baseclass.BaseTimePDE):
 
-    def __init__(self, datapath="ref/Kuramoto_Sivashinsky.dat", bbox=[0, 2 * np.pi, 0, 1], alpha=100 / 16, beta=100 / (16 * 16), gamma=100 / (16**4)):
+    def __init__(self, datapath="ref/Kuramoto_Sivashinsky.dat", bbox=[0, 2 * np.pi, 0, 1], alpha=100 / 16, beta=100 / (16 * 16), gamma=100 / (16**4),
+                 ic_func=None):
+        """ic_func: optional callable x -> values (x is the full (N, 2) coordinate array)
+        overriding the default analytic IC cos(x)(1+sin(x)); used for time-marching."""
         super().__init__()
         # output dim
         self.output_dim = 1
@@ -88,9 +96,11 @@ class KuramotoSivashinskyEquation(baseclass.BaseTimePDE):
         self.load_ref_data(datapath, t_transpose=False)
 
         # BCs
+        if ic_func is None:
+            ic_func = lambda x: np.cos(x[:, 0:1]) * (1 + np.sin(x[:, 0:1]))
         self.add_bcs([{
             'component': 0,
-            'function': (lambda x: np.cos(x[:, 0:1]) * (1 + np.sin(x[:, 0:1]))),
+            'function': ic_func,
             'bc': (lambda _, on_initial: on_initial),
             'type': 'ic'
         }])

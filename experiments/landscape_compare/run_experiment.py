@@ -61,19 +61,23 @@ torch.set_default_dtype(torch.float32)
 # =========================================================================== #
 # PDE registry
 # =========================================================================== #
-def _make_ks(loss_type, causal_eps, num_causal_buckets):
-    pde = KuramotoSivashinskyEquation()
+def _make_ks(loss_type, causal_eps, num_causal_buckets, time_range=None, ic_func=None):
+    bbox = [0, 2 * np.pi] + (list(time_range) if time_range else [0, 1])
+    pde = KuramotoSivashinskyEquation(bbox=bbox, ic_func=ic_func)
     pde.set_loss_type(loss_type, causal_eps=causal_eps, num_causal_buckets=num_causal_buckets)
     return pde
 
 
-def _make_gs(loss_type, causal_eps, num_causal_buckets):
-    pde = GrayScottEquation()
+def _make_gs(loss_type, causal_eps, num_causal_buckets, time_range=None, ic_func=None):
+    bbox = [-1, 1, -1, 1] + (list(time_range) if time_range else [0, 200])
+    pde = GrayScottEquation(bbox=bbox, ic_func=ic_func)
     pde.set_loss_type(loss_type, causal_eps=causal_eps, num_causal_buckets=num_causal_buckets)
     return pde
 
 
-def _make_burgers(loss_type, causal_eps, num_causal_buckets):
+def _make_burgers(loss_type, causal_eps, num_causal_buckets, time_range=None, ic_func=None):
+    if time_range is not None or ic_func is not None:
+        raise ValueError("time-marching is only supported for the chaotic PDEs (KS, Gray-Scott)")
     return Burgers1D(loss_type=loss_type, causal_eps=causal_eps, num_causal_buckets=num_causal_buckets)
 
 
@@ -83,20 +87,53 @@ PDE_REGISTRY = {
         "spatial_dims": 1,          # inputs: (x, t)
         "output_names": ["u"],
         "hidden_default": "100*5",
+        "time_bbox": (0.0, 1.0),
+        # Reference solution is exactly periodic on [0, 2pi] (verified: edge rms diff = 0), but
+        # the PINNacle PDE definition imposes ONLY the IC -- no spatial BC at all, so the problem
+        # the network sees is ill-posed (a 4th-order PDE with no BC has non-periodic solutions
+        # that legitimately zero the residual while diverging from the periodic reference).
+        # Fix, following the causal paper (arXiv:2203.07404): enforce periodicity EXACTLY with a
+        # Fourier feature embedding of x (period 2pi -> base wavenumber 1).
+        "periodic": {"base_k": 1.0, "modes_default": 10},
     },
     "grayscott": {
         "factory": _make_gs,
         "spatial_dims": 2,          # inputs: (x, y, t)
         "output_names": ["u", "v"],
         "hidden_default": "100*5",
+        "time_bbox": (0.0, 200.0),
+        # Same missing-BC issue as KS; reference is periodic on [-1,1]^2 (period 2 per axis ->
+        # base wavenumber pi).
+        "periodic": {"base_k": float(np.pi), "modes_default": 5},
     },
     "burgers1d": {
         "factory": _make_burgers,
         "spatial_dims": 1,          # inputs: (x, t)
         "output_names": ["u"],
         "hidden_default": "100*5",
+        "time_bbox": (0.0, 1.0),
+        "periodic": None,           # Dirichlet BCs are already in the PDE definition
     },
 }
+
+
+def make_periodic_transform(spatial_dims, base_k, n_modes):
+    """Input transform (x_1..x_s, t) -> (cos/sin(k x_1).., cos/sin(k x_s).., t), k = base_k*1..K.
+
+    All spatial dependence goes through period-(2pi/base_k) features, so the network output is
+    exactly periodic in every spatial dimension, to all derivative orders -- the hard-constraint
+    equivalent of periodic BCs used by Wang et al. 2022 for Kuramoto-Sivashinsky.
+    """
+    def transform(x):
+        ks = torch.arange(1, n_modes + 1, device=x.device, dtype=x.dtype) * base_k
+        feats = []
+        for d in range(spatial_dims):
+            ang = x[:, d:d + 1] * ks
+            feats.append(torch.cos(ang))
+            feats.append(torch.sin(ang))
+        feats.append(x[:, spatial_dims:])
+        return torch.cat(feats, dim=1)
+    return transform
 
 # method -> (loss_type, optimizer schedule). schedule = list of (opt_name, lr, frac)
 # where frac is the fraction of --iterations spent in that phase. frozen has no schedule.
@@ -141,13 +178,21 @@ METHOD_SPEC = {
 # =========================================================================== #
 # Model builder (closure, as PlotLossSurface / VisualizationModel expect)
 # =========================================================================== #
-def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_buckets):
+def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_buckets,
+                    fourier_modes=0, time_range=None, ic_func=None):
+    """fourier_modes > 0 applies the exact-periodicity Fourier embedding (see PDE_REGISTRY);
+    time_range/ic_func restrict the PDE to one time-marching window with a handed-off IC."""
     entry = PDE_REGISTRY[pde_name]
 
     def get_model():
-        pde = entry["factory"](loss_type, causal_eps, num_causal_buckets)
-        layers = [pde.input_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
+        pde = entry["factory"](loss_type, causal_eps, num_causal_buckets,
+                               time_range=time_range, ic_func=ic_func)
+        sd = entry["spatial_dims"]
+        in_dim = 2 * fourier_modes * sd + (pde.input_dim - sd) if fourier_modes > 0 else pde.input_dim
+        layers = [in_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
         net = dde.nn.FNN(layers, "tanh", "Glorot normal").float()
+        if fourier_modes > 0:
+            net.apply_feature_transform(make_periodic_transform(sd, entry["periodic"]["base_k"], fourier_modes))
 
         loss_weights = np.ones(pde.num_loss, dtype=float)
         for i, c in enumerate(pde.loss_config):
@@ -200,6 +245,88 @@ def seed_init_network(net, seed):
                 m.weight.copy_(w.to(m.weight.device, m.weight.dtype))
                 if m.bias is not None:
                     m.bias.zero_()
+
+
+# =========================================================================== #
+# Training (optimizer schedule x causal-eps annealing x time-marching)
+# =========================================================================== #
+# Causal-eps annealing schedule of Wang et al. 2022 (arXiv:2203.07404): train with a small eps
+# first (gentle weighting while residuals are large), advance to the next eps once every causal
+# weight has converged to ~1 (min_i w_i > delta, delta = 0.99 recommended). A fixed moderate eps
+# (the Expert's-Guide simplification we used previously) under-weights late times for the whole
+# run when residuals start large -- one of the reasons causal training underperformed.
+CAUSAL_EPS_SCHEDULE = [1e-2, 1e-1, 1.0, 10.0, 100.0]
+
+
+class CausalEpsAdvance(dde.callbacks.Callback):
+    """Stop the current training phase early once min_i causal weight > delta (paper's rule)."""
+
+    def __init__(self, delta=0.99, check_every=100):
+        super().__init__()
+        self.delta = delta
+        self.check_every = check_every
+        self.n = 0
+
+    def on_epoch_end(self):
+        self.n += 1
+        if self.n % self.check_every:
+            return
+        w = getattr(self.model.data, "last_causal_min_weight", None)
+        if w is not None and w > self.delta:
+            print(f"[causal] min bucket weight {w:.4f} > {self.delta} -> advancing eps phase")
+            self.model.stop_training = True
+
+
+def train_one_model(model, loss_weights, spec, iterations, n_saves, display_every, run_dir,
+                    causal_eps_schedule=None, causal_delta=0.99):
+    """Run the method's optimizer schedule on `model` (already seed-initialized/warm-started).
+
+    For causal-loss methods with an eps schedule, each optimizer phase is split into annealing
+    sub-phases: model.data.causal_eps is raised through the schedule, advancing early when all
+    causal weights exceed `causal_delta`. Returns the list of checkpoint nets collected.
+    """
+    solver_models = []
+    n_phases = len(spec["schedule"])
+    for (opt_name, lr, decay, frac) in spec["schedule"]:
+        phase_iters = max(1, int(round(iterations * frac)))
+        # A fresh compile happens per phase (and per time-marching window); if the SOAP lr
+        # warmup would eat more than half the phase, shrink it proportionally so the phase
+        # actually reaches the target lr.
+        if decay is not None and decay[0] == "warmup_step" and decay[1] > phase_iters // 2:
+            decay = ("warmup_step", max(1, phase_iters // 5), decay[2], decay[3])
+        compile_optimizer(model, opt_name, lr, loss_weights, decay=decay)
+        if spec["loss_type"] == "causal" and causal_eps_schedule:
+            sub_iters = max(1, phase_iters // len(causal_eps_schedule))
+            sub_saves = max(1, n_saves // (n_phases * len(causal_eps_schedule)))
+            for eps in causal_eps_schedule:
+                model.data.causal_eps = eps
+                saver = ModelSaverCallback(total_iterations=sub_iters, n_save_models=sub_saves)
+                print(f"--- phase: {opt_name} lr={lr} decay={decay} causal_eps={eps} iters<={sub_iters} ---")
+                model.train(iterations=sub_iters, display_every=display_every,
+                            callbacks=[saver, CausalEpsAdvance(delta=causal_delta)],
+                            model_save_path=run_dir, save_model=False)
+                solver_models.extend(saver.saved_models)
+        else:
+            saver = ModelSaverCallback(total_iterations=phase_iters,
+                                       n_save_models=max(1, n_saves // n_phases))
+            print(f"--- phase: {opt_name} lr={lr} decay={decay} iters={phase_iters} ---")
+            model.train(iterations=phase_iters, display_every=display_every,
+                        callbacks=[saver], model_save_path=run_dir, save_model=False)
+            solver_models.extend(saver.saved_models)
+    return solver_models
+
+
+def make_ic_handoff(prev_model, output_dim):
+    """IC function for time-marching window k>0: the previous window's prediction at the
+    interface time (the IC collocation points already carry t = t_interface)."""
+    def ic_scalar(x):
+        return prev_model.predict(np.asarray(x, dtype=np.float32)).astype(np.float64)
+
+    def ic_multi(x, component):
+        pred = prev_model.predict(np.asarray(x, dtype=np.float32)).astype(np.float64)
+        return pred[:, component]
+
+    return ic_multi if output_dim > 1 else ic_scalar
 
 
 # =========================================================================== #
@@ -449,8 +576,19 @@ def main():
     parser.add_argument("--n-save-models", type=int, default=10, help="checkpoints along the trajectory")
     parser.add_argument("--display-every", type=int, default=100)
     parser.add_argument("--seed", type=int, default=1234)
-    parser.add_argument("--causal-eps", type=float, default=1.0)
+    parser.add_argument("--causal-eps", type=float, default=None,
+                        help="fixed causal eps; default None = the paper's annealing schedule "
+                             f"{CAUSAL_EPS_SCHEDULE} advancing when min weight > --causal-delta")
+    parser.add_argument("--causal-delta", type=float, default=0.99,
+                        help="min-causal-weight threshold to advance the eps annealing phase")
     parser.add_argument("--num-causal-buckets", type=int, default=32)
+    parser.add_argument("--fourier-modes", type=int, default=None,
+                        help="modes for the exact-periodicity Fourier embedding (default: per-PDE; "
+                             "KS 10, Gray-Scott 5, Burgers off). 0 disables.")
+    parser.add_argument("--time-windows", type=int, default=1,
+                        help="time-marching: split the time domain into this many sequentially "
+                             "trained windows, IC handed off from the previous window (chaotic "
+                             "PDEs only; the causal paper's setting for chaotic KS)")
     parser.add_argument("--ae-epochs", type=int, default=10000, help="autoencoder training epochs")
     parser.add_argument("--grid-xnum", type=int, default=25, help="landscape grid resolution")
     parser.add_argument("--no-landscape", action="store_true", help="skip the landscape tier (gradient methods)")
@@ -470,6 +608,22 @@ def main():
     output_names = entry["output_names"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    # periodic embedding: per-PDE default unless overridden; 0 disables
+    if args.fourier_modes is None:
+        fourier_modes = entry["periodic"]["modes_default"] if entry.get("periodic") else 0
+    else:
+        fourier_modes = args.fourier_modes if entry.get("periodic") else 0
+
+    # causal-eps: fixed value if given, else the paper's annealing schedule
+    causal_eps_schedule = [args.causal_eps] if args.causal_eps is not None else list(CAUSAL_EPS_SCHEDULE)
+    causal_eps0 = causal_eps_schedule[0]
+
+    if args.time_windows > 1 and (args.pde == "burgers1d" or args.method == "frozen"):
+        # marching applies only to gradient methods on the chaotic PDEs; downgrade quietly so
+        # run_all.py can pass --time-windows to the whole matrix
+        print(f"[note] --time-windows ignored for {args.pde}/{args.method}")
+        args.time_windows = 1
+
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
@@ -482,7 +636,9 @@ def main():
         "pde": args.pde, "method": args.method, "loss_type": spec["loss_type"],
         "hidden_layers": hidden_layers, "iterations": args.iterations,
         "n_save_models": args.n_save_models, "seed": args.seed, "quick": args.quick,
-        "causal_eps": args.causal_eps, "num_causal_buckets": args.num_causal_buckets,
+        "causal_eps_schedule": causal_eps_schedule, "causal_delta": args.causal_delta,
+        "num_causal_buckets": args.num_causal_buckets,
+        "fourier_modes": fourier_modes, "time_windows": args.time_windows,
         "ae_epochs": args.ae_epochs, "grid_xnum": args.grid_xnum, "device": device,
         "git_commit": git_commit(), "started_at": datetime.now().isoformat(),
     }
@@ -495,7 +651,7 @@ def main():
     if args.method == "frozen":
         # ---- gradient-free path ----
         predict_fn, extra = run_frozen(args.pde, args.quick, seed=args.seed)
-        pde_eval = entry["factory"](spec["loss_type"], args.causal_eps, args.num_causal_buckets)
+        pde_eval = entry["factory"](spec["loss_type"], causal_eps0, args.num_causal_buckets)
         sol_metrics, fields = evaluate_solution(pde_eval, predict_fn, spatial_dims, output_names)
         metrics.update(sol_metrics)
 
@@ -511,43 +667,76 @@ def main():
         metrics["frozen_basis"] = diag.get("basis", "")
         metrics["integrator_success"] = bool(diag.get("integrator_success", True))
     else:
-        # ---- gradient path ----
-        get_model = build_get_model(args.pde, hidden_layers, spec["loss_type"],
-                                    args.causal_eps, args.num_causal_buckets)
+        # ---- gradient path (optionally time-marched over sequential windows) ----
+        W = max(1, args.time_windows)
+        t_lo, t_hi = entry["time_bbox"]
+        edges = np.linspace(t_lo, t_hi, W + 1)
+        iters_per_window = max(1, args.iterations // W)
+
+        # landscape/reconstruction closure: FULL time domain, analytic IC (grid losses are then
+        # "how does the full-domain loss see each visited point", comparable across methods)
         get_model_rec = build_get_model(args.pde, hidden_layers, spec["loss_type"],
-                                        args.causal_eps, args.num_causal_buckets)
-        model, loss_weights = get_model()
-        # Shared, method-independent starting point: identical weights for every method at this
-        # seed, different weights across seeds (see seed_init_network).
-        seed_init_network(model.net, args.seed)
+                                        causal_eps0, args.num_causal_buckets,
+                                        fourier_modes=fourier_modes)
 
-        n_phases = len(spec["schedule"])
-        saves_per_phase = max(1, args.n_save_models // n_phases)
         solver_models = []
-        for (opt_name, lr, decay, frac) in spec["schedule"]:
-            phase_iters = max(1, int(round(args.iterations * frac)))
-            compile_optimizer(model, opt_name, lr, loss_weights, decay=decay)
-            saver = ModelSaverCallback(total_iterations=phase_iters, n_save_models=saves_per_phase)
-            print(f"--- phase: {opt_name} lr={lr} decay={decay} iters={phase_iters} ---")
-            model.train(iterations=phase_iters, display_every=args.display_every,
-                        callbacks=[saver], model_save_path=run_dir, save_model=False)
-            solver_models.extend(saver.saved_models)
+        window_models = []
+        prev_model = None
+        for w in range(W):
+            time_range = (float(edges[w]), float(edges[w + 1])) if W > 1 else None
+            ic_func = make_ic_handoff(prev_model, len(output_names)) if w > 0 else None
+            gm = build_get_model(args.pde, hidden_layers, spec["loss_type"],
+                                 causal_eps0, args.num_causal_buckets,
+                                 fourier_modes=fourier_modes, time_range=time_range, ic_func=ic_func)
+            model, loss_weights = gm()
+            if w == 0:
+                # Shared, method-independent starting point: identical weights for every method
+                # at this seed, different weights across seeds (see seed_init_network).
+                seed_init_network(model.net, args.seed)
+            else:
+                # warm start from the previous window's solution (standard time-marching)
+                model.net.load_state_dict(prev_model.net.state_dict())
+            if W > 1:
+                print(f"\n==== time window {w + 1}/{W}: t in [{edges[w]:.4g}, {edges[w + 1]:.4g}] ====")
+            solver_models += train_one_model(model, loss_weights, spec, iters_per_window,
+                                             max(1, args.n_save_models // W), args.display_every,
+                                             run_dir, causal_eps_schedule=causal_eps_schedule,
+                                             causal_delta=args.causal_delta)
+            window_models.append(model)
+            prev_model = model
 
-        # final-model solution metrics
-        def predict_fn(coords):
-            return model.predict(coords.astype(np.float32))
+        # final-model solution metrics (stitched across windows when time-marching)
+        if W == 1:
+            def predict_fn(coords):
+                return model.predict(coords.astype(np.float32))
+        else:
+            def predict_fn(coords):
+                coords = np.asarray(coords)
+                idx = np.clip(np.searchsorted(edges[1:-1], coords[:, -1], side="right"), 0, W - 1)
+                out = np.empty((coords.shape[0], len(output_names)), dtype=np.float64)
+                for k in range(W):
+                    m = idx == k
+                    if m.any():
+                        out[m] = window_models[k].predict(coords[m].astype(np.float32)).reshape(-1, len(output_names))
+                return out
         pde_eval = model.pde
         sol_metrics, fields = evaluate_solution(pde_eval, predict_fn, spatial_dims, output_names)
         metrics.update(sol_metrics)
 
-        # loss history (per display step, per component) from the accumulated losshistory
+        # loss history (per display step, per component), concatenated across windows
         try:
-            lh = model.losshistory
-            steps = np.asarray(lh.steps).reshape(-1, 1)
-            loss_train = np.asarray(lh.loss_train)
+            blocks = []
+            offset = 0
+            for wm in window_models:
+                lh = wm.losshistory
+                steps = np.asarray(lh.steps, dtype=float).reshape(-1, 1)
+                if len(steps):
+                    blocks.append(np.hstack([steps + offset, np.asarray(lh.loss_train)]))
+                    offset += float(steps[-1, 0])
+            loss_hist = np.vstack(blocks)
             np.savetxt(os.path.join(run_dir, "loss_history.csv"),
-                       np.hstack([steps, loss_train]), delimiter=",",
-                       header="step," + ",".join(f"loss_{i}" for i in range(loss_train.shape[1])), comments="")
+                       loss_hist, delimiter=",",
+                       header="step," + ",".join(f"loss_{i}" for i in range(loss_hist.shape[1] - 1)), comments="")
         except Exception as e:
             print(f"[warn] could not save loss history: {e}")
 

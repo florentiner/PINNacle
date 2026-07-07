@@ -221,6 +221,10 @@ class PDE(Data):
         with torch.no_grad():
             cumulative_prior_loss = torch.cumsum(bucket_means, dim=0) - bucket_means
             weights = torch.exp(-self.causal_eps * cumulative_prior_loss)
+            # Diagnostic for the causal-training annealing/stopping rule of Wang et al. 2022
+            # (arXiv:2203.07404): training with the current causal_eps is considered converged
+            # once min_i w_i > delta (they recommend delta=0.99), at which point eps is increased.
+            self.last_causal_min_weight = float(weights.min())
 
         return (weights * bucket_means).sum() / weights.sum().clamp(min=1e-12)
 
