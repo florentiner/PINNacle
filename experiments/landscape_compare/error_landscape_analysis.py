@@ -48,6 +48,12 @@ METHOD_COLORS = {"origin": "tab:red", "causal": "tab:blue", "soap": "tab:orange"
 # --------------------------------------------------------------------------- #
 # Tiny forward pass straight from an FNN checkpoint (no torch/deepxde needed)
 # --------------------------------------------------------------------------- #
+# Exact-periodicity Fourier embedding used by the harness (run_experiment.PDE_REGISTRY):
+# checkpoints trained with fourier_modes > 0 expect embedded inputs, so the manual forward
+# must apply the same transform. (spatial_dims, base wavenumber) per PDE:
+PERIODIC_SPEC = {"kuramoto_sivashinsky": (1, 1.0), "grayscott": (2, np.pi), "burgers1d": (1, None)}
+
+
 def load_state(path):
     import torch  # local import: only used to deserialize; math below is numpy
     sd = torch.load(path, map_location="cpu")
@@ -62,9 +68,28 @@ def load_state(path):
     return layers
 
 
-def forward(layers, x):
-    """x: (N, in_dim) float64 -> (N, out_dim). tanh on all but the last layer (dde FNN)."""
-    h = x
+def embed_inputs(x, pde, fourier_modes):
+    """Numpy replica of run_experiment.make_periodic_transform (identity if modes == 0)."""
+    if not fourier_modes:
+        return x
+    spatial_dims, base_k = PERIODIC_SPEC[pde]
+    ks = np.arange(1, fourier_modes + 1, dtype=np.float64) * base_k
+    feats = []
+    for d in range(spatial_dims):
+        ang = x[:, d:d + 1] * ks
+        feats.append(np.cos(ang))
+        feats.append(np.sin(ang))
+    feats.append(x[:, spatial_dims:])
+    return np.concatenate(feats, axis=1)
+
+
+def forward(layers, x, pde=None, fourier_modes=0):
+    """x: (N, in_dim) float64 raw coords -> (N, out_dim). Applies the periodic embedding when
+    the run was trained with one, then tanh on all but the last layer (dde FNN)."""
+    h = embed_inputs(x, pde, fourier_modes) if fourier_modes else x
+    if h.shape[1] != layers[0][0].shape[1]:
+        raise ValueError(f"input dim {h.shape[1]} != first-layer dim {layers[0][0].shape[1]} "
+                         f"(fourier_modes={fourier_modes} mismatch with checkpoint?)")
     for k, (W, b) in enumerate(layers):
         h = h @ W.T + b
         if k < len(layers) - 1:
@@ -100,13 +125,19 @@ def analyze_run(run_dir, n_ref=4000, n_lambda=5, rng=None):
     X, Y = coords[sub], ref[sub]
     ref_rms = np.sqrt((Y ** 2).mean())
 
+    # run config: pde name + Fourier-embedding modes (checkpoints expect embedded inputs)
+    cfg_p = os.path.join(run_dir, "config.json")
+    cfg = json.load(open(cfg_p)) if os.path.exists(cfg_p) else {}
+    pde_name = cfg.get("pde", os.path.basename(os.path.dirname(run_dir)))
+    fmodes = int(cfg.get("fourier_modes", 0) or 0)
+
     ckpts = sorted(p for p in os.listdir(ckpt_dir) if p.endswith(".pt"))
     nets = [load_state(os.path.join(ckpt_dir, p)) for p in ckpts]
 
     # per-checkpoint error + prediction rms (trivial attraction)
     errs, pred_rms = [], []
     for net in nets:
-        P = forward(net, X).reshape(Y.shape)
+        P = forward(net, X, pde_name, fmodes).reshape(Y.shape)
         errs.append(rel_l2(P, Y))
         pred_rms.append(float(np.sqrt((P ** 2).mean()) / max(ref_rms, EPS)))
     errs, pred_rms = np.array(errs), np.array(pred_rms)
@@ -120,7 +151,7 @@ def analyze_run(run_dir, n_ref=4000, n_lambda=5, rng=None):
     path_x, path_err = [0.0], [errs[0]]
     for i in range(len(nets) - 1):
         for lam in lam_grid:
-            P = forward(lerp_layers(nets[i], nets[i + 1], lam), X).reshape(Y.shape)
+            P = forward(lerp_layers(nets[i], nets[i + 1], lam), X, pde_name, fmodes).reshape(Y.shape)
             path_x.append(i + lam)
             path_err.append(rel_l2(P, Y))
         path_x.append(float(i + 1))

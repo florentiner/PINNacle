@@ -35,6 +35,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 
 import argparse
+import copy
 import json
 import subprocess
 import time
@@ -277,15 +278,127 @@ class CausalEpsAdvance(dde.callbacks.Callback):
             self.model.stop_training = True
 
 
+METRIC_COLUMNS = ["mse", "mae", "mxe", "l1re", "l2re", "crmse", "ic_mse", "bc_mse", "bc_rmse", "bc_l2re"]
+
+
+class PerEpochMetricsCallback(dde.callbacks.Callback):
+    """Records mse/mae/mxe/l1re/l2re/crmse/ic_mse/bc_mse/bc_rmse/bc_l2re every `log_every` epochs
+    against a fixed reference sub-sample, WITHOUT ever clearing its own history.
+
+    src.utils.callbacks.TesterCallback computes the same metrics but is designed to be reused
+    across many short training chunks in the RL pipeline: its on_train_end wipes every
+    accumulator list back to empty (and resets its epoch counter to 0) once it has read off the
+    chunk-final .rmse/.brmse it needs -- confirmed by direct tracing (valid_epoch correctly
+    reaches N during training, then is reset to 0 inside on_train_end). That makes it unusable
+    for "train, then read the history back" the way this harness wants: attaching a fresh
+    TesterCallback per optimizer phase and reading its lists after model.train() returns always
+    yields empty lists, silently. This callback exists purely to avoid that trap: build ONE
+    instance per run, pass the SAME instance into every model.train() call across every phase/
+    sub-phase, and its own epoch counter -- independent of DeepXDE's train_state.step, which
+    ModelSaverCallback resets to 0 after every phase -- gives one continuous, non-resetting
+    step axis for free.
+    """
+
+    def __init__(self, pde, spatial_dims, log_every=100, n_ref=4000, seed=0):
+        super().__init__()
+        coords, values = _get_ref(pde)
+        rng = np.random.default_rng(seed)
+        sub = rng.choice(coords.shape[0], size=min(n_ref, coords.shape[0]), replace=False)
+        self.coords, self.values = coords[sub], values[sub]
+        self.ic_mask, self.bc_mask = _ic_bc_masks(pde, self.coords, spatial_dims)
+        self.solution_l1 = float(np.abs(self.values).mean())
+        self.solution_l2 = float(np.sqrt((self.values ** 2).mean()))
+        self.log_every = max(1, log_every)
+        self._since_last = 0
+        self.epoch = 0
+        self.rows = []
+
+    def on_epoch_end(self):
+        self.epoch += 1
+        self._since_last += 1
+        if self._since_last < self.log_every:
+            return
+        self._since_last = 0
+
+        with torch.no_grad():
+            y = self.model.predict(self.coords)
+        err = y - self.values
+        mse = float((err ** 2).mean())
+        row = {
+            "epoch": self.epoch, "mse": mse, "mae": float(np.abs(err).mean()),
+            "mxe": float(np.abs(err).max()),
+            "l1re": float(np.abs(err).mean() / self.solution_l1) if self.solution_l1 > 0 else float("nan"),
+            "l2re": float(np.sqrt(mse) / self.solution_l2) if self.solution_l2 > 0 else float("nan"),
+            "crmse": float(np.abs(err.mean())),
+        }
+        if self.ic_mask.any():
+            row["ic_mse"] = float((err[self.ic_mask] ** 2).mean())
+        else:
+            row["ic_mse"] = float("nan")
+        if self.bc_mask.any():
+            bc_mse = float((err[self.bc_mask] ** 2).mean())
+            row["bc_mse"] = bc_mse
+            row["bc_rmse"] = float(np.sqrt(bc_mse))
+            row["bc_l2re"] = row["bc_rmse"] / max(self.solution_l2, 1e-12)
+        else:
+            row["bc_mse"] = row["bc_rmse"] = row["bc_l2re"] = float("nan")
+        self.rows.append(row)
+
+
 def train_one_model(model, loss_weights, spec, iterations, n_saves, display_every, run_dir,
-                    causal_eps_schedule=None, causal_delta=0.99):
+                    causal_eps_schedule=None, causal_delta=0.99, step_offset=0.0, metrics_cb=None):
     """Run the method's optimizer schedule on `model` (already seed-initialized/warm-started).
 
     For causal-loss methods with an eps schedule, each optimizer phase is split into annealing
     sub-phases: model.data.causal_eps is raised through the schedule, advancing early when all
-    causal weights exceed `causal_delta`. Returns the list of checkpoint nets collected.
+    causal weights exceed `causal_delta`.
+
+    Every model.train() call resets DeepXDE's internal step counter to 0 (ModelSaverCallback's
+    on_train_end does this), so a naive concatenation of model.losshistory across phases would
+    have overlapping/repeating step numbers for any multi-phase method (lbfgs_baseline's Adam+
+    L-BFGS tail, and every causal method's 5 eps sub-phases). `step_offset` fixes that: each
+    phase's harvested loss-history rows get `+= step_offset` before `step_offset` is advanced by
+    that phase's iteration count, giving one monotonically increasing step axis for the whole
+    run (across windows too, when the caller threads step_offset through time-marching).
+
+    metrics_cb: an already-constructed PerEpochMetricsCallback (or None to skip per-epoch
+    validation metrics entirely -- used for time-marching, where the PDE's ref_data spans the
+    FULL time domain regardless of the current window's bbox, so scoring a mid-window model
+    against it would mix in massive extrapolation error from times it never trained on). The
+    SAME instance must be passed to every phase in a window (it accumulates its own epoch
+    counter across model.train() calls, unlike TesterCallback -- see its docstring for why a
+    fresh TesterCallback per phase silently loses everything).
+
+    Returns (solver_models, loss_rows, step_offset):
+      loss_rows : list of 1D arrays [step, loss_0, loss_1, ...] (DeepXDE's raw component losses)
     """
-    solver_models = []
+    solver_models, loss_rows = [], []
+
+    def run_phase(opt_name, lr, decay, phase_iters, n_save_models, causal_eps=None):
+        nonlocal step_offset
+        compile_optimizer(model, opt_name, lr, loss_weights, decay=decay)
+        if causal_eps is not None:
+            model.data.causal_eps = causal_eps
+        prev_len = len(model.losshistory.steps)
+        saver = ModelSaverCallback(total_iterations=phase_iters, n_save_models=n_save_models)
+        callbacks = [saver]
+        if causal_eps is not None:
+            callbacks.append(CausalEpsAdvance(delta=causal_delta))
+        if metrics_cb is not None:
+            callbacks.append(metrics_cb)
+        tag = f"causal_eps={causal_eps} " if causal_eps is not None else ""
+        print(f"--- phase: {opt_name} lr={lr} decay={decay} {tag}iters<={phase_iters} "
+              f"(steps {step_offset:.0f}+) ---")
+        model.train(iterations=phase_iters, display_every=display_every, callbacks=callbacks,
+                    model_save_path=run_dir, save_model=False)
+
+        steps = np.asarray(model.losshistory.steps[prev_len:], dtype=float)
+        if len(steps):
+            lt = np.asarray(model.losshistory.loss_train[prev_len:], dtype=float)
+            loss_rows.append(np.hstack([(steps + step_offset)[:, None], lt]))
+        step_offset += phase_iters
+        solver_models.extend(saver.saved_models)
+
     n_phases = len(spec["schedule"])
     for (opt_name, lr, decay, frac) in spec["schedule"]:
         phase_iters = max(1, int(round(iterations * frac)))
@@ -294,26 +407,14 @@ def train_one_model(model, loss_weights, spec, iterations, n_saves, display_ever
         # actually reaches the target lr.
         if decay is not None and decay[0] == "warmup_step" and decay[1] > phase_iters // 2:
             decay = ("warmup_step", max(1, phase_iters // 5), decay[2], decay[3])
-        compile_optimizer(model, opt_name, lr, loss_weights, decay=decay)
         if spec["loss_type"] == "causal" and causal_eps_schedule:
             sub_iters = max(1, phase_iters // len(causal_eps_schedule))
             sub_saves = max(1, n_saves // (n_phases * len(causal_eps_schedule)))
             for eps in causal_eps_schedule:
-                model.data.causal_eps = eps
-                saver = ModelSaverCallback(total_iterations=sub_iters, n_save_models=sub_saves)
-                print(f"--- phase: {opt_name} lr={lr} decay={decay} causal_eps={eps} iters<={sub_iters} ---")
-                model.train(iterations=sub_iters, display_every=display_every,
-                            callbacks=[saver, CausalEpsAdvance(delta=causal_delta)],
-                            model_save_path=run_dir, save_model=False)
-                solver_models.extend(saver.saved_models)
+                run_phase(opt_name, lr, decay, sub_iters, sub_saves, causal_eps=eps)
         else:
-            saver = ModelSaverCallback(total_iterations=phase_iters,
-                                       n_save_models=max(1, n_saves // n_phases))
-            print(f"--- phase: {opt_name} lr={lr} decay={decay} iters={phase_iters} ---")
-            model.train(iterations=phase_iters, display_every=display_every,
-                        callbacks=[saver], model_save_path=run_dir, save_model=False)
-            solver_models.extend(saver.saved_models)
-    return solver_models
+            run_phase(opt_name, lr, decay, phase_iters, max(1, n_saves // n_phases))
+    return solver_models, loss_rows, step_offset
 
 
 def make_ic_handoff(prev_model, output_dim):
@@ -401,6 +502,19 @@ def _spectral_band_error(coords, pred, ref, spatial_dims, n_bands=3):
     return out
 
 
+def _ic_bc_masks(pde, coords, spatial_dims):
+    """IC mask (t == t0) and spatial-boundary mask (bbox extremes, excluding the IC slice)."""
+    has_time = pde.input_dim == spatial_dims + 1
+    ic = np.isclose(coords[:, -1], coords[:, -1].min(), atol=1e-9) if has_time else np.zeros(len(coords), dtype=bool)
+    bbox = np.asarray(pde.bbox, dtype=float)
+    bmask = np.zeros(coords.shape[0], dtype=bool)
+    for d in range(spatial_dims):
+        bmask |= np.isclose(coords[:, d], bbox[2 * d], atol=1e-9) | np.isclose(coords[:, d], bbox[2 * d + 1], atol=1e-9)
+    if has_time:
+        bmask &= ~ic
+    return ic, bmask
+
+
 def evaluate_solution(pde, predict_fn, spatial_dims, output_names):
     """Predict on the reference grid and compute the solution-accuracy metrics + fields."""
     coords, values = _get_ref(pde)
@@ -414,21 +528,9 @@ def evaluate_solution(pde, predict_fn, spatial_dims, output_names):
     for c, name in enumerate(output_names):
         metrics[f"relative_l2_{name}"] = _relative_l2(pred[:, c : c + 1], values[:, c : c + 1])
 
-    # IC error (t == t0): time is the last input dim for these time PDEs.
-    has_time = pde.input_dim == spatial_dims + 1
-    if has_time:
-        t = coords[:, -1]
-        ic = np.isclose(t, t.min(), atol=1e-9)
-        if ic.any():
-            metrics["ic_relative_l2"] = _relative_l2(pred[ic], values[ic])
-
-    # spatial-boundary error via bbox extremes (excluding the IC slice)
-    bbox = np.asarray(pde.bbox, dtype=float)
-    bmask = np.zeros(coords.shape[0], dtype=bool)
-    for d in range(spatial_dims):
-        bmask |= np.isclose(coords[:, d], bbox[2 * d], atol=1e-9) | np.isclose(coords[:, d], bbox[2 * d + 1], atol=1e-9)
-    if has_time:
-        bmask &= ~np.isclose(coords[:, -1], coords[:, -1].min(), atol=1e-9)
+    ic, bmask = _ic_bc_masks(pde, coords, spatial_dims)
+    if ic.any():
+        metrics["ic_relative_l2"] = _relative_l2(pred[ic], values[ic])
     if bmask.any():
         metrics["boundary_relative_l2"] = _relative_l2(pred[bmask], values[bmask])
 
@@ -679,8 +781,20 @@ def main():
                                         causal_eps0, args.num_causal_buckets,
                                         fourier_modes=fourier_modes)
 
+        # A validation metric evaluated against the PDE's ref_data only means what it looks like
+        # when the model being scored was trained over ref_data's whole time range: with time-
+        # marching (W>1), each window's model only "knows" its own sub-interval, so scoring it
+        # against the full-domain reference every log_every steps would silently mix in massive
+        # extrapolation error from times it never trained on. Keep the standard per-epoch metric
+        # curve (mse/l2re/etc.) for the common W==1 case; for W>1 rely on the (already-correct,
+        # because predict_fn stitches windows) final metrics.json + trajectory_error.csv instead.
+        attach_tester = (W == 1)
+
         solver_models = []
         window_models = []
+        all_loss_rows = []
+        metrics_cb = None
+        step_offset = 0.0
         prev_model = None
         for w in range(W):
             time_range = (float(edges[w]), float(edges[w + 1])) if W > 1 else None
@@ -693,15 +807,27 @@ def main():
                 # Shared, method-independent starting point: identical weights for every method
                 # at this seed, different weights across seeds (see seed_init_network).
                 seed_init_network(model.net, args.seed)
+                # Save the shared init as checkpoint 0 so every method's trajectory starts at
+                # the SAME visible point in the (shared) landscape and per-checkpoint error
+                # curves begin at the true common origin.
+                solver_models.append(copy.deepcopy(model.net))
+                if attach_tester:
+                    # ONE instance, reused across every phase/sub-phase of this (single) window --
+                    # see PerEpochMetricsCallback's docstring for why a fresh one per phase silently
+                    # loses everything.
+                    metrics_cb = PerEpochMetricsCallback(model.pde, spatial_dims,
+                                                         log_every=args.display_every, seed=args.seed)
             else:
                 # warm start from the previous window's solution (standard time-marching)
                 model.net.load_state_dict(prev_model.net.state_dict())
             if W > 1:
                 print(f"\n==== time window {w + 1}/{W}: t in [{edges[w]:.4g}, {edges[w + 1]:.4g}] ====")
-            solver_models += train_one_model(model, loss_weights, spec, iters_per_window,
-                                             max(1, args.n_save_models // W), args.display_every,
-                                             run_dir, causal_eps_schedule=causal_eps_schedule,
-                                             causal_delta=args.causal_delta)
+            new_models, loss_rows, step_offset = train_one_model(
+                model, loss_weights, spec, iters_per_window, max(1, args.n_save_models // W),
+                args.display_every, run_dir, causal_eps_schedule=causal_eps_schedule,
+                causal_delta=args.causal_delta, step_offset=step_offset, metrics_cb=metrics_cb)
+            solver_models += new_models
+            all_loss_rows += loss_rows
             window_models.append(model)
             prev_model = model
 
@@ -723,22 +849,31 @@ def main():
         sol_metrics, fields = evaluate_solution(pde_eval, predict_fn, spatial_dims, output_names)
         metrics.update(sol_metrics)
 
-        # loss history (per display step, per component), concatenated across windows
+        # loss history (per display step, per component): step_offset already makes this
+        # monotonic across every phase/sub-phase/window (see train_one_model's docstring).
         try:
-            blocks = []
-            offset = 0
-            for wm in window_models:
-                lh = wm.losshistory
-                steps = np.asarray(lh.steps, dtype=float).reshape(-1, 1)
-                if len(steps):
-                    blocks.append(np.hstack([steps + offset, np.asarray(lh.loss_train)]))
-                    offset += float(steps[-1, 0])
-            loss_hist = np.vstack(blocks)
+            loss_hist = np.vstack(all_loss_rows)
             np.savetxt(os.path.join(run_dir, "loss_history.csv"),
                        loss_hist, delimiter=",",
                        header="step," + ",".join(f"loss_{i}" for i in range(loss_hist.shape[1] - 1)), comments="")
         except Exception as e:
             print(f"[warn] could not save loss history: {e}")
+
+        # standard per-epoch validation metrics (mse/mae/mxe/l1re/l2re/crmse/ic_mse/bc_mse/...) --
+        # previously not saved at all (only the single final-checkpoint snapshot in metrics.json
+        # existed). Empty/absent for time-marching runs (see the attach_tester note above).
+        if metrics_cb is not None and metrics_cb.rows:
+            try:
+                cols = ["epoch"] + METRIC_COLUMNS
+                arr = np.array([[r[c] for c in cols] for r in metrics_cb.rows])
+                np.savetxt(os.path.join(run_dir, "metrics_history.csv"), arr, delimiter=",",
+                           header=",".join(cols), comments="")
+            except Exception as e:
+                print(f"[warn] could not save metrics history: {e}")
+        elif not attach_tester:
+            print("[note] metrics_history.csv skipped: time-marching (--time-windows > 1) makes "
+                  "a per-epoch validation metric against the full-domain reference misleading "
+                  "for a single window's model; see metrics.json for the correct stitched result.")
 
         # per-checkpoint trajectory error (rel-L2 at each landscape trajectory point)
         try:

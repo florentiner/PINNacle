@@ -49,7 +49,9 @@ ALL_PDES = ["kuramoto_sivashinsky", "grayscott", "burgers1d"]
 #                  L-BFGS), which is a different, weaker-on-chaotic optimizer axis kept only to
 #                  confirm that plain L-BFGS underperforms.
 #   frozen       - gradient-free control (Frozen-PINN).
-DEFAULT_METHODS = ["origin", "causal", "soap_causal", "frozen"]
+# `soap` (SOAP + origin loss) is also in the defaults so the SOAP ablation without causal is
+# available, matching the matrix actually run for the first analysis.
+DEFAULT_METHODS = ["origin", "causal", "soap", "soap_causal", "frozen"]
 ALL_METHODS = ["origin", "causal", "adam_baseline", "lbfgs_baseline", "soap", "soap_causal", "frozen"]
 
 

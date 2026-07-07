@@ -53,11 +53,26 @@ gaps, now fixed:
    interface — the setting the causal paper actually used for chaotic KS (their Δt = 0.1 ⇒
    `--time-windows 10`). Gradient methods on chaotic PDEs only; ignored elsewhere.
 
-Recommended chaotic rerun:
+Recommended chaotic rerun + analysis:
 ```bash
 python experiments/landscape_compare/run_all.py \
     --pdes kuramoto_sivashinsky grayscott --n-repeats 3 --iterations 30000 --time-windows 10
+python experiments/landscape_compare/compare_landscapes.py --runs runs_landscape_compare
+python experiments/landscape_compare/error_landscape_analysis.py --runs runs_landscape_compare
+python experiments/landscape_compare/shared_landscape.py --runs runs_landscape_compare
 ```
+
+### Shared error landscape (the core comparison artifact)
+
+Because every gradient method at a given seed starts from the **same initial weights** (saved
+as checkpoint `model-000`), their trajectories can be embedded into **one** shared 2D space:
+`shared_landscape.py` trains a single autoencoder on the union of all methods' checkpoints,
+evaluates one loss grid (plain/origin loss as the neutral yardstick) and one **TRUE-ERROR
+grid** (each decoded grid network's relative-L2 vs the reference), and overlays every method's
+path on both maps — same landscape, same start, methods differ only in where they go. Outputs
+under `<runs>/shared_landscape/<pde>_seed<k>/` (`loss_map.pdf`, `error_map.pdf`,
+`shared_grid.npz`, `trajectories.npz`, `endpoints.json`). Runs on the results machine
+(needs torch/deepxde; GPU used if available).
 
 ### Controlled weight initialization
 
@@ -135,7 +150,12 @@ frozen) actually change with the seed.
 config.json           # every hyperparameter, seed, git commit, timestamps
 metrics.json          # relative-L2, MSE/MAE, IC/boundary error, Fourier low/mid/high, wall-clock
 solution/fields.npz   # coords, pred, ref, abs_error on the full reference grid  (ALL methods)
-loss_history.csv      # per-display-step loss components                          (gradient)
+loss_history.csv      # per-display-step loss components, one monotonic step axis (gradient)
+                      #   across every phase/sub-phase/window (see train_one_model)
+metrics_history.csv   # epoch,mse,mae,mxe,l1re,l2re,crmse,ic_mse,bc_mse,bc_rmse,bc_l2re every
+                      #   --display-every epochs (PerEpochMetricsCallback); absent for
+                      #   --time-windows > 1 runs, where a per-window number against the
+                      #   full-domain reference would be misleading -- see metrics.json instead
 trajectory_error.csv  # relative-L2 at each landscape checkpoint                  (gradient)
 checkpoints/model-*.pt# the saved trajectory of network weights                   (gradient)
 landscape/            # 2D-embedded loss landscape                                (gradient)
