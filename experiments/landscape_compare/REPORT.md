@@ -112,3 +112,47 @@ From `ANALYSIS.md` rounds 1–2 and the H6–H10 tests:
 `error_landscape/kuramoto_sivashinsky_trivial_attraction.pdf` (amplitude decay to the
 trivial branch, all methods), `comparison_figures/relative_l2.pdf` (final errors ± seed
 spread), `error_landscape/*_trajmap.pdf` (per-method trajectories over their landscapes).
+
+---
+
+## Appendix: double-check of the "origin beats best_practice on KS" result
+
+Because the result is counterintuitive, it was re-verified end to end. **It is real, and its
+cause is fully identified — three fixed-budget schedule artifacts, not a code bug.**
+
+**Pipeline checks (all pass):**
+- Configs correct (`ablation_all`: causal + modified_mlp + grad_norm + 10 windows; `none`:
+  plain FNN, origin loss, 1 window; both fourier=10, 30k iterations).
+- Sign-consistent in **all 3 seeds** (none 0.914/0.926/0.915 vs all 0.950/0.989/0.941).
+- Independent recomputation from raw `fields.npz` reproduces `metrics.json` exactly.
+- Window stitching clean: prediction jumps across all 9 window boundaries are *smaller*
+  than the reference's own step-to-step change (no evaluation/handoff bug).
+- Both runs reach comparable, tiny final losses (6.0e-3 vs 7.6e-3) — the difference is in
+  *which function* that loss buys, not in failed optimization.
+
+**Root cause chain (each link verified from the data):**
+1. **Window starvation (W):** window 1 of the stack — 3000 iterations exclusively on
+   t∈[0, 0.1], *analytic* IC, no handoff involved — fits its own window at rel-L2 **0.254**
+   vs origin's **0.041** on the same region. `ablation_W` alone confirms: early-band fit
+   2.3× worse than origin.
+2. **Grad-norm cold start (G):** weights start each window at [1, 1] (paper-faithful) and
+   the log shows them reaching only ~[1, 9] by iteration 2000 of 3000 — vs origin's fixed
+   IC×100. The IC is under-enforced precisely when it matters; `ablation_G` alone: early
+   fit 2.6× worse (0.108). In later windows grad-norm settles at ≈[1.1, 1.1] (handed-off
+   ICs are easy, so it never re-weights them up).
+3. **Compounding:** the IC handoff then propagates window-1's 0.25 error through 9 more
+   windows (H7 mechanism).
+Secondary: causal methods recompile per ε sub-phase, so the lr scheduler restarts each time
+— stacked runs train at constant lr 1e-3 while origin decays to 0.21×1e-3 (final polish).
+No loss blow-ups at the restarts (checked), so this is a minor contributor.
+
+**Exculpated ingredients:** the modified MLP is innocent — `ablation_A` alone *beats*
+origin's early fit (0.027 vs 0.041) and ties its horizon; causal alone is mild (0.063).
+
+**Interpretation:** this is a *fixed-total-budget* comparison (30k iterations for everyone —
+the fair controlled design). The stack's ingredients carry per-window/warm-up overhead that,
+under budget parity, costs more than they return, while origin already sits at the
+predictability-horizon wall (t\*=0.30, tied best of all 16 combos) — so there was no headroom
+for the stack to win on KS in the first place. At the papers' budgets (10–100× more
+iterations per window) artifacts 1–2 dissolve; the claim "origin > best_practice" holds at
+benchmark scale, and says the stack's overhead is real, not that the papers are wrong.
