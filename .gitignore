@@ -168,3 +168,7 @@ cython_debug/
 # vscode
 .vscode/
 .idea/
+
+# report figures are source-controlled (regenerable via make_report_figures.py, but REPORT.md
+# must render on a fresh clone without the results tree)
+!experiments/landscape_compare/figures/*.png
