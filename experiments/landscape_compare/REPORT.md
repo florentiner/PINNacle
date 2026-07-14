@@ -53,6 +53,9 @@ W-containing combos pin every seed to the trivial-background solution (0.094–0
 0.039). The pattern region itself stays ≥1.1 rel-L2 for *every* method, origin and stack
 alike (H6b).
 
+![Per-seed ablation results](figures/per_seed_ablation.png)
+*All 16 combos, every seed. KS (left): origin is near the best; the full stack sits above it in all seeds. GS (right): everything piles onto the trivial-background value except the overshoot-attractor failures (origin@1236, G, WA/CWA).*
+
 ## 3. How each part influences the training process (and in what sense it "beats" origin)
 
 Main effects on process metrics, KS (origin baseline: early-band error 0.053, tracked
@@ -90,6 +93,12 @@ From `ANALYSIS.md` rounds 1–2 and the H6–H10 tests:
    other than to the reference; GS: every method reproduces the 98% background and misses
    the 1.7% pattern).
 
+![The horizon wall](figures/ks_horizon.png)
+*Left: per-time-band error — origin, A and the stack all cross the failure threshold at t≈0.2–0.3 (CWA shows the un-rescued marching divergence). Right: amplitude ratio — track-then-decay toward the trivial branch for origin and stack alike.*
+
+![Process vs destination](figures/dissociation.png)
+*Same seed-coloring in both panels: final weights (left) form three tight seed clusters (η²(seed)=0.63); training-trajectory features (right) show no seed structure at all (η²(seed)=0.01) — the method shapes the path, the seed's init locks the destination.*
+
 ## 5. Bottom line
 
 - **"Original DeepXDE is not good at chaotic PDEs"** is true, for three stacked reasons:
@@ -108,7 +117,7 @@ From `ANALYSIS.md` rounds 1–2 and the H6–H10 tests:
   gradient-free Frozen-PINN solves the same equation to 3.2e-5 in 4 seconds because it
   replaces the horizon-limited optimization with a well-conditioned linear solve.
 
-*Figures*: `similarity/*_embedding.pdf` (process-vs-destination dissociation),
+*Embedded figures are regenerable via `python experiments/landscape_compare/make_report_figures.py --runs runs_landscape_compare`. Further figures*: `similarity/*_embedding.pdf` (process-vs-destination dissociation),
 `error_landscape/kuramoto_sivashinsky_trivial_attraction.pdf` (amplitude decay to the
 trivial branch, all methods), `comparison_figures/relative_l2.pdf` (final errors ± seed
 spread), `error_landscape/*_trajmap.pdf` (per-method trajectories over their landscapes).
@@ -199,6 +208,9 @@ beating origin (H-KS-1).
 **A > all because A carries none of the W-damage.** The stack = A + a small C-tax + a huge
 W-wound − a large-but-incomplete G-bandage.
 
+![Decomposition](figures/ks_decomposition.png)
+*The chain per seed (dots): the +W step is the wound, the +G step the incomplete bandage; the dashed line is origin.*
+
 ### Q3. Is ablation_A truly better than origin, or statistical error?
 
 **Real in direction, unproven in size — treat as "A ≈ origin, both at the wall".**
@@ -223,6 +235,9 @@ W-wound − a large-but-incomplete G-bandage.
   stack's C/W ingredients reliably steer every seed into the less-bad trivial one. The
   correct GS framing: **best_practice buys attractor-selection reliability (worth −43.6% of
   mean error and ~150× variance), never pattern recovery.**
+
+![GS insurance](figures/gs_insurance.png)
+*origin's per-epoch error: two seeds converge to 0.094 (below the stack) while seed 1236 is captured by the overshoot attractor and worsens; the stack's final stitched errors (stars) are uniformly 0.09–0.11 — insurance, not improvement.*
 
 ### Round-4 bottom line
 
