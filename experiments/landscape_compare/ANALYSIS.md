@@ -165,6 +165,76 @@ ingredients — all three now fixed in the harness:
 Re-run for the causal-vs-origin verdict under the corrected setup:
 `run_all.py --pdes kuramoto_sivashinsky grayscott --n-repeats 3 --iterations 30000 --time-windows 10`
 
+## Round 2 — ablation sweep under the corrected setup: why `origin` really fails
+
+Data: 96/96 cells, 2 PDEs × 16 ingredient combos (C=causal+annealing, W=10-window
+time-marching, A=modified MLP, G=grad-norm weighting) × 3 seeds, 30k iterations, commit
+`5ebe1c0`. Crucially, the **exact-periodicity Fourier embedding is ON in every cell**
+(including `ablation_none` = origin), so the round-1 ill-posedness bug is fixed everywhere
+and the sweep isolates the four method ingredients cleanly.
+
+### The deceptive landscape is gone; the failure is not
+
+With periodicity enforced, KS/origin's loss↔error correlation flips from **−0.72 to +0.91**
+(the landscape is now honest: loss and error fall together, then plateau together) and the
+error improves slightly, 0.97 → **0.918**. But 0.918 is still a failure — and now for a
+cleaner, more fundamental reason:
+
+- **Origin solves early time nearly perfectly, then dies to the trivial branch.** KS/origin
+  rel-L2 by time band: t∈[0,0.2]: **0.040** — t∈[0.2,0.5]: 0.78 — t>0.5: ≈1.0, while the
+  prediction's amplitude decays (rms 0.78→0.26) as the true solution grows (0.78→1.30).
+- **The optimum it finds is stable, not under-trained.** The l2re curve is flat from epoch
+  ~10k to 30k (0.9186→0.9191); the final total loss is **6e-3** — tiny by the loss's own
+  standard. Low loss + 92% error at a *stable* minimum: the residual stops constraining the
+  solution beyond the predictability horizon.
+- **The horizon is exactly what chaos arithmetic predicts.** The rescaled KS has max linear
+  growth rate λ ≈ **25**/time-unit (e-folding time 0.04; the t∈[0,1] domain is ~25 e-folds).
+  A field fitted to ~4% error stays meaningful for t ≈ ln(1/0.04)/25 ≈ **0.13–0.2** — the
+  measured collapse point. Holding accuracy to t=1 would require pointwise error below
+  ~e^−25 ≈ 1e-11, far beyond float32 gradient training. Tracking-then-decay is therefore the
+  *best available minimum*, not a training accident.
+- **Gray–Scott: the trivial basin wins on volume.** The pattern occupies only **1.7%** of
+  the reference spacetime (|v| > 10% of max); (u,v)=(1,0) zeroes the residual on the other
+  ~98% of collocation volume. Every one of the 16 combos lands on it (v-error ≈ 1.0 for all;
+  the "9.4%" aggregate is the u≈1 background). The fixes only make reaching the trivial
+  point *reliable* (origin: 0.177±0.14 across seeds; C/W/G-containing combos: 0.094±0.001).
+
+### Factorial main effects: no ingredient (nor all four) breaks the horizon wall
+
+Mean effect of adding each ingredient, over all 8 with/without pairs (final rel-L2, − = helps):
+
+| ingredient | KS | Gray–Scott |
+|---|---|---|
+| C (causal) | **+0.050 (hurts)** | −0.028 |
+| W (marching) | **+0.094 (hurts)** | −0.003 |
+| A (modified MLP) | +0.062 | +0.000 |
+| G (grad-norm) | −0.063 | −0.021 |
+
+KS best cell: `ablation_A` 0.914 vs `none` 0.918 — statistically nothing. `ablation_all`
+(the full best-practice stack) = 0.960; `CWA` diverges (1.41). At a fixed 30k-iteration
+budget, W *hurts* because 10 windows × 3k iterations starves each window (marching combos
+have *worse* early-time fits, e.g. CW t<0.2 error 0.22 vs none 0.069), and causal spends
+most of its budget on early buckets it already fits. The papers' successful chaotic runs
+sit on top of ~6× wider modified MLPs and 10–100× more iterations per window: the horizon
+wall is pushed by **capacity + compute**, the tricks alone do not move it at this scale.
+(Frozen-PINN's 3.2e-5 on the same KS shows representability was never the barrier — the
+barrier is specifically pushing a soft-constrained NN through 25 e-folds of error
+amplification with gradient descent.)
+
+### Answer to "why is origin/DeepXDE not good at chaotic"
+
+1. **As shipped, the benchmark problem is ill-posed** (no spatial BCs; reference is
+   periodic) — this alone made the landscape actively deceptive in round 1 (corr −0.72).
+2. **With that fixed, chaos itself sets a horizon**: a soft residual loss stops pinning the
+   solution to the reference after ~ln(1/ε)/λ time units; past it, the lowest-loss
+   continuation is decay to the trivial branch (KS) or the trivial fixed point (GS, which
+   additionally wins ~98% of the collocation volume). The optimizer finds exactly that
+   minimum, converges, and stays — low loss, high error, honestly.
+3. **The literature's per-ingredient fixes don't break the wall at benchmark scale** —
+   factorial evidence above; they work in the papers in combination with much larger
+   networks and budgets (and Frozen-PINN sidesteps the wall entirely by not using
+   gradient descent).
+
 ## Conclusion
 
 Chaotic PDEs defeat gradient-trained PINNs through a **trivial-solution attractor**: an

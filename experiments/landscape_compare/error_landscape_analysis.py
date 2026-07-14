@@ -39,11 +39,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 EPS = 1e-12
-GRADIENT_METHODS = ["origin", "causal", "soap", "soap_causal", "best_practice",
-                    "adam_baseline", "lbfgs_baseline"]
-METHOD_COLORS = {"origin": "tab:red", "causal": "tab:blue", "soap": "tab:orange",
+_FIXED_COLORS = {"origin": "tab:red", "causal": "tab:blue", "soap": "tab:orange",
                  "soap_causal": "tab:green", "best_practice": "tab:cyan",
-                 "adam_baseline": "tab:brown", "lbfgs_baseline": "tab:purple"}
+                 "adam_baseline": "tab:brown", "lbfgs_baseline": "tab:purple",
+                 "ablation_none": "tab:red", "ablation_C": "tab:blue",
+                 "ablation_all": "tab:cyan"}
+_FALLBACK_COLORS = list(plt.get_cmap("tab20").colors)
+
+
+def method_color(method):
+    """Stable color per method; fixed for the core methods, hashed for everything else
+    (e.g. the 16 ablation_* combos), so new METHOD_SPEC entries never need edits here."""
+    if method in _FIXED_COLORS:
+        return _FIXED_COLORS[method]
+    return _FALLBACK_COLORS[hash(method) % len(_FALLBACK_COLORS)]
 
 
 # --------------------------------------------------------------------------- #
@@ -232,8 +241,8 @@ def collect(runs_root):
             if not os.path.isdir(pde_dir):
                 continue
             for method in sorted(os.listdir(pde_dir)):
-                if method not in GRADIENT_METHODS:
-                    continue
+                if not os.path.isdir(os.path.join(pde_dir, method, "checkpoints")):
+                    continue  # not a gradient run (frozen has no checkpoints)
                 r = analyze_run(os.path.join(pde_dir, method))
                 if r is not None:
                     out[(pde, method, seed)] = r
@@ -252,7 +261,7 @@ def fig_loss_vs_error(rows, pde, path, seed):
         return
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
     for m, r in sorted(sel.items()):
-        c = METHOD_COLORS.get(m)
+        c = method_color(m)
         x = np.arange(len(r["errs"]))
         ax1.plot(x[: len(r["losses"])], r["losses"], "-o", color=c, ms=3, label=m)
         ax2.plot(x, r["errs"], "-o", color=c, ms=3, label=m)
@@ -270,9 +279,9 @@ def fig_error_section(rows, pde, path, seed):
         return
     fig, ax = plt.subplots(figsize=(8, 4.5))
     for m, r in sorted(sel.items()):
-        ax.plot(r["path_x"] / r["path_x"].max(), r["path_err"], "-", color=METHOD_COLORS.get(m), label=m)
+        ax.plot(r["path_x"] / r["path_x"].max(), r["path_err"], "-", color=method_color(m), label=m)
         ck = np.isin(r["path_x"], np.arange(len(r["errs"])))
-        ax.plot(r["path_x"][ck] / r["path_x"].max(), r["path_err"][ck], "o", color=METHOD_COLORS.get(m), ms=4)
+        ax.plot(r["path_x"][ck] / r["path_x"].max(), r["path_err"][ck], "o", color=method_color(m), ms=4)
     ax.set_xlabel("training progress (path through full parameter space, checkpoints = dots)")
     ax.set_ylabel("TRUE relative-L2")
     ax.set_title(f"{pde}: error landscape section along each method's training path (seed {seed})")
@@ -287,7 +296,7 @@ def fig_trivial(rows, pde, path, seed):
         return
     fig, ax = plt.subplots(figsize=(7, 4))
     for m, r in sorted(sel.items()):
-        ax.plot(np.arange(len(r["pred_rms"])), r["pred_rms"], "-o", ms=3, color=METHOD_COLORS.get(m), label=m)
+        ax.plot(np.arange(len(r["pred_rms"])), r["pred_rms"], "-o", ms=3, color=method_color(m), label=m)
     ax.axhline(1.0, color="k", lw=0.8, ls="--", label="reference amplitude")
     ax.axhline(0.0, color="grey", lw=0.8, ls=":")
     ax.set_xlabel("checkpoint"); ax.set_ylabel("rms(prediction) / rms(reference)")
