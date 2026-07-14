@@ -135,3 +135,78 @@ The narrative the data should support: **chaotic PDEs give PINNs a rugged, decep
 landscape where residual and true error decouple; methods win by either reshaping the
 objective so low loss again means low error (causal), preconditioning the descent
 (SOAP/L-BFGS), or discarding the landscape for a well-conditioned linear solve (Frozen).**
+
+---
+
+## Round 3 — origin vs best_practice: hypotheses testable from `runs_landscape_compare`
+
+The 96-cell ablation sweep (16 ingredient combos × 3 seeds × 2 PDEs, shared init per seed)
+contains enough per-run data — error/loss trajectories, per-epoch metrics, 2D loss grids,
+checkpoints, solution fields — to ask *why* origin underperforms (or fails identically to)
+the best-practice stack, at four different levels of description. Each hypothesis names its
+data artifact and its decision rule; `similarity_analysis.py` implements H8–H10.
+
+**H6 — horizon, not asymptote.** If origin's deficit vs best_practice is a *predictability
+horizon* effect, the two should differ in the time (KS) / space (GS) *extent* of the
+well-fit region, not in the fit quality inside it.
+→ Artifact: `solution/fields.npz` (rel-L2 by time band), `metrics_history.csv`.
+→ Rule: compare per-band errors; equal early-band + equal collapse point ⇒ same horizon ⇒
+   the stack does not extend predictability at this scale (matches Round-2: t≈0.2 for both).
+
+**H7 — different failure *mechanisms*, same failure.** origin should fail by converging
+honestly to a stable partial-tracking minimum (flat error curve, corr(loss, err) ≈ +1),
+while marching-based stacks should fail by *compounding* (error growing along the window
+chain, ending above the shared-init error).
+→ Artifact: `trajectory_error.csv` + `landscape/trajectory_losses.npz`.
+→ Rule: origin's late error slope ≈ 0 with high corr; W-combos' final error > initial error.
+   (Round-2 confirms: origin 1.04→0.914 flat; CW 1.04→1.81, CWA →1.99.)
+
+**H8 — seed-vs-method variance dominance.** If, over the 16 combos, the *between-seed*
+variance of landscape/trajectory features is comparable to or larger than the
+*between-method* variance, the ingredients are not reshaping the optimization problem at
+all — the strongest possible statement that the wall is a property of the PDE, not the
+method.
+→ Artifact: all runs' landscape descriptors + resampled trajectories.
+→ Rule: pooled one-way η²(method) vs η²(seed) + silhouette scores under each labeling
+   (`similarity/variance_decomposition.csv`); η²_seed ≥ η²_method ⇒ method-irrelevance.
+
+**H9 — parameter-space laziness.** Within a seed, every plain-FNN method starts at the SAME
+weights. If final weights cluster by *seed* rather than by *method* (PCA/t-SNE of final
+checkpoints), the optimizer never leaves the init's basin regardless of ingredient — the
+methods choose *where in the shared basin* to settle, not *which basin*.
+→ Artifact: `checkpoints/model-*.pt` (last), FNN runs only.
+→ Rule: silhouette(seed) > silhouette(method) in `*_weights_embedding.pdf`.
+
+**H10 — solution-space collapse.** If all methods' *predicted fields* form essentially one
+cluster per PDE (near the trivial branch/point), then the 16 different optimization
+processes are converging to the *same wrong answer* — the trivial attractor is the unique
+reachable optimum, and origin is not "worse than best practice" so much as "identical to
+it in outcome".
+→ Artifact: `solution/fields.npz` predictions on the common reference grid.
+→ Rule: t-SNE/PCA of predicted fields shows no method separation beyond the diverged
+   W-combos; within-cluster spread ≥ between-method spread.
+
+### Round-3 verdicts (96-cell sweep, `similarity/variance_decomposition.csv`)
+
+| space | η²(method) | η²(seed) | silhouette(method / seed) | verdict |
+|---|---|---|---|---|
+| KS landscape   | 0.87 | 0.008 | +0.13 / −0.05 | method reshapes the landscape |
+| KS trajectory  | 0.94 | 0.013 | +0.28 / −0.06 | method reshapes the path |
+| KS solution    | 0.56 | 0.025 | −0.01 / −0.06 | graded field differences, no clusters |
+| KS weights     | 0.12 | **0.63** | −0.21 / **+0.45** | **clusters by seed = init basin** |
+| GS landscape   | 0.82 | 0.011 | −0.08 / −0.05 | method reshapes the landscape |
+| GS trajectory  | 0.82 | 0.021 | −0.03 / −0.05 | method reshapes the path |
+| GS solution    | 0.45 | 0.038 | −0.22 / −0.08 | graded, no clusters |
+| GS weights     | 0.07 | **0.80** | −0.26 / **+0.63** | **clusters by seed = init basin** |
+
+- **H9 confirmed strongly**: final weights cluster by *seed*, not method — no ingredient
+  ever escapes the shared init's basin; methods only choose where *within* it to settle.
+- **H8 rejected in its strong form** for trajectory/landscape space: the ingredients DO
+  produce genuinely different optimization processes (~90% of feature variance is
+  method-driven)…
+- **H10 (the synthesis)**: …but the reshaping never changes the outcome class. Solution
+  differences are graded (η² ≈ 0.5 even excluding the diverged W-combos) with *negative*
+  method-silhouettes and equal final errors (KS 0.91–0.96, GS trivial). **The ingredients
+  change how the run travels, not where it can arrive** — parameter space is init-locked,
+  outcome space is horizon/attractor-locked, and that is precisely why `origin` and the
+  full best-practice stack are indistinguishable on chaotic PDEs at this scale.
