@@ -156,3 +156,78 @@ predictability-horizon wall (t\*=0.30, tied best of all 16 combos) — so there 
 for the stack to win on KS in the first place. At the papers' budgets (10–100× more
 iterations per window) artifacts 1–2 dissolve; the claim "origin > best_practice" holds at
 benchmark scale, and says the stack's overhead is real, not that the papers are wrong.
+
+---
+
+## Round 4: full research — why the stack loses on KS, is A's win real, is GS just seed insurance
+
+Four questions, each tested against the 96-cell data (paired by seed wherever possible —
+the shared-init design makes per-seed pairing exact).
+
+### Q1. Why does best_practice not beat origin on KS? — four hypotheses, three checked
+
+| hypothesis | status | evidence |
+|---|---|---|
+| **H-KS-1: no headroom** — origin already sits at the predictability-horizon wall | ✅ confirmed | origin's tracked horizon t\*=0.30 is tied-best of all 16 combos; the best variant (A) gains only 0.5% |
+| **H-KS-2: window starvation is the causal driver** of the stack's deficit | ⏳ **proposed** (below) | budget-matched dose-response not yet run on capable hardware |
+| **H-KS-3: G's benefit is purely a W-rescue** | ✅ confirmed | stratified interaction: without marching G **hurts** (+0.024); with marching G **rescues** (−0.150). The −6.9% G main effect is 100% rescue artifact |
+| **H-KS-4: C-tax** — causal diverts budget without moving the horizon | ✅ confirmed | +C costs +0.014…+0.024 in every healthy (no-W) stratum; exception: C rescues G-alone (0.999→0.937), a second rescue interaction |
+
+**H-KS-2 causal test (to run on the GPU machine — local CPU too slow, runs were aborted):**
+budget-matched window dose-response, same seed(s), same 15–30k total iterations:
+
+```bash
+python experiments/landscape_compare/run_experiment.py --pde kuramoto_sivashinsky \
+    --method ablation_all --iterations 30000 --time-windows 2  --no-landscape --seed 1234 --out runs_dose_w2
+python experiments/landscape_compare/run_experiment.py --pde kuramoto_sivashinsky \
+    --method ablation_all --iterations 30000 --time-windows 5  --no-landscape --seed 1234 --out runs_dose_w5
+# (W=10 and origin already exist at 30k in runs_landscape_compare)
+```
+Prediction if starvation is causal: rel-L2 falls monotonically as windows decrease
+(W10 0.950 → W5 → W2 → ≈ ablation_CAG 0.926 at W=1-equivalent), approaching but not
+beating origin (H-KS-1).
+
+### Q2. Why is ablation_A better than ablation_all? — exact per-seed decomposition
+
+| step | seed 1234 | seed 1235 | seed 1236 | mean Δ |
+|---|---|---|---|---|
+| A | 0.9129 | 0.9133 | 0.9148 | — |
+| +C → CA | 0.9215 | 0.9331 | 0.9290 | **+0.014** (causal tax) |
+| +W → CWA | 1.2781 | 1.4510 | 1.5036 | **+0.483** (starved marching diverges, every seed) |
+| +G → all | 0.9496 | 0.9888 | 0.9412 | **−0.451** (rescue, incomplete) |
+
+**A > all because A carries none of the W-damage.** The stack = A + a small C-tax + a huge
+W-wound − a large-but-incomplete G-bandage.
+
+### Q3. Is ablation_A truly better than origin, or statistical error?
+
+**Real in direction, unproven in size — treat as "A ≈ origin, both at the wall".**
+- Paired by seed (identical inits): diffs = [−0.0011, −0.0128, −0.0001] — **3/3 favor A**,
+  but paired-t p=0.37, Wilcoxon p=0.25, sign test p=0.125: **not significant at n=3**.
+- Mean advantage 0.0047 is *smaller than origin's own seed-to-seed std* (0.0067).
+- Supporting consistency: A's validation-error curve sits below origin's at 91–96% of all
+  epochs and **100% of the late half in every seed** — the direction is systematic, not a
+  final-snapshot fluke.
+- Power analysis: paired effect size d_z=0.66 ⇒ **~18 seeds** needed for 80% power at
+  p<0.05. Command: rerun `--methods ablation_none ablation_A --seeds 1237 … 1254`.
+
+### Q4. Is GS best_practice's win only origin's seed-1236 dropout? — yes, plus a discovery
+
+- Excluding seed 1236: origin **0.0937** vs stack **0.0944** — origin *wins* 2 of 3 seeds.
+  The stack's entire −43.6% GS mean advantage is **insurance**, not a better solution.
+- **Discovery — a second wrong attractor.** origin@1236 is not merely "slow to reach the
+  trivial solution": u=0.31 (background wrong) and **v rel-L2 = 3.33** — a large-amplitude
+  *wrong* pattern (overshoot branch), with the error curve *worsening* from 5k onward
+  (0.29→0.34). `ablation_G` fails in 2/3 seeds with the identical signature (v≈3.2). So GS
+  has ≥2 wrong attractors — trivial (v≈0, rel-L2_v≈1) and overshoot (rel-L2_v≈3.3) — and the
+  stack's C/W ingredients reliably steer every seed into the less-bad trivial one. The
+  correct GS framing: **best_practice buys attractor-selection reliability (worth −43.6% of
+  mean error and ~150× variance), never pattern recovery.**
+
+### Round-4 bottom line
+
+The stack loses on KS because origin already sits at the horizon wall (H-KS-1) while the
+stack pays a C-tax and a W-wound that G can only partially bandage (Q2, H-KS-3/4); its only
+consistent winner is the modified MLP alone, whose ~0.5% edge is directionally systematic
+but statistically unproven at 3 seeds (Q3); and its GS "win" is real but is seed-insurance
+against a newly identified second wrong attractor, not a better solution (Q4).
