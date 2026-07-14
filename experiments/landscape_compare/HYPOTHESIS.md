@@ -210,3 +210,25 @@ it in outcome".
   change how the run travels, not where it can arrive** — parameter space is init-locked,
   outcome space is horizon/attractor-locked, and that is precisely why `origin` and the
   full best-practice stack are indistinguishable on chaotic PDEs at this scale.
+
+### H6/H7/H10 measured verdicts (`test_hypotheses.py` on the 96-cell sweep)
+
+- **H6 CONFIRMED (horizon, not asymptote).** KS tracked horizon t\* (first time band with
+  rel-L2 > 0.5): origin **0.30**, best_practice 0.23 — same within one band, and origin is
+  *tied for the best horizon of all 16 combos* (best: ablation_A, t\*=0.30). Several combos
+  are *worse* (G, WG, WAG, CWA: t\*=0.10). No ingredient extends predictability; some damage
+  the early fit. GS analog (H6b): origin fits the ~98% background to 0.128 and misses the
+  pattern region at 1.13; best_practice: background 0.039, pattern 1.24 — same shape of
+  failure, only the *extent* of the well-fit region matters.
+- **H7 CONFIRMED (mechanisms).** origin = "stable partial minimum" on both PDEs (KS
+  1.04→0.909, late slope −0.007); the diverging marching combos = "compounding" (CW
+  1.04→1.84, slope +0.79; CWA →2.02) — ends *worse than the shared init*.
+- **H9 CONFIRMED quantitatively.** Weight-space travel from init is only 0.19× (GS) / 0.42×
+  (KS) of the between-seed init separation; within-seed final spread is 0.26× / 0.47× of the
+  between-seed spread. Every method stays in the shared init's neighborhood.
+- **H10 CONFIRMED for KS, PARTIAL for GS.** KS: mutual method-distance 0.24 vs
+  distance-to-reference 0.94 (ratio 0.25 — all methods share the same wrong answer; late-time
+  amplitude 0.19 of reference = the decayed trivial branch). GS: ratio 0.79 — but both
+  distances are small (0.10 vs 0.13) because ~98% of the reference *is* the trivial
+  background all methods reproduce (late-time amplitude 0.96); the entire failure is
+  concentrated in the 1.7% pattern region (H6b), where every method scores rel-L2 ≥ 1.1.
