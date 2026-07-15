@@ -232,3 +232,56 @@ it in outcome".
   distances are small (0.10 vs 0.13) because ~98% of the reference *is* the trivial
   background all methods reproduce (late-time amplitude 0.96); the entire failure is
   concentrated in the 1.7% pattern region (H6b), where every method scores rel-L2 ≥ 1.1.
+
+---
+
+## Round 5 — when/why SHOULD best practice beat origin? (scale, precision, parameterization)
+
+Round 2–4 established that at benchmark scale (100×5 net, 30k iterations, float32) no
+ingredient beats origin on KS, because origin already sits at the predictability-horizon
+wall and the stack pays fixed-budget overhead (window starvation, grad-norm cold start).
+The papers' successful chaotic runs differ from our controlled sweep in exactly three
+resources: **network scale**, **per-window compute**, and (implicitly, through the
+achievable residual) **arithmetic precision**. Round 5 turns each into a falsifiable
+hypothesis; `run_scale_showdown.sh` and `run_additional_experiments.sh` run them.
+
+**H11 — scale unlock.** The stack's ingredients are *complements at scale, liabilities at
+starvation*: with a width-256 modified MLP and 150k iterations (15k per window — the
+papers' regime), the ordering flips to `ablation_all < ablation_A < origin` (lower = better)
+on KS, because marching stops starving (each window gets 5× the whole benchmark budget) and
+grad-norm's cold start amortizes.
+→ Test: script 1 step 2 (origin / ablation_A / ablation_all @ 256\*4, 150k, warmup 5000,
+3 seeds). Falsified if origin still ties or wins at that scale.
+→ Corollary (H-KS-2, script 1 step 1): at the OLD 30k budget, error rises monotonically
+with window count (W2 < W5 < W10), pinning the Round-4 starvation chain causally.
+
+**H12 — precision floor.** The horizon law t\* ≈ ln(1/ε)/λ says the tracked horizon extends
+only if the achievable field error ε drops. If float32 arithmetic (not optimization) is
+what floors ε, float64 extends t\* measurably at the same budget; if the floor is
+optimization-set (loss stalls at 6e-3 far above float32's ~1e-7 capability), float64
+changes nothing — which would prove the wall is optimization-hard, not arithmetic-hard.
+→ Test: script 2 block (b) — origin / A / all on KS, 3 seeds, `--float64`.
+→ Read-out: compare per-time-band error and t\* between float32 (existing) and float64 runs.
+
+**H13 — A's advantage is real.** The modified MLP's consistent ~0.5% edge over origin
+(3/3 seeds, 100% of late epochs, but p=0.125 at n=3) survives 18 paired seeds at p<0.05
+(power analysis: d_z=0.66 ⇒ n≈18 for 80% power).
+→ Test: script 2 block (a) — seeds 1237–1251 of ablation_none + ablation_A; pool with the
+existing 1234–1236; paired t + Wilcoxon.
+
+**H14 — budget-dependent synergy sign-flip.** The G×W interaction measured at 30k
+(G hurts −W: +0.024; G rescues +W: −0.150) flips toward genuine complementarity at 150k:
+in script-1-step-2 data, `all` beats `A` (G and W each *add* value on top of the
+architecture) — i.e., the same interaction term changes sign with per-window budget.
+→ Test: recompute the stratified G/W effects on the scale runs vs the benchmark runs.
+
+**H15 — RWF (Random Weight Factorization).** The Expert's Guide's remaining untested
+recommendation (W = diag(exp(s))·V, s∼N(1, 0.1); identical initial function, re-conditioned
+parameterization) improves the modified MLP at fixed budget: err(A+RWF) ≤ err(A).
+→ Test: script 2 block (c) — ablation_A / ablation_all with `--rwf`, 3 seeds.
+
+**Interpretation guide.** H11+H14 confirmed ⇒ "best practice beats origin *given the
+resources it was designed for*; the benchmark-scale loss was an artifact of budget parity."
+H12 confirmed ⇒ precision is a first-class ingredient the literature under-reports.
+All falsified ⇒ the horizon wall binds even at paper scale for this KS parameterization,
+and the gradient-free route (Frozen-PINN, 3.2e-5) is not just convenient but necessary.

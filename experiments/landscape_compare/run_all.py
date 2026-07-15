@@ -119,6 +119,11 @@ def main():
                         help="exact-periodicity embedding modes (default: per-PDE; 0 disables)")
     parser.add_argument("--time-windows", type=int, default=None,
                         help="time-marching windows for the chaotic PDEs (paper setting: 10)")
+    parser.add_argument("--warmup", type=int, default=None,
+                        help="Adam lr warmup steps (Expert's Guide large-scale: 5000)")
+    parser.add_argument("--float64", action="store_true", help="train in float64 (H12 precision test)")
+    parser.add_argument("--rwf", action="store_true", help="Random Weight Factorization (modified-MLP methods)")
+    parser.add_argument("--no-landscape", action="store_true", help="skip the landscape tier (passed through)")
     args = parser.parse_args()
 
     if args.ablation:
@@ -154,11 +159,18 @@ def main():
                       ("--ae-epochs", args.ae_epochs), ("--grid-xnum", args.grid_xnum),
                       ("--causal-eps", args.causal_eps), ("--causal-delta", args.causal_delta),
                       ("--num-causal-buckets", args.num_causal_buckets),
-                      ("--fourier-modes", args.fourier_modes), ("--time-windows", args.time_windows)]:
+                      ("--fourier-modes", args.fourier_modes), ("--time-windows", args.time_windows),
+                      ("--warmup", args.warmup)]:
         if val is not None:
             passthrough += [flag, str(val)]
     if args.quick:
         passthrough.append("--quick")
+    if args.float64:
+        passthrough.append("--float64")
+    if args.rwf:
+        passthrough.append("--rwf")
+    if args.no_landscape:
+        passthrough.append("--no-landscape")
 
     cells = [(p, m, s) for p in args.pdes for m in args.methods for s in seeds]
     print(f"Running {len(cells)} cells: pdes={args.pdes} methods={args.methods} seeds={seeds} "

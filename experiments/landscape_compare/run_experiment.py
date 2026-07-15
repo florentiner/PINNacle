@@ -57,8 +57,23 @@ from landscape_visualization._aux.visualization_model import VisualizationModel
 from landscape_visualization._aux.early_stopping_plot import EarlyStopping
 from landscape_visualization._aux.plot_loss_surface import PlotLossSurface
 
-dde.config.set_default_float("float32")
-torch.set_default_dtype(torch.float32)
+REAL = np.float32  # numpy dtype for every predict/save cast; switched by --float64
+
+
+def set_precision(float64):
+    """Set the global training precision. Must run before any model/net construction."""
+    global REAL
+    if float64:
+        REAL = np.float64
+        dde.config.set_default_float("float64")
+        torch.set_default_dtype(torch.float64)
+    else:
+        REAL = np.float32
+        dde.config.set_default_float("float32")
+        torch.set_default_dtype(torch.float32)
+
+
+set_precision(False)
 
 
 # =========================================================================== #
@@ -139,6 +154,35 @@ def make_periodic_transform(spatial_dims, base_k, n_modes):
     return transform
 
 
+class RWFLinear(torch.nn.Module):
+    """Random Weight Factorization (Expert's Guide arXiv:2308.08468, App. their rec.: mu=1.0,
+    sigma=0.1): W = diag(exp(s)) @ V with s, V trained jointly; at init exp(s)*V equals the
+    standard init, so RWF changes the *parameterization* (and thus the loss geometry), not the
+    initial function. seed_init_network knows how to (re)initialize this deterministically."""
+
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.in_features, self.out_features = in_features, out_features
+        self.s = torch.nn.Parameter(torch.empty(out_features))
+        self.V = torch.nn.Parameter(torch.empty(out_features, in_features))
+        self.bias = torch.nn.Parameter(torch.zeros(out_features))
+        self.reset_parameters()
+
+    def reset_parameters(self, generator=None):
+        w = torch.empty(self.out_features, self.in_features)
+        torch.nn.init.xavier_normal_(w) if generator is None else w.copy_(
+            torch.randn(w.shape, generator=generator) * (2.0 / (self.in_features + self.out_features)) ** 0.5)
+        s = torch.ones(self.out_features) if generator is None else (
+            1.0 + 0.1 * torch.randn(self.out_features, generator=generator))
+        with torch.no_grad():
+            self.s.copy_(s.to(self.s.dtype))
+            self.V.copy_((w / torch.exp(s).unsqueeze(1)).to(self.V.dtype))
+            self.bias.zero_()
+
+    def forward(self, x):
+        return x @ (torch.exp(self.s).unsqueeze(1) * self.V).T + self.bias
+
+
 class ModifiedMLP(DDENNBase):
     """Modified MLP of Wang, Teng & Perdikaris 2021 (arXiv:2001.04536), the architecture the
     Expert's Guide (arXiv:2308.08468) and the causal paper use for their chaotic-PDE results.
@@ -149,10 +193,12 @@ class ModifiedMLP(DDENNBase):
     FNN) so the landscape machinery's generic flatten/repopulate and the fallback in
     extract_layers_from_dde_fnn both keep working; the encoders are separate submodules.
     Supports apply_feature_transform (needed for the exact-periodicity Fourier embedding).
+    rwf=True swaps every Linear for RWFLinear (same init function, factorized parameterization).
     """
 
-    def __init__(self, layer_sizes, activation="tanh"):
+    def __init__(self, layer_sizes, activation="tanh", rwf=False):
         super().__init__()
+        self.rwf = rwf
         if len(layer_sizes) < 3:
             raise ValueError("ModifiedMLP needs at least [in, hidden, out]")
         widths = set(layer_sizes[1:-1])
@@ -160,16 +206,18 @@ class ModifiedMLP(DDENNBase):
             raise ValueError("ModifiedMLP requires equal hidden widths")
         in_dim, width, out_dim = layer_sizes[0], layer_sizes[1], layer_sizes[-1]
         self.activation = torch.tanh if activation == "tanh" else getattr(torch, activation)
-        self.encoder_u = torch.nn.Linear(in_dim, width)
-        self.encoder_v = torch.nn.Linear(in_dim, width)
+        Lin = RWFLinear if rwf else torch.nn.Linear
+        self.encoder_u = Lin(in_dim, width)
+        self.encoder_v = Lin(in_dim, width)
         self.linears = torch.nn.ModuleList(
-            [torch.nn.Linear(in_dim, width)]
-            + [torch.nn.Linear(width, width) for _ in range(len(layer_sizes) - 3)]
-            + [torch.nn.Linear(width, out_dim)]
+            [Lin(in_dim, width)]
+            + [Lin(width, width) for _ in range(len(layer_sizes) - 3)]
+            + [Lin(width, out_dim)]
         )
-        for m in [self.encoder_u, self.encoder_v, *self.linears]:
-            torch.nn.init.xavier_normal_(m.weight)
-            torch.nn.init.zeros_(m.bias)
+        if not rwf:
+            for m in [self.encoder_u, self.encoder_v, *self.linears]:
+                torch.nn.init.xavier_normal_(m.weight)
+                torch.nn.init.zeros_(m.bias)
 
     def forward(self, inputs):
         x = inputs
@@ -286,10 +334,11 @@ for _r in range(len(INGREDIENT_LETTERS) + 1):
 # Model builder (closure, as PlotLossSurface / VisualizationModel expect)
 # =========================================================================== #
 def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_buckets,
-                    fourier_modes=0, time_range=None, ic_func=None, arch="fnn"):
+                    fourier_modes=0, time_range=None, ic_func=None, arch="fnn", rwf=False):
     """fourier_modes > 0 applies the exact-periodicity Fourier embedding (see PDE_REGISTRY);
     time_range/ic_func restrict the PDE to one time-marching window with a handed-off IC;
-    arch selects the network: "fnn" (DeepXDE FNN) or "modified_mlp" (Wang et al. 2021)."""
+    arch selects the network: "fnn" (DeepXDE FNN) or "modified_mlp" (Wang et al. 2021);
+    rwf applies Random Weight Factorization to the modified MLP (Expert's Guide rec.)."""
     entry = PDE_REGISTRY[pde_name]
 
     def get_model():
@@ -299,9 +348,9 @@ def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_b
         in_dim = 2 * fourier_modes * sd + (pde.input_dim - sd) if fourier_modes > 0 else pde.input_dim
         layers = [in_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
         if arch == "modified_mlp":
-            net = ModifiedMLP(layers, "tanh").float()
+            net = ModifiedMLP(layers, "tanh", rwf=rwf)
         elif arch == "fnn":
-            net = dde.nn.FNN(layers, "tanh", "Glorot normal").float()
+            net = dde.nn.FNN(layers, "tanh", "Glorot normal")
         else:
             raise ValueError(f"Unknown arch '{arch}'")
         if fourier_modes > 0:
@@ -358,6 +407,9 @@ def seed_init_network(net, seed):
                 m.weight.copy_(w.to(m.weight.device, m.weight.dtype))
                 if m.bias is not None:
                     m.bias.zero_()
+            elif isinstance(m, RWFLinear):
+                # deterministic RWF re-init from the same generator (factorized Xavier + s~N(1,0.1))
+                m.reset_parameters(generator=g)
 
 
 # =========================================================================== #
@@ -577,10 +629,10 @@ def make_ic_handoff(prev_model, output_dim):
     """IC function for time-marching window k>0: the previous window's prediction at the
     interface time (the IC collocation points already carry t = t_interface)."""
     def ic_scalar(x):
-        return prev_model.predict(np.asarray(x, dtype=np.float32)).astype(np.float64)
+        return prev_model.predict(np.asarray(x, dtype=REAL)).astype(np.float64)
 
     def ic_multi(x, component):
-        pred = prev_model.predict(np.asarray(x, dtype=np.float32)).astype(np.float64)
+        pred = prev_model.predict(np.asarray(x, dtype=REAL)).astype(np.float64)
         return pred[:, component]
 
     return ic_multi if output_dim > 1 else ic_scalar
@@ -695,7 +747,7 @@ def evaluate_solution(pde, predict_fn, spatial_dims, output_names):
     metrics["fourier_mid"] = bands["band1"]
     metrics["fourier_high"] = bands["band2"]
 
-    fields = {"coords": coords.astype(np.float32),
+    fields = {"coords": coords.astype(REAL),
               "pred": pred.astype(np.float32),
               "ref": values.astype(np.float32),
               "abs_error": np.abs(pred - values).astype(np.float32)}
@@ -850,6 +902,18 @@ def main():
     parser.add_argument("--ae-epochs", type=int, default=10000, help="autoencoder training epochs")
     parser.add_argument("--grid-xnum", type=int, default=25, help="landscape grid resolution")
     parser.add_argument("--no-landscape", action="store_true", help="skip the landscape tier (gradient methods)")
+    parser.add_argument("--float64", action="store_true",
+                        help="train in float64 (tests the precision-floor hypothesis H12: the "
+                             "chaos horizon t* ~ ln(1/eps)/lambda extends only if the achievable "
+                             "field error eps actually drops)")
+    parser.add_argument("--rwf", action="store_true",
+                        help="Random Weight Factorization on the modified MLP (Expert's Guide "
+                             "arXiv:2308.08468: W = diag(exp(s))V, s~N(1,0.1); same init "
+                             "function, better-conditioned parameterization). Only affects "
+                             "arch=modified_mlp methods")
+    parser.add_argument("--warmup", type=int, default=0,
+                        help="linear lr warmup steps for Adam phases (Expert's Guide uses 5000 "
+                             "for their large-scale configs; 0 = off, the benchmark default)")
     parser.add_argument("--quick", action="store_true", help="tiny smoke-test settings")
     args = parser.parse_args()
 
@@ -859,12 +923,22 @@ def main():
         args.ae_epochs = min(args.ae_epochs, 400)
         args.grid_xnum = min(args.grid_xnum, 9)
 
+    set_precision(args.float64)  # BEFORE any net/model construction
+
     entry = PDE_REGISTRY[args.pde]
     spec = METHOD_SPEC[args.method]
     hidden_layers = args.hidden_layers or entry["hidden_default"]
     spatial_dims = entry["spatial_dims"]
     output_names = entry["output_names"]
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if args.warmup > 0:
+        # Expert's-Guide-style linear lr warmup for the Adam phases (their large-scale configs
+        # warm up over 5000 steps). Rewrites ("step", a, b) decay -> ("warmup_step", W, a, b).
+        spec = dict(spec)
+        spec["schedule"] = [
+            (opt, lr, ("warmup_step", args.warmup, decay[1], decay[2]) if (opt == "adam" and decay and decay[0] == "step") else decay, frac)
+            for (opt, lr, decay, frac) in spec["schedule"]] if spec["schedule"] else None
 
     # periodic embedding: per-PDE default unless overridden; 0 disables
     if args.fourier_modes is None:
@@ -907,6 +981,7 @@ def main():
         "num_causal_buckets": args.num_causal_buckets,
         "fourier_modes": fourier_modes, "time_windows": time_windows,
         "arch": arch, "grad_norm_weights": grad_norm_weights,
+        "float64": args.float64, "rwf": args.rwf, "warmup": args.warmup,
         "ae_epochs": args.ae_epochs, "grid_xnum": args.grid_xnum, "device": device,
         "git_commit": git_commit(), "started_at": datetime.now().isoformat(),
     }
@@ -945,7 +1020,7 @@ def main():
         # "how does the full-domain loss see each visited point", comparable across methods)
         get_model_rec = build_get_model(args.pde, hidden_layers, spec["loss_type"],
                                         causal_eps0, args.num_causal_buckets,
-                                        fourier_modes=fourier_modes, arch=arch)
+                                        fourier_modes=fourier_modes, arch=arch, rwf=args.rwf)
 
         # A validation metric evaluated against the PDE's ref_data only means what it looks like
         # when the model being scored was trained over ref_data's whole time range: with time-
@@ -968,7 +1043,7 @@ def main():
             gm = build_get_model(args.pde, hidden_layers, spec["loss_type"],
                                  causal_eps0, args.num_causal_buckets,
                                  fourier_modes=fourier_modes, time_range=time_range, ic_func=ic_func,
-                                 arch=arch)
+                                 arch=arch, rwf=args.rwf)
             model, loss_weights = gm()
             extra_cbs = None
             if grad_norm_weights:
@@ -1010,7 +1085,7 @@ def main():
         # final-model solution metrics (stitched across windows when time-marching)
         if W == 1:
             def predict_fn(coords):
-                return model.predict(coords.astype(np.float32))
+                return model.predict(coords.astype(REAL))
         else:
             def predict_fn(coords):
                 coords = np.asarray(coords)
@@ -1019,7 +1094,7 @@ def main():
                 for k in range(W):
                     m = idx == k
                     if m.any():
-                        out[m] = window_models[k].predict(coords[m].astype(np.float32)).reshape(-1, len(output_names))
+                        out[m] = window_models[k].predict(coords[m].astype(REAL)).reshape(-1, len(output_names))
                 return out
         pde_eval = model.pde
         sol_metrics, fields = evaluate_solution(pde_eval, predict_fn, spatial_dims, output_names)
@@ -1059,7 +1134,7 @@ def main():
             base_net_state = {k: v.clone() for k, v in model.net.state_dict().items()}
             for i, net in enumerate(solver_models):
                 model.net.load_state_dict(net.state_dict())
-                p = model.predict(coords[sub].astype(np.float32)).reshape(values[sub].shape)
+                p = model.predict(coords[sub].astype(REAL)).reshape(values[sub].shape)
                 rows.append([i, _relative_l2(p, values[sub])])
             model.net.load_state_dict(base_net_state)
             np.savetxt(os.path.join(run_dir, "trajectory_error.csv"), np.asarray(rows),
