@@ -64,6 +64,15 @@ def set_precision(float64):
     """Set the global training precision. Must run before any model/net construction."""
     global REAL
     if float64:
+        # MPS is float32-only; float64 there would error on the first tensor op. Fall back to
+        # CPU for double precision (the H12 test cares about arithmetic precision, not device).
+        try:
+            from deepxde.backend.pytorch.tensor import default_device
+            if default_device == "mps":
+                print("[note] --float64 not supported on MPS; forcing CPU for this run.")
+                torch.set_default_device("cpu")
+        except Exception:
+            pass
         REAL = np.float64
         dde.config.set_default_float("float64")
         torch.set_default_dtype(torch.float64)
@@ -169,14 +178,20 @@ class RWFLinear(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self, generator=None):
-        w = torch.empty(self.out_features, self.in_features)
-        torch.nn.init.xavier_normal_(w) if generator is None else w.copy_(
-            torch.randn(w.shape, generator=generator) * (2.0 / (self.in_features + self.out_features)) ** 0.5)
-        s = torch.ones(self.out_features) if generator is None else (
-            1.0 + 0.1 * torch.randn(self.out_features, generator=generator))
+        # A seeded `generator` is always a CPU generator, so build the random tensors on CPU
+        # (the params may live on cuda/mps) and let copy_ move them -- device-clean + identical
+        # init across devices. The unseeded constructor path uses the default device directly.
+        if generator is None:
+            w = torch.empty(self.out_features, self.in_features)
+            torch.nn.init.xavier_normal_(w)
+            s = torch.ones(self.out_features)
+        else:
+            std = (2.0 / (self.in_features + self.out_features)) ** 0.5
+            w = torch.randn(self.out_features, self.in_features, generator=generator, device="cpu") * std
+            s = 1.0 + 0.1 * torch.randn(self.out_features, generator=generator, device="cpu")
         with torch.no_grad():
-            self.s.copy_(s.to(self.s.dtype))
-            self.V.copy_((w / torch.exp(s).unsqueeze(1)).to(self.V.dtype))
+            self.s.copy_(s.to(self.s.device, self.s.dtype))
+            self.V.copy_((w / torch.exp(s).unsqueeze(1)).to(self.V.device, self.V.dtype))
             self.bias.zero_()
 
     def forward(self, x):
@@ -362,7 +377,10 @@ def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_b
         if fourier_modes > 0:
             net.apply_feature_transform(make_periodic_transform(sd, entry["periodic"]["base_k"], fourier_modes))
 
-        loss_weights = np.ones(pde.num_loss, dtype=float)
+        # match the training precision (REAL): a float64 weights array becomes a float64 torch
+        # tensor inside DeepXDE's loss (`losses *= as_tensor(loss_weights)`), which is illegal on
+        # MPS (float32-only). REAL is float32 by default, float64 only under --float64 (CPU).
+        loss_weights = np.ones(pde.num_loss, dtype=REAL)
         for i, c in enumerate(pde.loss_config):
             if c.get("type", "") in ("boundary", "initial", "ic"):
                 loss_weights[i] = 100.0
@@ -438,7 +456,9 @@ def seed_init_network(net, seed):
             if isinstance(m, torch.nn.Linear):
                 fan_out, fan_in = m.weight.shape[0], m.weight.shape[1]
                 std = (2.0 / (fan_in + fan_out)) ** 0.5  # Xavier/Glorot normal, gain=1
-                w = torch.randn(m.weight.shape, generator=g) * std
+                # generate on CPU (the seeded generator is a CPU generator; the param may live
+                # on cuda/mps), then move -- keeps the init bit-identical across devices
+                w = torch.randn(m.weight.shape, generator=g, device="cpu") * std
                 m.weight.copy_(w.to(m.weight.device, m.weight.dtype))
                 if m.bias is not None:
                     m.bias.zero_()
@@ -993,7 +1013,12 @@ def main():
     hidden_layers = args.hidden_layers or entry["hidden_default"]
     spatial_dims = entry["spatial_dims"]
     output_names = entry["output_names"]
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # deepxde picks the training device (cuda / mps / cpu, honoring DDE_DEVICE); mirror it for
+    # the autoencoder / landscape tier so everything runs on the same accelerator.
+    try:
+        from deepxde.backend.pytorch.tensor import default_device as device
+    except Exception:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if args.warmup > 0:
         # Expert's-Guide-style linear lr warmup for the Adam phases (their large-scale configs

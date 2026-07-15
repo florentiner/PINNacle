@@ -15,8 +15,27 @@ if Version(torch.__version__) < Version("1.9.0"):
 # But, taking care of all tensors requires a lot of work.
 # An alternative way is to use GPU by default if GPU is available, which is similar to
 # TensorFlow.
-if torch.cuda.is_available():
-    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+import os as _os
+
+# Device selection. CUDA keeps the historical behavior (default cuda.FloatTensor). On Apple
+# Silicon there is no cuda.FloatTensor equivalent, so the MPS GPU is enabled via the modern
+# torch.set_default_device API (PyTorch >= 2.0): with it, torch.as_tensor(numpy_array),
+# torch.nn.Linear, and higher-order autograd all land on MPS -- verified device-clean for the
+# full PINN training path. Override with DDE_DEVICE={cpu,cuda,mps} (e.g. DDE_DEVICE=cpu to
+# force CPU, or when a float64 problem is needed since MPS is float32-only).
+_forced = _os.environ.get("DDE_DEVICE", "").lower()
+default_device = "cpu"
+if _forced == "cpu":
+    pass
+elif _forced == "cuda" or (_forced == "" and torch.cuda.is_available()):
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+        default_device = "cuda"
+elif _forced == "mps" or (_forced == "" and hasattr(torch.backends, "mps")
+                          and torch.backends.mps.is_available()):
+    if torch.backends.mps.is_available():
+        torch.set_default_device("mps")
+        default_device = "mps"
 
 
 lib = torch
@@ -37,7 +56,9 @@ def data_type_dict():
 
 
 def is_gpu_available():
-    return torch.cuda.is_available()
+    return torch.cuda.is_available() or (
+        hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        and default_device == "mps")
 
 
 def is_tensor(obj):
