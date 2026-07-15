@@ -614,10 +614,33 @@ def train_one_model(model, loss_weights, spec, iterations, n_saves, display_ever
       loss_rows : list of 1D arrays [step, loss_0, loss_1, ...] (DeepXDE's raw component losses)
     """
     solver_models, loss_rows = [], []
+    entry_offset = step_offset  # window-local zero for decay continuation (fresh lr per window)
 
+    # Every run_phase call recompiles the optimizer, which RESTARTS its lr scheduler. Two
+    # schedule-continuity corrections keep multi-phase methods (causal eps sub-phases,
+    # time-marching windows) from being artifact-handicapped relative to origin's single
+    # continuous compile -- the exact class of bug Round 4 caught at the benchmark scale:
+    #   1. warmup ("warmup_step") applies ONCE, at the true start of the run (step_offset==0);
+    #      later phases fall back to the plain step decay (a warm-started net needs no warmup,
+    #      and a restarting warmup would keep the lr near zero for the whole run).
+    #   2. step-decay progress carries across phases: the compile lr is pre-multiplied by
+    #      gamma^(elapsed_steps // step_size), so the stack's effective lr trajectory matches
+    #      origin's continuous schedule instead of snapping back to the base lr every phase.
     def run_phase(opt_name, lr, decay, phase_iters, n_save_models, causal_eps=None):
         nonlocal step_offset
-        compile_optimizer(model, opt_name, lr, loss_weights, decay=decay)
+        eff_lr, eff_decay = lr, decay
+        if eff_decay is not None and eff_decay[0] == "warmup_step":
+            if step_offset > 0:
+                eff_decay = ("step", eff_decay[2], eff_decay[3])
+            elif eff_decay[1] > phase_iters // 2:
+                # warmup would not finish inside the first phase: shrink it so it does
+                eff_decay = ("warmup_step", max(1, phase_iters // 5), eff_decay[2], eff_decay[3])
+        win_elapsed = int(step_offset - entry_offset)
+        if eff_decay is not None and eff_decay[0] == "step" and win_elapsed > 0:
+            # continuity across eps sub-phases WITHIN this window; each marching window
+            # restarts at the base lr (a fresh subproblem), matching the papers' per-window runs
+            eff_lr = lr * (eff_decay[2] ** (win_elapsed // int(eff_decay[1])))
+        compile_optimizer(model, opt_name, eff_lr, loss_weights, decay=eff_decay)
         if causal_eps is not None:
             model.data.causal_eps = causal_eps
         prev_len = len(model.losshistory.steps)
@@ -630,7 +653,7 @@ def train_one_model(model, loss_weights, spec, iterations, n_saves, display_ever
         if extra_callbacks:
             callbacks.extend(extra_callbacks)
         tag = f"causal_eps={causal_eps} " if causal_eps is not None else ""
-        print(f"--- phase: {opt_name} lr={lr} decay={decay} {tag}iters<={phase_iters} "
+        print(f"--- phase: {opt_name} lr={eff_lr:.2e} decay={eff_decay} {tag}iters<={phase_iters} "
               f"(steps {step_offset:.0f}+) ---")
         model.train(iterations=phase_iters, display_every=display_every, callbacks=callbacks,
                     model_save_path=run_dir, save_model=False)
@@ -645,11 +668,6 @@ def train_one_model(model, loss_weights, spec, iterations, n_saves, display_ever
     n_phases = len(spec["schedule"])
     for (opt_name, lr, decay, frac) in spec["schedule"]:
         phase_iters = max(1, int(round(iterations * frac)))
-        # A fresh compile happens per phase (and per time-marching window); if the SOAP lr
-        # warmup would eat more than half the phase, shrink it proportionally so the phase
-        # actually reaches the target lr.
-        if decay is not None and decay[0] == "warmup_step" and decay[1] > phase_iters // 2:
-            decay = ("warmup_step", max(1, phase_iters // 5), decay[2], decay[3])
         if spec["loss_type"] == "causal" and causal_eps_schedule:
             sub_iters = max(1, phase_iters // len(causal_eps_schedule))
             sub_saves = max(1, n_saves // (n_phases * len(causal_eps_schedule)))

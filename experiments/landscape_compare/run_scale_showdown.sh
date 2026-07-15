@@ -20,7 +20,7 @@
 #   Set SCALE_GS=1 to also run the same trio on Gray-Scott.
 #
 # Outputs: runs_dose/ and runs_scale/ -- zip both and transfer back for analysis:
-#     zip -r round5_results.zip runs_dose runs_scale
+#     zip -r round5_results.zip runs_dose runs_scale runs_scale_rwf 2>/dev/null || zip -r round5_results.zip runs_dose runs_scale
 # ============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -29,6 +29,7 @@ export DDEBACKEND=pytorch KMP_DUPLICATE_LIB_OK=TRUE
 RE=experiments/landscape_compare/run_experiment.py
 RA=experiments/landscape_compare/run_all.py
 SEEDS="1234 1235 1236"
+SCALE_ITER="${SCALE_ITER:-150000}"   # override for bigger budgets (papers use up to ~300k)
 
 echo "================ STEP 1: H-KS-2 window dose-response ================"
 # separate --out per window count (same pde/method name would collide in one tree)
@@ -50,17 +51,28 @@ echo "================ STEP 2: scale showdown (H11) ================"
 # of the study) but grid reduced to bound the cost of 256-width loss evaluations.
 python $RA --pdes kuramoto_sivashinsky \
     --methods origin ablation_A ablation_all \
-    --hidden-layers "256*4" --iterations 150000 --warmup 5000 \
+    --hidden-layers "256*4" --iterations $SCALE_ITER --warmup 5000 \
     --n-repeats 3 --parallel 3 --grid-xnum 15 \
     --out runs_scale
+
+# Optional 4th arm: the stack's absolute best shot -- ablation_all + Random Weight
+# Factorization (the Expert's Guide's remaining recommendation). Separate --out because the
+# method name is the same. Enable with SCALE_RWF=1.
+if [ "${SCALE_RWF:-0}" = "1" ]; then
+  python $RA --pdes kuramoto_sivashinsky \
+      --methods ablation_all \
+      --hidden-layers "256*4" --iterations $SCALE_ITER --warmup 5000 --rwf \
+      --n-repeats 3 --parallel 3 --grid-xnum 15 \
+      --out runs_scale_rwf
+fi
 
 if [ "${SCALE_GS:-0}" = "1" ]; then
   python $RA --pdes grayscott \
       --methods origin ablation_A ablation_all \
-      --hidden-layers "256*4" --iterations 150000 --warmup 5000 \
+      --hidden-layers "256*4" --iterations $SCALE_ITER --warmup 5000 \
       --n-repeats 3 --parallel 3 --grid-xnum 15 \
       --out runs_scale
 fi
 
 echo "================ done ================"
-echo "Transfer back:  zip -r round5_results.zip runs_dose runs_scale"
+echo "Transfer back:  zip -r round5_results.zip runs_dose runs_scale runs_scale_rwf 2>/dev/null || zip -r round5_results.zip runs_dose runs_scale"
