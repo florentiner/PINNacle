@@ -34,6 +34,9 @@ echo "================ STEP 1: H-KS-2 window dose-response ================"
 # separate --out per window count (same pde/method name would collide in one tree)
 for W in 2 5; do
   for S in $SEEDS; do
+    if [ -f "runs_dose/w${W}/seed_${S}/kuramoto_sivashinsky/ablation_all/metrics.json" ]; then
+      echo "skip dose w${W}/seed_${S} (done)"; continue
+    fi
     python $RE --pde kuramoto_sivashinsky --method ablation_all \
       --iterations 30000 --time-windows $W --no-landscape \
       --seed $S --out "runs_dose/w${W}/seed_${S}" &

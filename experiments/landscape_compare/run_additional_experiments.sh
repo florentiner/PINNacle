@@ -33,19 +33,22 @@ python $RA --pdes kuramoto_sivashinsky \
     --parallel 3 \
     --out runs_seeds18
 
-echo "================ (b) H12: float64 precision-floor test ================"
-python $RA --pdes kuramoto_sivashinsky \
-    --methods origin ablation_A ablation_all \
-    --iterations 30000 --float64 \
-    --n-repeats 3 --parallel 3 --grid-xnum 15 \
-    --out runs_float64
-
 echo "================ (c) H15: Random Weight Factorization ================"
 python $RA --pdes kuramoto_sivashinsky \
     --methods ablation_A ablation_all \
     --iterations 30000 --rwf \
     --n-repeats 3 --parallel 3 --grid-xnum 15 \
     --out runs_rwf
+
+echo "================ (b, runs LAST) H12: float64 precision-floor test ================"
+# WARNING: on consumer GPUs (GeForce/RTX) fp64 throughput is 1/32..1/64 of fp32 -- this block
+# may be VERY slow there (fine on A100/V100/H100). It runs last so you can stop after (a)+(c)
+# and still have complete results for those hypotheses.
+python $RA --pdes kuramoto_sivashinsky \
+    --methods origin ablation_A ablation_all \
+    --iterations 30000 --float64 \
+    --n-repeats 3 --parallel 3 --grid-xnum 15 \
+    --out runs_float64
 
 echo "================ done ================"
 echo "Transfer back:  zip -r round5_additional.zip runs_seeds18 runs_float64 runs_rwf"

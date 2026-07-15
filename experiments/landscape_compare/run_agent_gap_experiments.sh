@@ -37,8 +37,8 @@ CHAINS=(
   "alb_75|adam:1e-3:0.75,lbfgs:1.0:0.25"
   "alb_90|adam:1e-3:0.9,lbfgs:1.0:0.1"
   "ahilb|adam:1e-2:0.5,lbfgs:1.0:0.5"
-  "pso_start|pso:1e-3:0.1,adam:1e-3:0.9"                       # swarm exploration first
-  "pso_mid|adam:1e-3:0.45,pso:1e-3:0.1,adam:1e-3:0.45"         # basin hop mid-training
+  "pso_start|pso:1e-3:0.01,adam:1e-3:0.99"                     # swarm exploration first (300 PSO iters ~ paper stage length; PSO costs ~30 evals/iter)
+  "pso_mid|adam:1e-3:0.495,pso:1e-3:0.01,adam:1e-3:0.495"      # basin hop mid-training (300 PSO iters)
   "alternate|adam:1e-3:0.3,lbfgs:1.0:0.2,adam:1e-4:0.3,lbfgs:0.5:0.2"
 )
 
@@ -47,6 +47,10 @@ for PDE in kuramoto_sivashinsky grayscott; do
   for entry in "${CHAINS[@]}"; do
     NAME="${entry%%|*}"; CHAIN="${entry#*|}"
     for S in $SEEDS; do
+      # resume guard: skip cells that already finished (safe to rerun the script)
+      if [ -f "runs_chains/${NAME}/seed_${S}/${PDE}/chain/metrics.json" ]; then
+        echo "skip ${PDE}/${NAME}/seed_${S} (done)"; continue
+      fi
       python $RE --pde $PDE --method chain --chain "$CHAIN" \
         --iterations $ITER --no-landscape --seed $S \
         --out "runs_chains/${NAME}/seed_${S}" &
