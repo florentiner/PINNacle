@@ -51,7 +51,7 @@ from src.pde.burgers import Burgers1D
 from src.utils.args import parse_hidden_layers
 from src.utils.callbacks import ModelSaverCallback
 from src import frozen_pinn
-from deepxde.optimizers.config import set_SOAP_options
+from deepxde.optimizers.config import set_SOAP_options, set_PSO_options
 from deepxde.nn.pytorch.nn import NN as DDENNBase
 from landscape_visualization._aux.visualization_model import VisualizationModel
 from landscape_visualization._aux.early_stopping_plot import EarlyStopping
@@ -287,6 +287,12 @@ METHOD_SPEC = {
     #    compared on the solution-accuracy tier + its own landscape.
     "best_practice":  {"loss_type": "causal", "schedule": [(*ADAM_P, 1.0)],
                        "arch": "modified_mlp", "grad_norm_weights": True, "time_windows": 10},
+    # -- PELINE chain oracle: a fixed optimizer chain from the RL agent's action space
+    #    (Adam/L-BFGS/PSO stages), given via --chain "adam:1e-3:0.5,lbfgs:1.0:0.5". Used to
+    #    upper-bound what the PINN-PELINE agent could achieve over origin(+fixes) without
+    #    integrating the agent itself (HYPOTHESIS.md Round 6). Plain FNN, origin loss, so it
+    #    shares the same seed-init/architecture as `origin`.
+    "chain":          {"loss_type": "origin", "schedule": "FROM_CLI"},
     "frozen":         {"loss_type": "origin", "schedule": None},
 }
 
@@ -383,8 +389,37 @@ def compile_optimizer(model, opt_name, lr, loss_weights, decay=None):
         # -- untuned for PINNs); shampoo_beta left at its class default (not specified by the paper).
         set_SOAP_options(lr=lr, betas=(0.99, 0.999), precondition_frequency=2)
         model.compile("SOAP", decay=decay, loss_weights=loss_weights)
+    elif opt_name == "pso":
+        # Particle-swarm stage, exactly as the PINN-PELINE RL pipeline's action space uses it
+        # (rl_trainer._build_torch_optimizer): hyperparameters via global PSO_options, lr is the
+        # gradient-descent component (0 disables it -> pure swarm).
+        set_PSO_options(lr=lr)
+        model.compile("PSO", loss_weights=loss_weights)
     else:
         raise ValueError(f"Unknown optimizer '{opt_name}'")
+
+
+def parse_chain(chain_str, total_iterations):
+    """Parse a PELINE-style fixed optimizer chain: "adam:1e-3:0.5,lbfgs:1.0:0.3,pso:1e-3:0.2"
+    (opt:lr:fraction, fractions summing to ~1) into METHOD_SPEC schedule tuples. Adam stages
+    keep the shared step-decay pipeline; L-BFGS/PSO have no scheduler (as in the RL pipeline).
+    This gives the ORACLE view of the PINN-PELINE agent: any policy the DQN can express over
+    a whole episode IS such a chain, so the best fixed chain upper-bounds the trained agent
+    at equal budget."""
+    schedule = []
+    for part in chain_str.split(","):
+        fields = part.strip().split(":")
+        if len(fields) != 3:
+            raise ValueError(f"chain stage '{part}' is not opt:lr:fraction")
+        opt, lr, frac = fields[0].lower(), float(fields[1]), float(fields[2])
+        if opt not in ("adam", "lbfgs", "soap", "pso"):
+            raise ValueError(f"unknown chain optimizer '{opt}'")
+        decay = ("step", 2000, 0.9) if opt == "adam" else None
+        schedule.append((opt, lr, decay, frac))
+    total_frac = sum(s[-1] for s in schedule)
+    if not 0.99 <= total_frac <= 1.01:
+        raise ValueError(f"chain fractions sum to {total_frac}, expected 1.0")
+    return schedule
 
 
 def seed_init_network(net, seed):
@@ -914,6 +949,9 @@ def main():
     parser.add_argument("--warmup", type=int, default=0,
                         help="linear lr warmup steps for Adam phases (Expert's Guide uses 5000 "
                              "for their large-scale configs; 0 = off, the benchmark default)")
+    parser.add_argument("--chain", type=str, default=None,
+                        help='fixed optimizer chain for --method chain, e.g. '
+                             '"adam:1e-3:0.5,lbfgs:1.0:0.5" (opt:lr:fraction; PELINE action space)')
     parser.add_argument("--quick", action="store_true", help="tiny smoke-test settings")
     args = parser.parse_args()
 
@@ -927,6 +965,13 @@ def main():
 
     entry = PDE_REGISTRY[args.pde]
     spec = METHOD_SPEC[args.method]
+    if args.method == "chain":
+        if not args.chain:
+            raise SystemExit("--method chain requires --chain \"opt:lr:frac,...\"")
+        spec = dict(spec)
+        spec["schedule"] = parse_chain(args.chain, args.iterations)
+    elif args.chain:
+        raise SystemExit("--chain is only valid with --method chain")
     hidden_layers = args.hidden_layers or entry["hidden_default"]
     spatial_dims = entry["spatial_dims"]
     output_names = entry["output_names"]
@@ -982,6 +1027,7 @@ def main():
         "fourier_modes": fourier_modes, "time_windows": time_windows,
         "arch": arch, "grad_norm_weights": grad_norm_weights,
         "float64": args.float64, "rwf": args.rwf, "warmup": args.warmup,
+        "chain": args.chain,
         "ae_epochs": args.ae_epochs, "grid_xnum": args.grid_xnum, "device": device,
         "git_commit": git_commit(), "started_at": datetime.now().isoformat(),
     }

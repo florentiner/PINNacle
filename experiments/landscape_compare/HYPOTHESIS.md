@@ -285,3 +285,70 @@ resources it was designed for*; the benchmark-scale loss was an artifact of budg
 H12 confirmed ⇒ precision is a first-class ingredient the literature under-reports.
 All falsified ⇒ the horizon wall binds even at paper scale for this KS parameterization,
 and the gradient-free route (Frozen-PINN, 3.2e-5) is not just convenient but necessary.
+
+---
+
+## Round 6 — can the PINN-PELINE agent close the origin→best-practice gap? (oracle experiments, no agent integration)
+
+Context: the PINN-PELINE paper (this repo's RL pipeline) trains a DQN to build optimizer
+chains — actions = (optimizer ∈ {Adam, L-BFGS, PSO}, lr, stage length) — from 4-channel
+autoencoder loss-landscape states, reward = per-stage reduction in RMSE vs the reference
+(with residual/loss-based rewards named as the next step). Its own PINNacle results hit
+exactly the walls this study identified: **GS 9.35e-2 = the trivial-attractor value; KS
+9.46e-1 = the horizon wall** ("on long-time and chaotic problems, both methods yield
+L2RE ≈ 1"). The question: operating on origin(+the well-posedness fixes), which parts of
+the best-practice gap can an *adaptive scheduler* recover — given that Round 4 proved the
+stack's losses are precisely *scheduling artifacts* (window starvation, grad-norm cold
+start, fixed ε-phases), i.e., the kind of thing an adaptive policy exists to avoid?
+
+**Key device: the chain oracle.** Any single-episode policy the DQN can express IS a fixed
+optimizer chain, so the best fixed chain from the paper's action space, found by grid,
+**upper-bounds the trained agent** at equal budget — no integration needed. (`--method
+chain --chain "adam:1e-3:0.5,lbfgs:1.0:0.5"` runs one; `run_agent_gap_experiments.sh`
+runs the grid.)
+
+**H16 — KS: no headroom for the agent in final error, real headroom in cost.** No chain in
+the action space beats origin's 0.918 wall (the oracle-best chain lands within noise of
+it), because the wall is set by the PDE, not the schedule. The agent's realizable value on
+KS is *efficiency*: some chains reach wall-level error in far fewer iterations than others.
+→ Test: E1 chain grid (12 chains × 3 seeds, KS); compare best-chain final rel-L2 vs origin,
+and iterations-to-0.93 across chains (from `metrics_history.csv`).
+→ Falsified if some chain lands materially below 0.91 — which would ALSO falsify part of
+the Round-2 horizon story, so this doubles as a robustness check.
+
+**H17 — switch-timing carries real signal (the agent's core premise).** Chains with the
+same components but different switch points (Adam→L-BFGS at 25/50/75/90%) differ in final
+error and in stability by more than seed noise — i.e., WHEN to switch matters, which is
+exactly the decision a state-conditioned policy can make and a fixed recipe cannot.
+→ Test: E2 = the switch-fraction subset of E1; variance across split points vs across seeds.
+→ If timing variance ≈ seed noise, the agent's per-state switching adds nothing over a
+tuned fixed chain (the paper's gains would then come only from per-problem chain selection).
+
+**H18 — GS: the agent's reinit action recovers the stack's insurance for free.** The entire
+GS best-practice gap is seed-insurance against the overshoot attractor (Round 4). The
+PELINE episode loop already contains the needed action: reinit/abandon a failing
+trajectory. Best-of-k restarts of plain origin should recover stack-level reliability
+(0.177 → ≈0.094) at ~k× cost with zero stack ingredients — and the wrong-attractor capture
+is *visible early*: origin@1236's error curve was already stuck at 0.29 by epoch 5k, so a
+policy could cut losses at ~1/6 of the budget, making the insurance ≈1.3×, not 3×.
+→ Test: E3 = 9 extra GS origin seeds → bootstrap best-of-k (k = 1..3) statistics; early-
+detectability check: does the epoch-5k error separate eventual-good from eventual-bad seeds
+across all 12 seeds?
+
+**H19 — loss-as-reward is viable on chaotic ONLY with the fixes + the multichannel state.**
+The paper's proposed residual-based reward works where loss↔error correlation is high.
+Post-periodicity-fix that holds on KS (corr +0.9), so Δloss reward ranks chain stages like
+ΔRMSE does; but on GS the *scalar* total loss cannot distinguish the trivial attractor
+(every method plateaus at 0.9628) — while the state's separate L_oper/L_bnd channels can
+(the overshoot branch has a distinct component signature). Prediction: per-stage
+corr(Δloss_total, ΔRMSE) is high on KS and degenerate on GS, but adding the loss
+*components* (the state channels) restores discriminability.
+→ Test: E4 = offline analysis of E1/E3 runs' `loss_history.csv` (per-component) +
+`metrics_history.csv`; no new runs needed beyond E1/E3.
+
+**Interpretation guide.** H16+H17+H18 confirmed ⇒ the agent can deliver best practice's
+*actual* benefits over origin (reliability, efficiency, per-problem scheduling) without its
+fixed-schedule costs — "agent + origin(+fixes) ≈ best practice, cheaper"; the final-error
+wall stays where physics puts it. H19 confirmed ⇒ the paper's ground-truth-free reward is
+workable on chaotic PDEs *because of* the well-posedness fixes and the multichannel state —
+a concrete, evidence-backed design recommendation for the agent's next version.
