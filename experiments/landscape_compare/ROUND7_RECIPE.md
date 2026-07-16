@@ -61,10 +61,34 @@ so the reach-factor curve is measured, not assumed. Best on a GPU (each 32-mode 
    arXiv:2501.16371); the optimization lever for closing the reach-factor gap.
 5. **RBA / SA-PINN per-point weighting** — focus late-time residuals where the horizon bites.
 
-## Honest bottom line (updated as results land)
+## Honest bottom line — MEASURED (seed 1234, 20k iters, CPU)
 
-Confirmed now: **the 10-mode Fourier embedding is a hard 0.72 ceiling — the single most
-important fixable bottleneck, and it was hiding in "we already use Fourier features".**
-Raising modes is the concrete recipe change predicted to beat origin by 1–2 orders of
-magnitude *if* optimization can follow. Whether it does is being measured; this file is
-updated with the verdict (do not cite a win until the numbers appear here).
+**Raising Fourier modes ALONE did NOT beat origin — it made things worse.** The optimistic
+reach-factor assumption is FALSE: the reach-factor collapses badly as modes grow, because a
+richer basis is a much harder optimization problem.
+
+| config | modes | rel-L2 | ceiling | reach-factor (achieved/ceiling) | IC error |
+|---|---|---|---|---|---|
+| origin (deepxde, shipped) | 10 | **0.914** | 0.719 | **1.27×** | 0.0016 |
+| origin + more modes | 24 | 0.947 (worse) | 0.095 | 9.9× | 0.138 |
+| origin + more modes | 32 | 1.047 (worse) | 0.020 | 52× | 0.247 |
+
+The tell is the **IC error** (t=0, the easiest slice): it explodes 0.0016 → 0.247 as modes
+rise. That is not the chaos horizon — it is the optimizer failing to fit the harder
+32-mode function at this budget. So:
+
+- **The 0.72 ceiling at 10 modes is real** (a necessary condition): you cannot beat 0.72
+  without more modes.
+- **But more modes is FAR from sufficient**, and at fixed budget it *hurts*: the harder
+  function needs correspondingly stronger optimization (more iterations, better init, a
+  second-order optimizer, more collocation) that the plain Adam/FNN cannot provide.
+
+**Caveats on these specific numbers**: these ran at 20k iters (vs origin@10's 30k) under
+heavy CPU throttling, so they are *under-converged* — a fair verdict needs the full
+`run_recipe.sh` sweep on a GPU (30k, 3 seeds, + the modified-MLP arm). But the direction is
+robust: raising modes without also strengthening optimization does not win, and can lose.
+
+**Verdict: raising Fourier modes is necessary but not sufficient; the recipe that beats
+origin must pair it with the optimization/budget upgrades in the priority list above (more
+iterations + collocation, physics-informed init, SSBroyden), or a fundamentally different
+solver.** This is why the "additional best practices" list matters — no single lever wins.

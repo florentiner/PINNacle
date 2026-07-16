@@ -46,7 +46,7 @@ Result: it is the *only* architecture that keeps improving as depth grows to 18 
 
 | technique | what / why | paper | status |
 |---|---|---|---|
-| **Random Fourier Features** `Φ(x)=[cos(Bx),sin(Bx)]`, B∼N(0,σ²) | the canonical spectral-bias fix; lets the net represent high-frequency chaotic structure. σ is a key knob | Tancik 2020; Wang 2021 (arXiv:2012.10047) | **[GAP for general σ]** — we use the *exact-periodicity* special case (below), not a tunable-σ RFF |
+| **Random Fourier Features** `Φ(x)=[cos(Bx),sin(Bx)]`, B∼N(0,σ²) / more modes | canonical spectral-bias fix; **necessary** (10-mode KS embedding has a hard 0.72 rel-L2 ceiling, Round 7) but **NOT sufficient**: raising modes alone at fixed budget made KS *worse* (0.914->0.947@24->1.047@32) because the richer basis is a harder optimization problem (IC error 0.0016->0.247). Must be paired with stronger optimization/more budget. | Tancik 2020; Wang 2021 (arXiv:2012.10047); Round 7 | **[TESTED: necessary, not sufficient]** |
 | **Exact-periodicity Fourier embedding** (our fix) | hard-encodes the true spatial period ⇒ well-posed; the specific RFF instance for periodic domains | causal paper arXiv:2203.07404 | **[HAVE]** `--fourier-modes` (KS 10 / GS 5, on by default) |
 | **Multi-scale / multi-frequency Fourier features** | separate σ bands for multi-scale problems | Wang 2021 multi-scale | **[GAP]** |
 
