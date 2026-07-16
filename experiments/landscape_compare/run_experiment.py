@@ -249,6 +249,101 @@ class ModifiedMLP(DDENNBase):
             out = self._output_transform(inputs, out)
         return out
 
+
+class PirateNet(DDENNBase):
+    """PirateNets (Wang, Sifan et al., arXiv:2402.00326, JMLR 2025) -- the SOTA PINN architecture.
+
+    On top of the modified-MLP two-encoder gating it adds the two pieces that make deep PINNs
+    trainable and are the paper's proven contribution:
+      1. **Adaptive residual blocks with an alpha-gate initialized to ZERO** -- at init the net
+         is a shallow *linear* map of the (Fourier) embedding, and each block's nonlinearity
+         switches on only as its trainable scalar alpha grows from 0. This avoids the
+         derivative-trainability collapse that kills plain deep MLPs.
+      2. **Physics-informed least-squares init** of the output layer (set separately after
+         construction, see piratenet_lsq_init) so the shallow-linear init already satisfies
+         the IC.
+
+    Forward (H = width, L = num_blocks; Phi = the input feature transform, e.g. Fourier embed):
+        Phi   = feature_transform(x)              (else Phi = x)
+        U     = act(W_u Phi + b_u);  V = act(W_v Phi + b_v)
+        x0    = W_in Phi                          (LINEAR projection -> "starts linear")
+        for l in 1..L:
+            f  = act(W1_l x);  z1 = f*U + (1-f)*V
+            g  = act(W2_l z1); z2 = g*U + (1-g)*V
+            h  = act(W3_l z2)
+            x  = alpha_l * h + (1 - alpha_l) * x  (alpha_l scalar, init 0)
+        u  = W_out x
+    All Linears live in flat submodules so seed_init_network re-inits them (alphas are
+    Parameters, left at 0); rwf=True swaps Linears for RWFLinear (Expert's Guide RWF).
+    """
+
+    def __init__(self, layer_sizes, activation="tanh", num_blocks=3, rwf=False):
+        super().__init__()
+        in_dim, width, out_dim = layer_sizes[0], layer_sizes[1], layer_sizes[-1]
+        self.activation = torch.tanh if activation == "tanh" else getattr(torch, activation)
+        Lin = RWFLinear if rwf else torch.nn.Linear
+        self.input_proj = Lin(in_dim, width)                 # x0 = W_in Phi (used linearly)
+        self.encoder_u = Lin(in_dim, width)
+        self.encoder_v = Lin(in_dim, width)
+        self.linears = torch.nn.ModuleList(                  # flat list: 3 dense layers per block
+            [Lin(width, width) for _ in range(3 * num_blocks)])
+        self.out = Lin(width, out_dim)
+        self.alphas = torch.nn.ParameterList(
+            [torch.nn.Parameter(torch.zeros(())) for _ in range(num_blocks)])
+        self.num_blocks = num_blocks
+        if not rwf:
+            for m in [self.input_proj, self.encoder_u, self.encoder_v, self.out, *self.linears]:
+                torch.nn.init.xavier_normal_(m.weight)
+                torch.nn.init.zeros_(m.bias)
+
+    def _features(self, inputs):
+        """Everything up to (not including) the output layer -> x^L. At init (alpha=0) this is
+        the linear projection of Phi, which is what makes the LSQ output init exact."""
+        x = inputs
+        if self._input_transform is not None:
+            x = self._input_transform(x)
+        phi = x
+        U = self.activation(self.encoder_u(phi))
+        V = self.activation(self.encoder_v(phi))
+        h = self.input_proj(phi)                             # linear x0
+        for b in range(self.num_blocks):
+            f = self.activation(self.linears[3 * b](h)); z1 = f * U + (1 - f) * V
+            g = self.activation(self.linears[3 * b + 1](z1)); z2 = g * U + (1 - g) * V
+            hh = self.activation(self.linears[3 * b + 2](z2))
+            a = self.alphas[b]
+            h = a * hh + (1 - a) * h
+        return h
+
+    def forward(self, inputs):
+        out = self.out(self._features(inputs))
+        if self._output_transform is not None:
+            out = self._output_transform(inputs, out)
+        return out
+
+
+def piratenet_lsq_init(net, x_ic, u_ic):
+    """Physics-informed least-squares init of PirateNet's output layer (paper's eq.):
+    W_out = argmin_W || W . features(x_ic) - u_ic ||. With alphas=0 the features are a linear
+    map of the Fourier embedding, so this makes the initial (shallow-linear) network already
+    satisfy the initial condition -- removing the cold start. Works whether the output layer is a
+    plain Linear or an RWFLinear (W = diag(exp(s)) V): for RWF we set s=0 and V = W_out."""
+    out = net.out
+    ref = out.bias if isinstance(out, RWFLinear) else out.weight  # tensor for dtype/device
+    with torch.no_grad():
+        Feat = net._features(torch.as_tensor(x_ic, dtype=ref.dtype, device=ref.device))  # (N, H)
+        Y = torch.as_tensor(u_ic, dtype=Feat.dtype, device=Feat.device)             # (N, out)
+        # ridge-stabilized normal equations: W = (F^T F + eI)^-1 F^T Y ; effective weight = W^T
+        H = Feat.shape[1]
+        A = Feat.T @ Feat + 1e-6 * torch.eye(H, dtype=Feat.dtype, device=Feat.device)
+        W = torch.linalg.solve(A, Feat.T @ Y)                                        # (H, out)
+        if isinstance(out, RWFLinear):
+            out.s.zero_()          # exp(0)=1 -> effective weight is just V
+            out.V.copy_(W.T)       # forward: x @ (exp(s)*V).T = x @ W  (matches Linear path)
+        else:
+            out.weight.copy_(W.T)
+        out.bias.zero_()
+
+
 # method -> (loss_type, optimizer schedule). schedule = list of (opt_name, lr, frac)
 # where frac is the fraction of --iterations spent in that phase. frozen has no schedule.
 # Paper-backed "best" gradient pipeline for chaotic PINNs, applied to *every* gradient method
@@ -302,6 +397,15 @@ METHOD_SPEC = {
     #    compared on the solution-accuracy tier + its own landscape.
     "best_practice":  {"loss_type": "causal", "schedule": [(*ADAM_P, 1.0)],
                        "arch": "modified_mlp", "grad_norm_weights": True, "time_windows": 10},
+    # -- SOTA: the PirateNets recipe (Wang, Li, Perdikaris; arXiv:2402.00326, JMLR 2025),
+    #    the reference architecture BEST_PRACTICES.md pins as SOTA for stiff/chaotic PINNs.
+    #    Physics-informed adaptive residual network (alpha-gated blocks init 0 -> starts as a
+    #    linear model whose last layer is set by least squares to the IC, then deepens as the
+    #    alphas grow) + random Fourier features (via --fourier-modes) + RWF + causal training +
+    #    grad-norm weighting + Adam warmup+decay. No time-marching (the paper trains the whole
+    #    domain at once). Frozen-PINN is intentionally NOT part of this recipe.
+    "sota":           {"loss_type": "causal", "schedule": [(*ADAM_P, 1.0)],
+                       "arch": "piratenet", "grad_norm_weights": True, "piratenet_lsq": True},
     # -- PELINE chain oracle: a fixed optimizer chain from the RL agent's action space
     #    (Adam/L-BFGS/PSO stages), given via --chain "adam:1e-3:0.5,lbfgs:1.0:0.5". Used to
     #    upper-bound what the PINN-PELINE agent could achieve over origin(+fixes) without
@@ -370,6 +474,8 @@ def build_get_model(pde_name, hidden_layers, loss_type, causal_eps, num_causal_b
         layers = [in_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
         if arch == "modified_mlp":
             net = ModifiedMLP(layers, "tanh", rwf=rwf)
+        elif arch == "piratenet":
+            net = PirateNet(layers, "tanh", num_blocks=3, rwf=rwf)
         elif arch == "fnn":
             net = dde.nn.FNN(layers, "tanh", "Glorot normal")
         else:
@@ -1146,6 +1252,16 @@ def main():
                 # Shared, method-independent starting point: identical weights for every method
                 # at this seed, different weights across seeds (see seed_init_network).
                 seed_init_network(model.net, args.seed)
+                if arch == "piratenet" and spec.get("piratenet_lsq", False):
+                    # PirateNets physics-informed init: set the (alpha=0, shallow-linear) output
+                    # layer by least squares to the initial condition, from the reference field's
+                    # earliest-time slice. Removes the cold start (ROUND7_RECIPE.md audit #4).
+                    rc, rv = _get_ref(model.pde)
+                    t0 = rc[:, -1].min()
+                    ic_mask = rc[:, -1] <= t0 + 1e-9
+                    if ic_mask.sum() >= model.net.out.in_features:
+                        piratenet_lsq_init(model.net, rc[ic_mask], rv[ic_mask])
+                        print(f"[piratenet] LSQ output init from {int(ic_mask.sum())} IC points at t={t0:.4g}")
                 # Save the shared init as checkpoint 0 so every method's trajectory starts at
                 # the SAME visible point in the (shared) landscape and per-checkpoint error
                 # curves begin at the true common origin.

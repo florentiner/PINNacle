@@ -1,3 +1,8 @@
+.gitignore
+runs_landscape_*
+.DS_Store
+experiments/.DS_Store
+*.zip
 *.png
 *.txt
 docs/
