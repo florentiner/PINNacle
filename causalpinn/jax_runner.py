@@ -113,7 +113,10 @@ class KSCausalJax:
             L_0 = 1e4 * loss_ics(params)
             r_pred = self.r_pred_fn(params, t_r, x_r)
             L_t = np.mean(r_pred ** 2, axis=1)
-            W = lax.stop_gradient(np.exp(-tol * (self.M @ L_t + L_0)))
+            if self.args.no_causal:
+                W = np.ones_like(L_t)
+            else:
+                W = lax.stop_gradient(np.exp(-tol * (self.M @ L_t + L_0)))
             return L_0, L_t, W
 
         def loss_fn(params, t_r, x_r, tol):
@@ -147,6 +150,9 @@ def main():
     p.add_argument("--param-snap-every", type=int, default=0,
                    help="save full param snapshots every N iters (0=off) — "
                         "enables loss-landscape trajectory plots")
+    p.add_argument("--no-causal", action="store_true",
+                   help="ablation: W=1 (uniform weights), fixed per-window "
+                        "budget (W-based early stop disabled)")
     args = p.parse_args()
     tol_list = [float(x) for x in args.tol_list.split(",")]
     os.makedirs(args.outdir, exist_ok=True)
@@ -251,7 +257,7 @@ def main():
                     hist_vec["t_r"].append(onp.asarray(t_r, dtype=onp.float32))
                     print(f"  it {win_iter}: loss {float(lval):.3e} "
                           f"l2_win {l2:.3e} W_min {w_min:.3f}", flush=True)
-                    if w_min > 0.99:
+                    if w_min > 0.99 and not args.no_causal:
                         break
                     # periodic in-stage checkpoint: survives hard kills
                     # (quota exhaustion) between graceful time-guard exits
