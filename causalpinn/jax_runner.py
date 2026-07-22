@@ -153,6 +153,11 @@ def main():
     p.add_argument("--no-causal", action="store_true",
                    help="ablation: W=1 (uniform weights), fixed per-window "
                         "budget (W-based early stop disabled)")
+    p.add_argument("--adaptive-budget", type=int, default=0,
+                   help="policy-class emulation: total per-window iteration "
+                        "budget with adaptive stage control (advance tol on "
+                        "sustained W_min>0.9 or stall; final stage runs to "
+                        "W_min>=0.99 or budget exhaustion)")
     args = p.parse_args()
     tol_list = [float(x) for x in args.tol_list.split(",")]
     os.makedirs(args.outdir, exist_ok=True)
@@ -226,9 +231,13 @@ def main():
         x_eval = np.asarray(x_star)
 
         stage0 = ck["stage"] if k_win == ck["window"] else 0
+        budget_hit = False
         for stage in range(stage0, len(tol_list)):
+            if budget_hit:
+                break
             tol = tol_list[stage]
             print(f"[W{k_win} S{stage}] tol={tol}")
+            stall_best, stall_at = -1.0, 0
             for it in range(args.iter_cap):
                 key, k1, k2 = random.split(key, 3)
                 t_r = random.uniform(k1, (args.n_t,), minval=0.0,
