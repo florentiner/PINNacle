@@ -81,7 +81,7 @@ the window end as training progresses; W_min collapses at each tol increase and 
 to ~1 as that stage's causality is satisfied. Six annealing cycles per window are visible
 in the W_min trajectories across all trained windows.
 
-## 5. Ablation: WHICH ingredient does the work? [FINAL PENDING w5–w9]
+## 5. Ablation: WHICH ingredient does the work? [COMPLETE — 10/10 windows]
 (`runs/kaggle-causal-ks-ablation-s*/`; same architecture, marching, budgets; W≡1)
 
 | Window | Causal | No-causal (W≡1) | Ratio |
@@ -94,13 +94,19 @@ in the W_min trajectories across all trained windows.
 | w5 | 4.0e-3 | 7.4e-3 | 1.8× |
 | w6 | 5.3e-3 | 9.8e-3 | 1.8× |
 | w7 | 1.1e-2 | 2.1e-2 | 1.9× |
+| w8 | 4.4e-2 | 8.9e-2 | 2.0× |
+| w9 | 7.9e-2 | 2.0e-1 | **2.5×** |
+| **full domain (stitched)** | **3.56e-2** | **8.61e-2** | **2.4×** |
 
-**Honest attribution:** with short (Δt=0.1) marching windows, hard IC anchoring (w_ic=1e4),
-and the modified-MLP/Fourier architecture, uniform-weight training also solves chaotic KS
-windows — at a **remarkably stable ~1.8× accuracy penalty that holds from w3 through w7**
-(the ratio does not blow up as chaos deepens; it stays flat). Short windows are themselves
-a coarse causality mechanism, and this ablation quantifies exactly how much the explicit
-causal weighting adds on top: a consistent ~2× — meaningful but not the whole story. The catastrophic vanilla failure is
+**Honest attribution (complete picture):** with short (Δt=0.1) marching windows, hard IC
+anchoring (w_ic=1e4), and the modified-MLP/Fourier architecture, uniform-weight training
+also solves chaotic KS windows — at a penalty that is **stable ~1.8× through mid-chaos
+(w3–w7) and then WIDENS in the deepest chaos: 2.0× (w8), 2.5× (w9); 2.4× full-domain
+(8.61e-2 vs 3.56e-2)**. Interpretation: short windows are themselves a coarse causality
+mechanism and carry most of the rescue from vanilla's total failure; explicit causal
+weighting adds a ~2× multiplier that grows precisely where the dynamics are hardest —
+i.e., causal weighting earns its keep in the regime the method was designed for. It also
+supplies the convergence certificate (min W → 0.99) that uniform weighting cannot. The catastrophic vanilla failure is
 attributable to the *single-shot full-domain formulation* (no marching, no periodic
 encoding, generic MLP); causal weighting is a robust accuracy multiplier on top — and the
 within-window mechanism that makes tolerance annealing/convergence certification
