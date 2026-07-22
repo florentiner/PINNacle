@@ -183,11 +183,19 @@ def main():
         for j, bv in enumerate(G):
             vec = t0 + (av * ar + ac) * d1 + (bv * br + bc) * d2
             Z[j, i] = loss(unflat(vec, ref_sd))
-    Z = np.clip(Z, 1e0, None)
+    Z = np.nan_to_num(Z, nan=np.nanmax(Z[np.isfinite(Z)]),
+                      posinf=np.nanmax(Z[np.isfinite(Z)]))
+    floor = max(np.nanmin(Z[Z > 0]) if np.any(Z > 0) else 1e-3, 1e-6)
+    Z = np.clip(Z, floor, None)
 
     # ---- render: Li et al. style ----
     fig, ax = plt.subplots(figsize=(6.4, 4.8))
-    levels = np.logspace(np.log10(max(Z.min(), 1e0)), np.log10(Z.max()), 30)
+    lo, hi = float(Z.min()), float(Z.max())
+    if hi / lo < 1.5:                       # near-flat: pad so levels are valid
+        hi = lo * 1.5
+    levels = np.unique(np.logspace(np.log10(lo), np.log10(hi), 30))
+    if len(levels) < 3:
+        levels = np.linspace(lo, hi, 20)
     cs = ax.contour(G, G, Z, levels=levels, norm=LogNorm(),
                     cmap="viridis", linewidths=0.8)
     ax.clabel(cs, cs.levels[::3], inline=True, fontsize=6,
