@@ -58,6 +58,21 @@ Data: `runs/07.18-13.19.39-baseline-chaotic/{0-0,1-0}/errors.txt`,
   the next funnel.** The final minimum is unfindable directly (needle in a rugged
   landscape) but trivially findable through the curriculum.
 
+### 3b. Landscape geometry predicts the per-case training cost
+(`analysis/out/paper_style/` — Li-et-al contour loss landscapes with trajectories)
+
+Rendering the weighted total loss (residual + 1e4·IC) in the trajectory plane
+exposes *why* the two cases cost so differently to train:
+- **KS is stiff** (4th-order term): a narrow deep funnel surrounded by a high
+  plateau. Vanilla wanders the plateau (loss stuck 6.7e3–1.5e4, never escaping);
+  causal descends the funnel (down to ~1). The stiffness is why KS windows
+  escalated to ~0.7–1M iterations.
+- **GS is well-conditioned** (2nd-order): a wide, nearly flat basin (loss varies
+  <10% across the whole trajectory plane). No funnel to find → GS windows all
+  converged in ~200k iterations with no escalation.
+The landscape geometry *predicts the observed per-window cost curves* — an
+independent, mechanism-level corroboration of the stiffness explanation.
+
 ## 4. The causal mechanism, observed directly
 (`analysis/out/ks-*/causal_front.png`; W/L_t vectors in `runs/*/causal/history.npz`)
 
