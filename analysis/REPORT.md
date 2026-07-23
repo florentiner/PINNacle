@@ -106,10 +106,94 @@ minimum adjacent to the previous one.*
 *GS: vanilla (left) again parks in a local dent far from the reference; the causal
 window (right) descends into a wide, **flat, well-conditioned basin** (loss varies
 &lt;10% across the trajectory plane; contour version:
-`report_figs/contour_gs_causal_w5.png`) — GS is 2nd-order and benign, which §1.6 shows
+`report_figs/contour_gs_causal_w5.png`) — GS is 2nd-order and benign, which §1.7 shows
 predicts its training-cost profile.*
 
-### 1.4 Ingredient attribution (complete ablation, 10/10 windows)
+### 1.4 Why the combination synergizes — one principle at four scales
+
+The ingredients are not four independent improvements that happen to stack. They are
+one principle — **make optimization follow the causal and structural priors of the
+PDE** — applied at four scales, wired so that each component removes a failure mode
+the others leave open. The wiring is visible in the training rule itself. Inside a
+window, with the residual evaluated on 32 chunks L₁…L₃₂ sorted in time:
+
+```
+W_i  = stop_grad( exp( −tol · ( Σ_{j<i} L_j  +  10⁴ · L_IC ) ) )
+loss = mean_i( W_i · L_i )  +  10⁴ · L_IC          tol annealed 10⁻³ → 10²
+```
+
+Read the exponent right to left:
+
+1. **The IC gate — where windows and causal loss couple.** Until the window's initial
+   condition is fit, the 10⁴·L_IC term keeps *every* W_i ≈ 0: nothing trains but the
+   IC. And the IC of window k is *the prediction of window k−1* — so the same term
+   that orders training inside a window is what chains the windows into a curriculum.
+   Hard marching across windows (Δt=0.1) and soft marching within them (32 weighted
+   chunks) are the same time-marching idea at coarse and fine granularity, bound
+   together by this gate.
+2. **The cumulative-residual term** Σ_{j<i} L_j releases chunk i only after everything
+   before it is resolved — fine-scale causality, observed directly as the trust front
+   of §1.6.
+
+Why both scales are needed:
+
+- **Fine without coarse** (causal weighting over the full t∈[0,1] in one window): the
+  anneal would have to sweep 10× the horizon while every late-time residual couples,
+  Lyapunov-amplified, back to the earliest errors. Already *within* Δt=0.1 windows the
+  sweep's cost triples as chaos deepens (§1.7) and the final-tolerance certificate
+  becomes unreachable past mid-domain (§2.2) — a whole-domain sweep faces that wall
+  from iteration one. Consistently, the reference recipe itself only attempts chaotic
+  KS with time-marching. *(Inferred — this cell was not run.)*
+- **Coarse without fine** (our measured ablation, W≡1): inside each window the
+  optimizer is free to fit acausally again, and it does — a per-window penalty of
+  ~1.3× at w0, ~1.8–1.9× through mid-chaos, 2.0–2.5× in the deepest windows (Fig. 2).
+  The penalty *grows with chaos depth*: the two scales couple to the physics; they are
+  not additive constants. Compounded through the handoffs this is the measured 2.4×
+  full-domain gap.
+
+**Where the Fourier features bind in — handoff purity.** PINNacle's KS loss contains
+*no periodic-BC term at all* (IC only; verified against the source), so the vanilla
+model has nothing enforcing u(0,t) = u(2π,t). The cos kx / sin kx input features make
+periodicity exact **by construction** — a boundary condition moved from the loss
+(soft, approximate) into the architecture (exact, free). This matters *because of* the
+windows: every handoff re-anchors on the previous window's prediction, so any boundary
+mismatch would enter the chain as IC error and be amplified at the Lyapunov rate
+through all later windows — exactly the inherited-error mechanism §2.2 measures. With
+exact periodicity that injection channel is zero, permanently. The multi-scale time
+features and the gated (U/V) MLP play the analogous role for conditioning: the funnel
+of §1.3 must not merely exist, it must be descendable at the anneal's pace.
+
+**Representation must match the physics, not just be present — measured.** The GS
+encoding experiment is the controlled demonstration: identical causal machinery, only
+the encoding swapped — and the reference's tensor-product Fourier encoding loses 3.2×
+to plain coordinates (9.6e-3 vs 3.0e-3, window 0), because GS's localized spots don't
+live in global Fourier modes. Each component earns its place by matching a structure
+of the problem: KS (exact periodicity, broadband chaos) → Fourier features are
+load-bearing; GS (localized patterns) → they hurt.
+
+**Why the combined effect is multiplicative rather than additive.** Each ingredient
+removes a failure mode that otherwise *caps* the whole pipeline — bottleneck logic: a
+chain is as accurate as its weakest link.
+
+| configuration | causality respected | representation matched | L2RE | binding failure mode |
+|---|---|---|---|---|
+| vanilla | no | no | 1.007 | acausal global fit → ghost (§1.2) |
+| vanilla + best of 12 optimizer chains × 3 seeds | no | no | 0.913–0.915 | same ghost — optimization effort ≠ formulation |
+| windows + Fourier + modified MLP, W≡1 (ablation) | coarse only | yes | 8.61e-2 | acausal fit *within* windows |
+| **full SOTA** | coarse + fine | yes | **3.56e-2** | remaining floor = inherited handoff error — physics, not optimization (§2.2) |
+| full causal machinery, mismatched encoding | yes | no | 3.2× worse (GS w0 test) | representation–physics mismatch |
+
+No subset escapes O(10⁻¹) on KS; the full set jumps two orders of magnitude. The
+loss-landscape figures of §1.3 are this table made visible: the funnel exists only in
+(causal objective) × (windowed horizon) × (matched representation) — delete a measured
+factor (vanilla, ablation) and the plateau returns.
+
+*(Scope note: the factorial is partial. The ablation removes causal weighting as one
+unit while keeping windows+Fourier+architecture bundled; the "fine without coarse" and
+"windows without Fourier" cells are mechanistic inferences and are marked as such;
+every number in the table is measured.)*
+
+### 1.5 Ingredient attribution (complete ablation, 10/10 windows)
 
 The user-facing question — is it the causal loss, the windows, or the Fourier
 features? — has a measured answer:
@@ -140,7 +224,7 @@ features? — has a measured answer:
 of w8 with an adaptive schedule — identical error, confirming the late-window floor is
 inherited, not a scheduling artifact.*
 
-### 1.5 The mechanism, observed directly
+### 1.6 The mechanism, observed directly
 
 The causal weights W(t) form a **trust front** that sweeps each window from its initial
 condition to its end as training progresses — six annealing cycles per window, W
@@ -152,7 +236,7 @@ satisfied:
 the optimizer down the funnel one wall at a time — which is also why its loss signal
 stays honest (§2.3) while the vanilla loss lies.*
 
-### 1.6 Conditioning corollary: geometry predicts cost
+### 1.7 Conditioning corollary: geometry predicts cost
 
 ![cost per window](report_figs/fig5_cost_per_window.png)
 
@@ -161,7 +245,7 @@ window 0 to the ~735k budget ceiling from mid-domain on; GS (2nd-order, wide fla
 basin) holds ~205k ± 30k for all 20 windows. Same recipe, same hardware, different
 physics — the cost curve follows the landscape geometry of §1.3.
 
-### 1.7 Reproducibility notes (provenance)
+### 1.8 Reproducibility notes (provenance)
 
 1. PINNacle's KS reference data is **bit-identical** to the causal authors'
    `ks_chaotic.mat`; an independent ETDRK4 integration reproduces it to ~1e-12 —
