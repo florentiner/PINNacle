@@ -168,3 +168,49 @@ the causal curriculum's (tol ladder, stage budgets, window advance), not the opt
 chain's.** The chain framework already carries the causal knobs in its config
 (causal_eps_schedule, causal_delta, num_causal_buckets, time_windows), so the agent-on-
 curriculum experiment is an action-space change, not an infrastructure change.
+
+---
+
+# P1 EXPERIMENT RESULT (adaptive w8, Kaggle) — refutes §3, sharpens the conclusion
+
+Ran the adaptive stage-controller (RL policy-class emulation: advance tol on W_min>0.9
+or stall; final stage to W_min≥0.99 or budget) on KS **window 8**, resuming from the
+exact w7→w8 handoff, budget matched to the fixed schedule.
+
+| w8 run | iters | best W_min | final L2RE |
+|---|---|---|---|
+| fixed schedule (baseline) | 735,000 | 0.648 (under-annealed) | 4.401e-2 |
+| **adaptive controller** | **615,000 (−16%)** | **0.997 (certified)** | **4.401e-2 (identical)** |
+
+**§3 and P1 are REFUTED.** I predicted that annealing w8 to W_min≈0.99 would drop its
+error toward ~1.5–2e-2. The controller DID reach certification (best W_min 0.997) — yet
+the error is **bit-identical to the under-annealed baseline (4.40e-2)**. Re-annealing the
+window does not move its error floor. (w9, cut short by session end at 112k iters, tells
+the same story: best W_min 0.992, L2RE 7.96e-2 ≈ fixed 7.87e-2.)
+
+**Corrected mechanism.** The w8/w9 error is NOT a within-window scheduling artifact. It is
+**inherited**: the accumulated w0→w7 handoff error, amplified window-over-window by the
+chaotic (Lyapunov) dynamics, sets a floor the window converges to perfectly but cannot
+break by better annealing. The window optimizes correctly toward an IC that is already
+slightly wrong.
+
+**This UNIFIES the study under H16's logic — now for the curriculum, not just chains:**
+on chaotic problems the agent's accuracy headroom is ~0 (the wall is physics — a ghost
+attractor in single-shot, inherited handoff error in the curriculum), but its
+**efficiency and reliability headroom are real and measured**: −16% iterations to the
+same result *with proper certification* (W_min 0.648→0.997), plus budget it can now
+redeploy. An RL agent rewarded by Δlog-loss + the W_min≥0.99 event would learn exactly
+this: certify-and-move-on, not waste iterations under-annealing.
+
+**Where accuracy headroom actually lives (revised, testable next).** Since the floor is
+accumulated handoff error, the lever is the curriculum's *geometry*, not its per-window
+annealing: shorter/more windows or overlap near late times reduce per-handoff
+amplification. That is the Δt / window-count action (action #5) — the one curriculum
+control this experiment leaves unexplored and the only one with a mechanism to lower the
+late-window floor. Predicted: doubling window count over t∈[0.7,1.0] lowers w8/w9 L2RE
+where fixed 10-window annealing cannot. [Kaggle-testable; ~1 session.]
+
+**Net:** the agent closes the vanilla↔SOTA gap by adopting the causal curriculum (26×,
+already shown); *within* that curriculum it buys efficiency + reliability + oracle-free
+certification (P1, measured), and any remaining accuracy is reachable only through
+window-geometry control, not optimizer or tol scheduling.
