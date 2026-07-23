@@ -177,16 +177,29 @@ Ran the adaptive stage-controller (RL policy-class emulation: advance tol on W_m
 or stall; final stage to W_min≥0.99 or budget) on KS **window 8**, resuming from the
 exact w7→w8 handoff, budget matched to the fixed schedule.
 
-| w8 run | iters | best W_min | final L2RE |
+| w8 run | iters | final-stage (tol=100) W_min best/end | final L2RE |
 |---|---|---|---|
-| fixed schedule (baseline) | 735,000 | 0.648 (under-annealed) | 4.401e-2 |
-| **adaptive controller** | **615,000 (−16%)** | **0.997 (certified)** | **4.401e-2 (identical)** |
+| fixed schedule (baseline) | 735,000 | 0.739 / 0.648 | 4.401e-2 |
+| **adaptive controller** | **615,000 (−16%)** | 0.759 / 0.727 | **4.401e-2 (identical)** |
 
-**§3 and P1 are REFUTED.** I predicted that annealing w8 to W_min≈0.99 would drop its
-error toward ~1.5–2e-2. The controller DID reach certification (best W_min 0.997) — yet
-the error is **bit-identical to the under-annealed baseline (4.40e-2)**. Re-annealing the
-window does not move its error floor. (w9, cut short by session end at 112k iters, tells
-the same story: best W_min 0.992, L2RE 7.96e-2 ≈ fixed 7.87e-2.)
+*(Correction over the first write-up of this table: the "0.997 certified" previously
+reported for the adaptive run was its best W_min across ALL stages — trivially reached
+in the tol≤1 stages, which both runs certify at ≥0.99 — not the final stage. The
+archived traces show both runs plateau at W_min≈0.74±0.02 at tol=100.)*
+
+**§3 and P1 are REFUTED — more strongly than first stated.** I predicted that annealing
+w8 to W_min≈0.99 would drop its error toward ~1.5–2e-2. In fact the tol=100 certificate
+is **unreachable in w8 under any schedule tried**: both runs sweep all 6 stages, certify
+every stage with tol≤1, plateau at W_min≈0.74 at tol=100 — and land at **bit-identical
+error (4.401e-2)**. The fixed schedule spent +134k extra iterations in the stalled final stage (334k vs the
+controller's 200k stage cap; net −120k for the window) chasing the certificate for
+ΔW_min≈0 and Δerror=0.
+Re-annealing the window does not move its error floor. (w9, cut short by session end at
+112k iters, tells the same story: L2RE 7.96e-2 ≈ fixed 7.87e-2.) Full-run context: on KS
+the final-stage certificate is reachable only for w0–w3 (0.990–0.994); w4 is marginal
+(0.898); w5–w9 plateau at 0.66–0.81 — a **certification cliff** located exactly where
+per-window error crosses ~1e-3 into the inherited-floor regime. On GS all 20 windows
+reach 0.973–0.992. W_min at final tol is therefore an oracle-free chaos-depth meter.
 
 **Corrected mechanism.** The w8/w9 error is NOT a within-window scheduling artifact. It is
 **inherited**: the accumulated w0→w7 handoff error, amplified window-over-window by the
@@ -198,8 +211,8 @@ slightly wrong.
 on chaotic problems the agent's accuracy headroom is ~0 (the wall is physics — a ghost
 attractor in single-shot, inherited handoff error in the curriculum), but its
 **efficiency and reliability headroom are real and measured**: −16% iterations to the
-same result *with proper certification* (W_min 0.648→0.997), plus budget it can now
-redeploy. An RL agent rewarded by Δlog-loss + the W_min≥0.99 event would learn exactly
+same result by refusing to extend a stalled final stage (the fixed schedule spent +134k
+in-stage iterations for ΔW_min≈0, Δerror=0), plus budget it can now redeploy. An RL agent rewarded by Δlog-loss + the W_min≥0.99 event would learn exactly
 this: certify-and-move-on, not waste iterations under-annealing.
 
 **Where accuracy headroom actually lives (revised, testable next).** Since the floor is
