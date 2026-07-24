@@ -69,7 +69,7 @@ def discover_username(token: str) -> str:
 
 def assign_pdes(cfg: dict, pdes_override: list[str] | None) -> dict[str, list[str]]:
     sys.path.insert(0, REPO_ROOT)
-    from experiments.chain_eval.pde_registry import ALL_PDE_NAMES
+    from experiments.chain_eval.pde_names import ALL_PDE_NAMES
 
     accounts = cfg["accounts"]
     if pdes_override is not None:

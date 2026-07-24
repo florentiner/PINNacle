@@ -31,7 +31,7 @@ PASSTHROUGH = [
 
 def main():
     sys.path.insert(0, REPO_ROOT)
-    from experiments.chain_eval.pde_registry import ALL_PDE_NAMES
+    from experiments.chain_eval.pde_names import ALL_PDE_NAMES
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pdes", default="all", help="'all' or comma-separated PDE names")
