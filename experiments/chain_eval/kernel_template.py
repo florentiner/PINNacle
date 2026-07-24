@@ -65,6 +65,8 @@ for i, job in enumerate(CONFIG["jobs"], 1):
         cmd += ["--test-epochs", str(CONFIG["test_epochs"])]
     if CONFIG.get("force"):
         cmd.append("--force")
+    if CONFIG.get("no_upload"):
+        cmd.append("--no-upload")
     statuses[job["csv_name"]] = sh(*cmd, env=env)
 
 print("\n" + "=" * 70, flush=True)

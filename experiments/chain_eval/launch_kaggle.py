@@ -148,8 +148,9 @@ def build_kernel_dir(account: dict, cfg: dict, jobs: list[dict], args) -> str:
         "repo": cfg.get("repo_url", DEFAULT_REPO_URL),
         "branch": cfg.get("branch", DEFAULT_BRANCH),
         "jobs": jobs,
-        "n_seeds": 2 if args.smoke else cfg.get("n_seeds", 10),
-        "seed_base": cfg.get("seed_base", 42),
+        "n_seeds": 2 if args.smoke else account.get("n_seeds", cfg.get("n_seeds", 10)),
+        "seed_base": account.get("seed_base", cfg.get("seed_base", 42)),
+        "no_upload": bool(account.get("no_upload", cfg.get("no_upload", False))),
         "test_epochs": 3 if args.smoke else None,
         "display_every": 1 if args.smoke else cfg.get("display_every", 100),
         # Benchmarked on T4x2: 2 workers/GPU is >=1.0x everywhere, 1.67x on light PDEs.
