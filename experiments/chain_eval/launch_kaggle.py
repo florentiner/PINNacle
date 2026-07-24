@@ -182,8 +182,15 @@ def cmd_launch(cfg: dict, args):
         kdir = build_kernel_dir(account, cfg, pdes, args)
         with open(os.path.join(kdir, "kernel-metadata.json")) as f:
             ref = json.load(f)["id"]
-        print(f"[{account['name']}] pushing {ref}  PDEs: {', '.join(pdes)}")
-        r = subprocess.run(["kaggle", "kernels", "push", "-p", kdir], env=kaggle_env(token))
+        shape = cfg.get("machine_shape", "NvidiaTeslaT4")
+        print(f"[{account['name']}] pushing {ref}  (shape {shape})  PDEs: {', '.join(pdes)}")
+        r = subprocess.run(
+            [sys.executable, os.path.join(SCRIPT_DIR, "_push_with_shape.py"), kdir, shape],
+            env=kaggle_env(token),
+        )
+        if r.returncode != 0:
+            print(f"[{account['name']}] shaped push failed — falling back to plain kaggle CLI push")
+            r = subprocess.run(["kaggle", "kernels", "push", "-p", kdir], env=kaggle_env(token))
         if r.returncode == 0:
             state[account["name"]] = {"ref": ref, "pdes": pdes, "smoke": bool(args.smoke)}
             save_state(state)

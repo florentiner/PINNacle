@@ -15,13 +15,21 @@ def sh(*cmd, check=False, env=None):
 
 sh("nvidia-smi")
 
-if not os.path.exists("PINNacle"):
+# Clone OUTSIDE /kaggle/working: everything in the working dir becomes kernel
+# output, and the repo (with ref/ data) is ~0.5 GB. Run artifacts + local CSV
+# copies are redirected into the working dir below so they stay retrievable.
+WORK_DIR = os.getcwd()
+CLONE_BASE = "/tmp" if os.path.isdir("/kaggle") else WORK_DIR
+os.makedirs(CLONE_BASE, exist_ok=True)
+repo_dir = os.path.join(CLONE_BASE, "PINNacle")
+if not os.path.exists(repo_dir):
     sh(
         "git", "clone", "-b", CONFIG["branch"], "--single-branch", "--depth", "1",
-        CONFIG["repo"], "PINNacle", check=True,
+        CONFIG["repo"], repo_dir, check=True,
     )
-os.chdir("PINNacle")
+os.chdir(repo_dir)
 print("Working directory:", os.getcwd(), flush=True)
+save_dir = os.path.join(WORK_DIR, "runs_chain_eval") if CLONE_BASE != WORK_DIR else "runs_chain_eval"
 
 sh(sys.executable, "-m", "pip", "install", "-q", "huggingface_hub", "pandas")
 
@@ -38,6 +46,7 @@ cmd = [
     "--n-seeds", str(CONFIG["n_seeds"]),
     "--seed-base", str(CONFIG["seed_base"]),
     "--display-every", str(CONFIG["display_every"]),
+    "--save-dir", save_dir,
     "--hf-repo", CONFIG["hf_repo"],
     "--hf-dir", CONFIG["hf_dir"],
 ]
