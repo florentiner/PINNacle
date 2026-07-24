@@ -99,22 +99,31 @@ def assign_pdes(cfg: dict, pdes_override: list[str] | None) -> dict[str, list[st
 
 
 def build_jobs(account: dict, cfg: dict, pdes: list[str]) -> list[dict]:
-    """Best-chain evals (csv_seed, continuous+fixed) first, then main-chain PDEs."""
+    """Best-chain evals (csv_seed, continuous+fixed) first, then main-chain PDEs.
+
+    "best_pdes": ["burgers_1d"] runs both value types; "best_jobs":
+    ["ns2d_longtime:fixed"] pins a single (pde, value_type) job.
+    """
     main_chain_key = cfg.get("chain_key") or "chain_adam_lbfgs"
+    best = [(p, vt) for p in account.get("best_pdes", []) for vt in ("continuous", "fixed")]
+    for entry in account.get("best_jobs", []):
+        pde, _, vt = entry.partition(":")
+        if vt not in ("continuous", "fixed"):
+            sys.exit(f"Account {account['name']}: bad best_jobs entry '{entry}' (want pde:continuous|fixed)")
+        best.append((pde, vt))
     jobs = []
-    for pde in account.get("best_pdes", []):
-        for vt in ("continuous", "fixed"):
-            chain_json = f"experiments/chain_eval/best_chains/{pde}_{vt}.json"
-            if not os.path.exists(os.path.join(SCRIPT_DIR, "best_chains", f"{pde}_{vt}.json")):
-                sys.exit(f"Account {account['name']}: no best chain file {chain_json}")
-            jobs.append({
-                "pde": pde,
-                "chain_json": chain_json,
-                "value_type": vt,
-                "hf_dir": cfg.get("best_hf_dir", "csv_seed"),
-                "csv_name": f"{pde}_{vt}",
-                "chain_key": f"{pde}_{vt}",
-            })
+    for pde, vt in best:
+        chain_json = f"experiments/chain_eval/best_chains/{pde}_{vt}.json"
+        if not os.path.exists(os.path.join(SCRIPT_DIR, "best_chains", f"{pde}_{vt}.json")):
+            sys.exit(f"Account {account['name']}: no best chain file {chain_json}")
+        jobs.append({
+            "pde": pde,
+            "chain_json": chain_json,
+            "value_type": vt,
+            "hf_dir": cfg.get("best_hf_dir", "csv_seed"),
+            "csv_name": f"{pde}_{vt}",
+            "chain_key": f"{pde}_{vt}",
+        })
     for pde in pdes:
         jobs.append({
             "pde": pde,
