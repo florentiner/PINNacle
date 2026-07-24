@@ -67,7 +67,10 @@ sequentially.
    (`kaggle_token` = a `KGAT_...` access token from kaggle.com → Settings →
    API). `accounts.json` is gitignored — never commit tokens.
 2. Optionally pin PDEs per account with `"pdes": [...]`; anything unassigned
-   is split round-robin across accounts.
+   is split round-robin across accounts. Kernels request the T4 x2 machine
+   (`"machine_shape": "NvidiaTeslaT4"`, the default) — do not switch to
+   `NvidiaTeslaP100`: its sm_60 is unsupported by Kaggle's PyTorch build and
+   the run silently falls back to CPU.
 3. Push (requires `pip install kaggle>=1.7`, internet-enabled private GPU
    kernels are created):
 

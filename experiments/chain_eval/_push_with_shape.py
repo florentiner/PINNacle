@@ -29,8 +29,8 @@ def _save_with_shape(self, request):
 
 KernelsApiClient.save_kernel = _save_with_shape
 
-from kaggle.api.kaggle_api_extended import KaggleApi
+# `import kaggle` authenticates once via KAGGLE_API_TOKEN (and consumes the
+# env var) — reuse that instance instead of authenticating a second time.
+import kaggle
 
-api = KaggleApi()
-api.authenticate()
-api.kernels_push_cli(folder, None)
+kaggle.api.kernels_push_cli(folder, None)
