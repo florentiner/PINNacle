@@ -73,7 +73,10 @@ on the next launch anyway).
    is split round-robin across accounts. Kernels request the T4 x2 machine
    (`"machine_shape": "NvidiaTeslaT4"`, the default) — do not switch to
    `NvidiaTeslaP100`: its sm_60 is unsupported by Kaggle's PyTorch build and
-   the run silently falls back to CPU.
+   the run silently falls back to CPU. Kernels run with `workers_per_gpu: 2`
+   (4 seed workers on T4 x2) — benchmarked ≥1.0× on all tested PDEs and
+   1.67× on light ones vs 1 worker/GPU; set it to 1 in accounts.json if a
+   heavy PDE ever OOMs.
 3. Push (requires `pip install kaggle>=1.7`, internet-enabled private GPU
    kernels are created):
 

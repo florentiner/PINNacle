@@ -3,6 +3,7 @@
     "branch": "chain_eval",
     "n_seeds": 10,
     "seed_base": 42,
+    "workers_per_gpu": 2,
     "hf_repo": "danil-e/pinnacle-optuna-db",
     "hf_dir": "csv_chain",
     "hf_token_write": "hf_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",

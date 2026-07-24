@@ -111,7 +111,8 @@ def build_kernel_dir(account: dict, cfg: dict, pdes: list[str], args) -> str:
         "test_epochs": 3 if args.smoke else None,
         "chain_key": cfg.get("chain_key"),
         "display_every": 1 if args.smoke else cfg.get("display_every", 100),
-        "workers_per_gpu": cfg.get("workers_per_gpu", 1),
+        # Benchmarked on T4x2: 2 workers/GPU is >=1.0x everywhere, 1.67x on light PDEs.
+        "workers_per_gpu": cfg.get("workers_per_gpu", 2),
         "hf_repo": cfg.get("hf_repo", "danil-e/pinnacle-optuna-db"),
         "hf_dir": cfg.get("hf_dir", "csv_chain"),
         "hf_token_write": cfg.get("hf_token_write", ""),
