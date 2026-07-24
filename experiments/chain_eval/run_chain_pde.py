@@ -276,7 +276,12 @@ def run_orchestrator(args) -> int:
         return 0
 
     devices = probe_devices(args.devices)
-    n_parallel = args.n_parallel or (len(devices) if devices[0] not in ("cpu", "mps") else 1)
+    if args.n_parallel:
+        n_parallel = args.n_parallel
+    elif devices[0] in ("cpu", "mps"):
+        n_parallel = 1
+    else:
+        n_parallel = len(devices) * max(1, args.workers_per_gpu)
     print(f"PDE={args.pde_name} chain_key={chain_key} smoke={smoke}")
     print(f"Seeds to run: {seeds}")
     print(f"Devices: {devices} | parallel workers: {n_parallel}", flush=True)
@@ -370,7 +375,10 @@ def main():
     parser.add_argument("--n-seeds", type=int, default=10)
     parser.add_argument("--seed-base", type=int, default=42)
     parser.add_argument("--devices", default="auto", help="'auto', 'cpu', or CUDA ids like '0,1'")
-    parser.add_argument("--n-parallel", type=int, default=None)
+    parser.add_argument("--n-parallel", type=int, default=None,
+                        help="Total parallel workers (overrides --workers-per-gpu)")
+    parser.add_argument("--workers-per-gpu", type=int, default=1,
+                        help="Seed workers per GPU (PINNacle nets are small; 2 can raise T4 throughput)")
     parser.add_argument("--display-every", type=int, default=100)
     parser.add_argument("--hidden-layers", default="100*5")
     parser.add_argument("--save-dir", default="runs_chain_eval")

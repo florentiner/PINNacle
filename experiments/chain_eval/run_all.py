@@ -24,7 +24,7 @@ RUNNER = os.path.join(SCRIPT_DIR, "run_chain_pde.py")
 
 PASSTHROUGH = [
     "chain_json", "chain_key", "n_seeds", "seed_base", "devices", "n_parallel",
-    "display_every", "hidden_layers", "save_dir", "test_epochs",
+    "workers_per_gpu", "display_every", "hidden_layers", "save_dir", "test_epochs",
     "hf_repo", "hf_dir", "hf_token_write", "hf_token_read",
 ]
 
@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--seed-base", type=int, default=None)
     parser.add_argument("--devices", default=None)
     parser.add_argument("--n-parallel", type=int, default=None)
+    parser.add_argument("--workers-per-gpu", type=int, default=None)
     parser.add_argument("--display-every", type=int, default=None)
     parser.add_argument("--hidden-layers", default=None)
     parser.add_argument("--save-dir", default=None)

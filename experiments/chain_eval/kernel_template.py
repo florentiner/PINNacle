@@ -46,6 +46,7 @@ cmd = [
     "--n-seeds", str(CONFIG["n_seeds"]),
     "--seed-base", str(CONFIG["seed_base"]),
     "--display-every", str(CONFIG["display_every"]),
+    "--workers-per-gpu", str(CONFIG.get("workers_per_gpu", 1)),
     "--save-dir", save_dir,
     "--hf-repo", CONFIG["hf_repo"],
     "--hf-dir", CONFIG["hf_dir"],
