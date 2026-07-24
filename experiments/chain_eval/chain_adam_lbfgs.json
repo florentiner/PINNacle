@@ -1,0 +1,4 @@
+[
+    {"optimizer": "Adam", "epochs": 1000, "lr": 0.001},
+    {"optimizer": "LBFGS", "epochs": 30000, "lr": 1.0, "history_size": 100}
+]

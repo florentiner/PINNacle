@@ -175,3 +175,9 @@ runs_optuna/
 optuna_studies/
 *.db
 kaggle_test_*.ipynb
+
+# chain_eval: local secrets and artifacts (never commit tokens)
+experiments/chain_eval/accounts.json
+experiments/chain_eval/kaggle_build/
+runs_chain_eval/
+.env

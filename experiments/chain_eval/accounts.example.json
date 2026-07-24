@@ -1,0 +1,21 @@
+{
+    "repo_url": "https://github.com/florentiner/PINNacle.git",
+    "branch": "chain_eval",
+    "n_seeds": 10,
+    "seed_base": 42,
+    "hf_repo": "danil-e/pinnacle-optuna-db",
+    "hf_dir": "csv_chain",
+    "hf_token_write": "hf_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "hf_token_read": "hf_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "accounts": [
+        {
+            "name": "acc1",
+            "kaggle_token": "KGAT_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "pdes": ["burgers_1d", "burgers_2d", "poisson2d_classic"]
+        },
+        {
+            "name": "acc2",
+            "kaggle_token": "KGAT_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+    ]
+}
