@@ -58,7 +58,10 @@ nohup ./experiments/chain_eval/run_server.sh > chain_eval.log 2>&1 &
 ```
 
 Seeds are parallelized over the listed GPUs inside each PDE; PDEs run
-sequentially.
+sequentially. `--workers-per-gpu 2` packs two seed workers on each GPU —
+the PINNacle nets are small, so this raises throughput on underutilized
+GPUs (drop back to 1 if a heavy PDE hits GPU OOM; failed seeds are retried
+on the next launch anyway).
 
 ## Run on Kaggle (GPU)
 
