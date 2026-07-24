@@ -75,26 +75,59 @@ def assign_pdes(cfg: dict, pdes_override: list[str] | None) -> dict[str, list[st
     if pdes_override is not None:
         pool = list(pdes_override)
         assignment = {a["name"]: [] for a in accounts}
+        rr_names = [a["name"] for a in accounts]
     else:
+        # "pdes" missing -> account takes part in round-robin of unassigned PDEs;
+        # "pdes": [] -> account explicitly runs no main-chain PDEs.
         assignment = {}
         assigned = set()
         for a in accounts:
-            listed = a.get("pdes") or []
+            listed = a.get("pdes", None) or []
             unknown = [p for p in listed if p not in ALL_PDE_NAMES]
             if unknown:
                 sys.exit(f"Account {a['name']}: unknown PDEs {unknown}")
             assignment[a["name"]] = list(listed)
             assigned.update(listed)
-        pool = [p for p in ALL_PDE_NAMES if p not in assigned]
-        if all(a.get("pdes") for a in accounts):
-            pool = []  # fully explicit assignment
-    names = [a["name"] for a in accounts]
+        rr_names = [a["name"] for a in accounts if "pdes" not in a]
+        pool = [p for p in ALL_PDE_NAMES if p not in assigned] if rr_names else []
+        leftovers = [p for p in ALL_PDE_NAMES if p not in assigned]
+        if leftovers and not rr_names:
+            print(f"NOTE: not assigned to any account: {', '.join(leftovers)}")
     for i, pde in enumerate(pool):
-        assignment[names[i % len(names)]].append(pde)
+        assignment[rr_names[i % len(rr_names)]].append(pde)
     return assignment
 
 
-def build_kernel_dir(account: dict, cfg: dict, pdes: list[str], args) -> str:
+def build_jobs(account: dict, cfg: dict, pdes: list[str]) -> list[dict]:
+    """Best-chain evals (csv_seed, continuous+fixed) first, then main-chain PDEs."""
+    main_chain_key = cfg.get("chain_key") or "chain_adam_lbfgs"
+    jobs = []
+    for pde in account.get("best_pdes", []):
+        for vt in ("continuous", "fixed"):
+            chain_json = f"experiments/chain_eval/best_chains/{pde}_{vt}.json"
+            if not os.path.exists(os.path.join(SCRIPT_DIR, "best_chains", f"{pde}_{vt}.json")):
+                sys.exit(f"Account {account['name']}: no best chain file {chain_json}")
+            jobs.append({
+                "pde": pde,
+                "chain_json": chain_json,
+                "value_type": vt,
+                "hf_dir": cfg.get("best_hf_dir", "csv_seed"),
+                "csv_name": f"{pde}_{vt}",
+                "chain_key": f"{pde}_{vt}",
+            })
+    for pde in pdes:
+        jobs.append({
+            "pde": pde,
+            "chain_json": None,
+            "value_type": "chain",
+            "hf_dir": cfg.get("hf_dir", "csv_chain"),
+            "csv_name": pde,
+            "chain_key": main_chain_key,
+        })
+    return jobs
+
+
+def build_kernel_dir(account: dict, cfg: dict, jobs: list[dict], args) -> str:
     slug = f"pinnacle-chain-{re.sub(r'[^a-z0-9-]', '-', account['name'].lower())}"
     if args.smoke:
         slug += "-smoke"
@@ -105,16 +138,14 @@ def build_kernel_dir(account: dict, cfg: dict, pdes: list[str], args) -> str:
     config = {
         "repo": cfg.get("repo_url", DEFAULT_REPO_URL),
         "branch": cfg.get("branch", DEFAULT_BRANCH),
-        "pdes": pdes,
+        "jobs": jobs,
         "n_seeds": 2 if args.smoke else cfg.get("n_seeds", 10),
         "seed_base": cfg.get("seed_base", 42),
         "test_epochs": 3 if args.smoke else None,
-        "chain_key": cfg.get("chain_key"),
         "display_every": 1 if args.smoke else cfg.get("display_every", 100),
         # Benchmarked on T4x2: 2 workers/GPU is >=1.0x everywhere, 1.67x on light PDEs.
         "workers_per_gpu": cfg.get("workers_per_gpu", 2),
         "hf_repo": cfg.get("hf_repo", "danil-e/pinnacle-optuna-db"),
-        "hf_dir": cfg.get("hf_dir", "csv_chain"),
         "hf_token_write": cfg.get("hf_token_write", ""),
         "hf_token_read": cfg.get("hf_token_read", ""),
         "force": bool(args.force),
@@ -176,16 +207,20 @@ def cmd_launch(cfg: dict, args):
     state = load_state()
     for account in accounts:
         pdes = assignment.get(account["name"], [])
-        if not pdes:
-            print(f"[{account['name']}] no PDEs assigned — skipping.")
+        jobs = build_jobs(account, cfg, pdes) if not args.smoke else build_jobs(
+            dict(account, best_pdes=[]), cfg, pdes
+        )
+        if not jobs:
+            print(f"[{account['name']}] no jobs assigned — skipping.")
             continue
         token = account["kaggle_token"]
         account = dict(account, username=account.get("username") or discover_username(token))
-        kdir = build_kernel_dir(account, cfg, pdes, args)
+        kdir = build_kernel_dir(account, cfg, jobs, args)
         with open(os.path.join(kdir, "kernel-metadata.json")) as f:
             ref = json.load(f)["id"]
         shape = cfg.get("machine_shape", "NvidiaTeslaT4")
-        print(f"[{account['name']}] pushing {ref}  (shape {shape})  PDEs: {', '.join(pdes)}")
+        job_names = ", ".join(j["csv_name"] for j in jobs)
+        print(f"[{account['name']}] pushing {ref}  (shape {shape})  jobs: {job_names}")
         r = subprocess.run(
             [sys.executable, os.path.join(SCRIPT_DIR, "_push_with_shape.py"), kdir, shape],
             env=kaggle_env(token),
@@ -194,7 +229,11 @@ def cmd_launch(cfg: dict, args):
             print(f"[{account['name']}] shaped push failed — falling back to plain kaggle CLI push")
             r = subprocess.run(["kaggle", "kernels", "push", "-p", kdir], env=kaggle_env(token))
         if r.returncode == 0:
-            state[account["name"]] = {"ref": ref, "pdes": pdes, "smoke": bool(args.smoke)}
+            state[account["name"]] = {
+                "ref": ref,
+                "jobs": [j["csv_name"] for j in jobs],
+                "smoke": bool(args.smoke),
+            }
             save_state(state)
             print(f"[{account['name']}] pushed: https://www.kaggle.com/code/{ref}")
         else:

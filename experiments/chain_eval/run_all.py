@@ -25,7 +25,7 @@ RUNNER = os.path.join(SCRIPT_DIR, "run_chain_pde.py")
 PASSTHROUGH = [
     "chain_json", "chain_key", "n_seeds", "seed_base", "devices", "n_parallel",
     "workers_per_gpu", "display_every", "hidden_layers", "save_dir", "test_epochs",
-    "hf_repo", "hf_dir", "hf_token_write", "hf_token_read",
+    "hf_repo", "hf_dir", "hf_token_write", "hf_token_read", "value_type",
 ]
 
 
@@ -52,6 +52,7 @@ def main():
     parser.add_argument("--hf-dir", default=None)
     parser.add_argument("--hf-token-write", default=None)
     parser.add_argument("--hf-token-read", default=None)
+    parser.add_argument("--value-type", default=None)
     args = parser.parse_args()
 
     if args.pdes.strip().lower() == "all":

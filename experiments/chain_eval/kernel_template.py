@@ -29,7 +29,7 @@ if not os.path.exists(repo_dir):
     )
 os.chdir(repo_dir)
 print("Working directory:", os.getcwd(), flush=True)
-save_dir = os.path.join(WORK_DIR, "runs_chain_eval") if CLONE_BASE != WORK_DIR else "runs_chain_eval"
+save_base = os.path.join(WORK_DIR, "runs_chain_eval") if CLONE_BASE != WORK_DIR else "runs_chain_eval"
 
 sh(sys.executable, "-m", "pip", "install", "-q", "huggingface_hub", "pandas")
 
@@ -40,24 +40,34 @@ if CONFIG.get("hf_token_write"):
 if CONFIG.get("hf_token_read"):
     env["HF_TOKEN_READ"] = CONFIG["hf_token_read"]
 
-cmd = [
-    sys.executable, "experiments/chain_eval/run_all.py",
-    "--pdes", ",".join(CONFIG["pdes"]),
-    "--n-seeds", str(CONFIG["n_seeds"]),
-    "--seed-base", str(CONFIG["seed_base"]),
-    "--display-every", str(CONFIG["display_every"]),
-    "--workers-per-gpu", str(CONFIG.get("workers_per_gpu", 1)),
-    "--save-dir", save_dir,
-    "--hf-repo", CONFIG["hf_repo"],
-    "--hf-dir", CONFIG["hf_dir"],
-]
-if CONFIG.get("chain_key"):
-    cmd += ["--chain-key", CONFIG["chain_key"]]
-if CONFIG.get("test_epochs") is not None:
-    cmd += ["--test-epochs", str(CONFIG["test_epochs"])]
-if CONFIG.get("force"):
-    cmd.append("--force")
+# Each job: {pde, chain_json (repo-relative or None for the default chain),
+#            value_type, hf_dir, csv_name, chain_key}
+statuses = {}
+for i, job in enumerate(CONFIG["jobs"], 1):
+    print(f"\n{'#' * 70}\n# job {i}/{len(CONFIG['jobs'])}: {job['csv_name']}\n{'#' * 70}", flush=True)
+    cmd = [
+        sys.executable, "experiments/chain_eval/run_chain_pde.py",
+        "--pde-name", job["pde"],
+        "--n-seeds", str(CONFIG["n_seeds"]),
+        "--seed-base", str(CONFIG["seed_base"]),
+        "--display-every", str(CONFIG["display_every"]),
+        "--workers-per-gpu", str(CONFIG.get("workers_per_gpu", 1)),
+        "--save-dir", os.path.join(save_base, job["csv_name"]),
+        "--hf-repo", CONFIG["hf_repo"],
+        "--hf-dir", job["hf_dir"],
+        "--csv-name", job["csv_name"],
+        "--value-type", job["value_type"],
+        "--chain-key", job["chain_key"],
+    ]
+    if job.get("chain_json"):
+        cmd += ["--chain-json", job["chain_json"]]
+    if CONFIG.get("test_epochs") is not None:
+        cmd += ["--test-epochs", str(CONFIG["test_epochs"])]
+    if CONFIG.get("force"):
+        cmd.append("--force")
+    statuses[job["csv_name"]] = sh(*cmd, env=env)
 
-rc = sh(*cmd, env=env)
-print("run_all.py exit code:", rc, flush=True)
-sys.exit(rc)
+print("\n" + "=" * 70, flush=True)
+for name, rc in statuses.items():
+    print(f"{'OK  ' if rc == 0 else 'FAIL'}  {name}", flush=True)
+sys.exit(0 if all(rc == 0 for rc in statuses.values()) else 1)

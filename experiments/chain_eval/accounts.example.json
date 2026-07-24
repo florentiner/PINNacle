@@ -4,19 +4,28 @@
     "n_seeds": 10,
     "seed_base": 42,
     "workers_per_gpu": 2,
+    "machine_shape": "NvidiaTeslaT4",
     "hf_repo": "danil-e/pinnacle-optuna-db",
     "hf_dir": "csv_chain",
+    "best_hf_dir": "csv_seed",
     "hf_token_write": "hf_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "hf_token_read": "hf_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "accounts": [
         {
             "name": "acc1",
             "kaggle_token": "KGAT_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "pdes": ["burgers_1d", "burgers_2d", "poisson2d_classic"]
+            "pdes": ["burgers_1d", "burgers_2d", "poisson2d_classic"],
+            "best_pdes": ["heatinv"]
         },
         {
-            "name": "acc2",
+            "name": "acc2-gets-leftover-pdes-round-robin",
             "kaggle_token": "KGAT_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+            "name": "acc3-only-best-chains",
+            "kaggle_token": "KGAT_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "pdes": [],
+            "best_pdes": ["burgers_1d", "ns2d_longtime"]
         }
     ]
 }

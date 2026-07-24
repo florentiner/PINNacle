@@ -34,8 +34,9 @@ CSV_COLUMNS = [
 _KEY_COLS = ["pde_name", "chain_key", "smoke_test", "seed"]
 
 
-def csv_path_in_repo(hf_dir: str, pde_name: str) -> str:
-    return f"{hf_dir}/{pde_name}.csv"
+def csv_path_in_repo(hf_dir: str, csv_name: str) -> str:
+    """csv_name is the file stem: the pde name, or e.g. '{pde}_{value_type}'."""
+    return f"{hf_dir}/{csv_name}.csv"
 
 
 def download_csv(repo_id: str, path_in_repo: str, token: str | None = None):
@@ -97,16 +98,16 @@ def merge_rows(remote_df, rows: list[dict]) -> pd.DataFrame:
 def upload_rows(
     repo_id: str,
     hf_dir: str,
-    pde_name: str,
+    csv_name: str,
     rows: list[dict],
     write_token: str | None,
     read_token: str | None = None,
     local_dir: str = "csv_chain_local",
     max_attempts: int = 4,
 ) -> bool:
-    """Merge `rows` into the remote per-PDE CSV and upload. Always keeps a local copy."""
-    path_in_repo = csv_path_in_repo(hf_dir, pde_name)
-    local_path = os.path.join(local_dir, f"{pde_name}.csv")
+    """Merge `rows` into the remote CSV and upload. Always keeps a local copy."""
+    path_in_repo = csv_path_in_repo(hf_dir, csv_name)
+    local_path = os.path.join(local_dir, f"{csv_name}.csv")
     os.makedirs(local_dir, exist_ok=True)
 
     if not write_token:
@@ -127,7 +128,7 @@ def upload_rows(
                 repo_id=repo_id,
                 repo_type="dataset",
                 token=write_token,
-                commit_message=f"chain_eval: {pde_name} +{len(rows)} seed rows",
+                commit_message=f"chain_eval: {csv_name} +{len(rows)} seed rows",
             )
             print(
                 f"Uploaded {path_in_repo} ({len(merged)} rows) -> "

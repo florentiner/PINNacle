@@ -1,0 +1,30 @@
+[
+    {
+        "optimizer": "Adam",
+        "lr": 0.001,
+        "epochs": 1000
+    },
+    {
+        "optimizer": "Adam",
+        "lr": 0.01,
+        "epochs": 2500
+    },
+    {
+        "optimizer": "LBFGS",
+        "lr": 0.5,
+        "epochs": 1500,
+        "max_iter": 10
+    },
+    {
+        "optimizer": "LBFGS",
+        "lr": 1.0,
+        "epochs": 1500,
+        "max_iter": 10
+    },
+    {
+        "optimizer": "LBFGS",
+        "lr": 0.5,
+        "epochs": 500,
+        "max_iter": 10
+    }
+]

@@ -216,7 +216,7 @@ def probe_devices(spec: str) -> list[str]:
     return ["cpu"]
 
 
-def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool) -> dict:
+def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool, value_type: str = "chain") -> dict:
     mse_op = r.get("mse", float("nan"))
     brmse = r.get("brmse", float("nan"))
     l2re_op = r.get("l2re", float("nan"))
@@ -235,7 +235,7 @@ def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool) -> dict:
     return {
         "run_timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "pde_name": r["pde_name"],
-        "value_type": "chain",
+        "value_type": value_type,
         "smoke_test": smoke,
         "chain_key": chain_key,
         "seed": int(r["seed"]),
@@ -257,6 +257,7 @@ def run_orchestrator(args) -> int:
     chain = load_chain(args.chain_json, args.test_epochs)
     smoke = args.test_epochs is not None
     chain_key = args.chain_key or os.path.splitext(os.path.basename(args.chain_json))[0]
+    csv_name = args.csv_name or args.pde_name
     write_token = args.hf_token_write or os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     read_token = args.hf_token_read or os.environ.get("HF_TOKEN_READ") or write_token
 
@@ -264,7 +265,7 @@ def run_orchestrator(args) -> int:
 
     if args.upload and not args.force:
         remote = hf_results.download_csv(
-            args.hf_repo, hf_results.csv_path_in_repo(args.hf_dir, args.pde_name), read_token
+            args.hf_repo, hf_results.csv_path_in_repo(args.hf_dir, csv_name), read_token
         )
         done = hf_results.existing_seeds(remote, args.pde_name, chain_key, smoke)
         skipped = [s for s in seeds if s in done]
@@ -326,12 +327,19 @@ def run_orchestrator(args) -> int:
             return
         with open(result_json) as f:
             r = json.load(f)
-        completed_rows.append(result_to_row(r, chain, chain_key, smoke))
+        completed_rows.append(result_to_row(r, chain, chain_key, smoke, args.value_type))
         if args.upload:
             hf_results.upload_rows(
-                args.hf_repo, args.hf_dir, args.pde_name, completed_rows,
+                args.hf_repo, args.hf_dir, csv_name, completed_rows,
                 write_token, read_token, local_dir=os.path.join(args.save_dir, "csv"),
             )
+        else:
+            import pandas as pd
+
+            local_dir = os.path.join(args.save_dir, "csv")
+            os.makedirs(local_dir, exist_ok=True)
+            local_path = os.path.join(local_dir, f"{csv_name}.csv")
+            pd.DataFrame(completed_rows, columns=hf_results.CSV_COLUMNS).to_csv(local_path, index=False)
 
     active: list[tuple] = []  # (proc, seed, result_json, slot)
     slots = list(range(n_parallel))
@@ -388,6 +396,10 @@ def main():
     # HF
     parser.add_argument("--hf-repo", default=DEFAULT_HF_REPO)
     parser.add_argument("--hf-dir", default=DEFAULT_HF_DIR)
+    parser.add_argument("--value-type", default="chain",
+                        help="value_type column in CSV rows (e.g. chain / continuous / fixed)")
+    parser.add_argument("--csv-name", default=None,
+                        help="CSV file stem in hf_dir (default: pde name; e.g. burgers_1d_continuous)")
     parser.add_argument("--hf-token-write", default=None)
     parser.add_argument("--hf-token-read", default=None)
     parser.add_argument("--no-upload", dest="upload", action="store_false")

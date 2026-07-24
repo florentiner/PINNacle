@@ -1,0 +1,29 @@
+[
+    {
+        "optimizer": "LBFGS",
+        "lr": 0.141,
+        "epochs": 272,
+        "max_iter": 10
+    },
+    {
+        "optimizer": "PSO",
+        "lr": 0.000843,
+        "epochs": 300
+    },
+    {
+        "optimizer": "LBFGS",
+        "lr": 0.169,
+        "epochs": 477,
+        "max_iter": 10
+    },
+    {
+        "optimizer": "Adam",
+        "lr": 0.00485,
+        "epochs": 1640
+    },
+    {
+        "optimizer": "Adam",
+        "lr": 0.0099,
+        "epochs": 777
+    }
+]
