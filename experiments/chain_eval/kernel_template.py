@@ -10,10 +10,14 @@ CONFIG = json.loads(r"""__CONFIG_JSON__""")
 
 def sh(*cmd, check=False, env=None):
     print("+", " ".join(cmd), flush=True)
-    return subprocess.run(list(cmd), check=check, env=env).returncode
+    try:
+        return subprocess.run(list(cmd), check=check, env=env).returncode
+    except FileNotFoundError:
+        print(f"command not found: {cmd[0]}", flush=True)
+        return 127
 
 
-sh("nvidia-smi")
+sh("nvidia-smi")  # informational; missing => CPU-only session (unverified account?)
 
 # Clone OUTSIDE /kaggle/working: everything in the working dir becomes kernel
 # output, and the repo (with ref/ data) is ~0.5 GB. Run artifacts + local CSV
