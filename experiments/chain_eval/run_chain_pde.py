@@ -299,7 +299,10 @@ def run_orchestrator(args) -> int:
     write_token = args.hf_token_write or os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     read_token = args.hf_token_read or os.environ.get("HF_TOKEN_READ") or write_token
 
-    seeds = [args.seed_base + i for i in range(args.n_seeds)]
+    if args.seeds:
+        seeds = [int(s) for s in args.seeds.replace(" ", "").split(",") if s != ""]
+    else:
+        seeds = [args.seed_base + i for i in range(args.n_seeds)]
 
     if args.upload and not args.force:
         remote = hf_results.download_csv(
@@ -446,6 +449,8 @@ def main():
                         help="CSV layout: 'chain' (csv_chain/csv_seed) or 'random' (csv_random)")
     parser.add_argument("--n-seeds", type=int, default=10)
     parser.add_argument("--seed-base", type=int, default=42)
+    parser.add_argument("--seeds", default=None,
+                        help="Explicit seed list like '3,6' (overrides --seed-base/--n-seeds)")
     parser.add_argument("--devices", default="auto", help="'auto', 'cpu', or CUDA ids like '0,1'")
     parser.add_argument("--n-parallel", type=int, default=None,
                         help="Total parallel workers (overrides --workers-per-gpu)")
