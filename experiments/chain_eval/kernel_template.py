@@ -54,6 +54,7 @@ for i, job in enumerate(CONFIG["jobs"], 1):
         "--pde-name", job["pde"],
         "--n-seeds", str(CONFIG["n_seeds"]),
         "--seed-base", str(CONFIG["seed_base"]),
+        *(["--seeds", str(CONFIG["seeds"])] if CONFIG.get("seeds") else []),
         "--display-every", str(CONFIG["display_every"]),
         "--workers-per-gpu", str(CONFIG.get("workers_per_gpu", 1)),
         "--save-dir", os.path.join(save_base, job["csv_name"]),

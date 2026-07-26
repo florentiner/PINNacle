@@ -166,11 +166,14 @@ def build_kernel_dir(account: dict, cfg: dict, jobs: list[dict], args) -> str:
         "jobs": jobs,
         "n_seeds": 2 if args.smoke else account.get("n_seeds", cfg.get("n_seeds", 10)),
         "seed_base": account.get("seed_base", cfg.get("seed_base", 42)),
+        "seeds": ",".join(str(s) for s in account.get("seeds", [])) or None,
         "no_upload": bool(account.get("no_upload", cfg.get("no_upload", False))),
         "test_epochs": 3 if args.smoke else None,
         "display_every": 1 if args.smoke else cfg.get("display_every", 100),
         # Benchmarked on T4x2: 2 workers/GPU is >=1.0x everywhere, 1.67x on light PDEs.
-        "workers_per_gpu": cfg.get("workers_per_gpu", 2),
+        # Set 1 per account for long chains, where per-seed latency (not throughput)
+        # decides whether a seed beats the session cap.
+        "workers_per_gpu": account.get("workers_per_gpu", cfg.get("workers_per_gpu", 2)),
         "hf_repo": cfg.get("hf_repo", "danil-e/pinnacle-optuna-db"),
         "hf_token_write": cfg.get("hf_token_write", ""),
         "hf_token_read": cfg.get("hf_token_read", ""),
