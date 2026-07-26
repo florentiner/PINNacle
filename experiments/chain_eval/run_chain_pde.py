@@ -56,11 +56,26 @@ def load_chain(chain_json: str, test_epochs: int | None):
     return chain
 
 
+def load_chains_by_seed(chains_json: str, seeds: list[int], test_epochs: int | None):
+    """{seed: chain} from a per-seed chain file (keys are seed numbers as strings)."""
+    with open(chains_json) as f:
+        raw = json.load(f)
+    out = {}
+    for seed in seeds:
+        if str(seed) not in raw:
+            sys.exit(f"{chains_json}: no chain for seed {seed} (has {sorted(raw)})")
+        chain = raw[str(seed)]
+        if test_epochs is not None:
+            chain = [dict(stage, epochs=int(test_epochs)) for stage in chain]
+        out[seed] = chain
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Worker: one seed, executed in a subprocess
 # ---------------------------------------------------------------------------
 
-def build_stage_optimizer(stage: dict, params):
+def build_stage_optimizer(stage: dict, params, lbfgs_max_iter: int = 1):
     import torch
 
     name = (stage.get("optimizer") or stage.get("type") or "").lower()
@@ -71,7 +86,7 @@ def build_stage_optimizer(stage: dict, params):
         return torch.optim.LBFGS(
             params,
             lr=lr,
-            max_iter=int(stage.get("max_iter", 1)),
+            max_iter=int(stage.get("max_iter", lbfgs_max_iter)),
             history_size=int(stage.get("history_size", 100)),
             line_search_fn="strong_wolfe",
         )
@@ -136,7 +151,7 @@ def run_worker(args) -> int:
         print(f"[seed {seed}] Stage {stage_idx}: {opt_name} | lr={stage['lr']} | epochs={epochs}")
         print(f"{'=' * 70}\n", flush=True)
 
-        opt = build_stage_optimizer(stage, model.net.parameters())
+        opt = build_stage_optimizer(stage, model.net.parameters(), args.lbfgs_max_iter)
         model.compile(opt, loss_weights=loss_weights)
         model.optimizer = opt
 
@@ -216,7 +231,8 @@ def probe_devices(spec: str) -> list[str]:
     return ["cpu"]
 
 
-def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool, value_type: str = "chain") -> dict:
+def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool, value_type: str = "chain",
+                  schema: str = "chain", pde_name_out: str | None = None) -> dict:
     mse_op = r.get("mse", float("nan"))
     brmse = r.get("brmse", float("nan"))
     l2re_op = r.get("l2re", float("nan"))
@@ -232,6 +248,24 @@ def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool, value_type:
         if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (l2re_op, l2re_bnd))
         else float("nan")
     )
+    if schema == "random":
+        # csv_random layout: no run metadata, plus l2re = hypot(l2re_op, l2re_bnd).
+        return {
+            "pde_name": pde_name_out or r["pde_name"],
+            "seed": int(r["seed"]),
+            "mse_op": mse_op,
+            "mse_bnd": mse_bnd,
+            "mse_total": mse_tot,
+            "l2re_op": l2re_op,
+            "l2re_bnd": l2re_bnd,
+            "l2re": (
+                math.hypot(l2re_op, l2re_bnd)
+                if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (l2re_op, l2re_bnd))
+                else float("nan")
+            ),
+            "l2re_total": l2re_tot,
+            "chain_json": json.dumps(chain),
+        }
     return {
         "run_timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "pde_name": r["pde_name"],
@@ -254,10 +288,14 @@ def run_orchestrator(args) -> int:
     _enter_repo_root()
     from experiments.chain_eval import hf_results
 
-    chain = load_chain(args.chain_json, args.test_epochs)
+    chain = load_chain(args.chain_json, args.test_epochs) if not args.chains_json else None
     smoke = args.test_epochs is not None
-    chain_key = args.chain_key or os.path.splitext(os.path.basename(args.chain_json))[0]
+    chain_key = args.chain_key or os.path.splitext(
+        os.path.basename(args.chains_json or args.chain_json)
+    )[0]
     csv_name = args.csv_name or args.pde_name
+    # csv_random keys rows by the dataset's own PDE spelling (heat_2d_longtime).
+    pde_name_out = csv_name if args.schema == "random" else args.pde_name
     write_token = args.hf_token_write or os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     read_token = args.hf_token_read or os.environ.get("HF_TOKEN_READ") or write_token
 
@@ -267,14 +305,29 @@ def run_orchestrator(args) -> int:
         remote = hf_results.download_csv(
             args.hf_repo, hf_results.csv_path_in_repo(args.hf_dir, csv_name), read_token
         )
-        done = hf_results.existing_seeds(remote, args.pde_name, chain_key, smoke)
+        done = hf_results.existing_seeds(remote, pde_name_out, chain_key, smoke, args.schema)
         skipped = [s for s in seeds if s in done]
         seeds = [s for s in seeds if s not in done]
         if skipped:
-            print(f"Skipping seeds already on HF for {args.pde_name}/{chain_key}: {skipped}")
+            print(f"Skipping seeds already on HF for {pde_name_out}/{chain_key}: {skipped}")
     if not seeds:
         print("Nothing to do — all seeds already recorded.")
         return 0
+
+    # Per-seed chains (csv_random) or one shared chain for every seed.
+    if args.chains_json:
+        chains_by_seed = load_chains_by_seed(args.chains_json, seeds, args.test_epochs)
+        chain_dir = os.path.join(args.save_dir, "chains")
+        os.makedirs(chain_dir, exist_ok=True)
+        chain_paths = {}
+        for seed, seed_chain in chains_by_seed.items():
+            p = os.path.join(chain_dir, f"seed_{seed}.json")
+            with open(p, "w") as f:
+                json.dump(seed_chain, f)
+            chain_paths[seed] = p
+    else:
+        chains_by_seed = {s: chain for s in seeds}
+        chain_paths = {s: args.chain_json for s in seeds}
 
     devices = probe_devices(args.devices)
     if args.n_parallel:
@@ -305,11 +358,12 @@ def run_orchestrator(args) -> int:
             sys.executable, os.path.abspath(__file__), "--worker",
             "--pde-name", args.pde_name,
             "--seed", str(seed),
-            "--chain-json", args.chain_json,
+            "--chain-json", chain_paths[seed],
             "--result-json", result_json,
             "--display-every", str(args.display_every),
             "--hidden-layers", args.hidden_layers,
             "--save-dir", args.save_dir,
+            "--lbfgs-max-iter", str(args.lbfgs_max_iter),
         ]
         if args.test_epochs is not None:
             cmd += ["--test-epochs", str(args.test_epochs)]
@@ -327,11 +381,14 @@ def run_orchestrator(args) -> int:
             return
         with open(result_json) as f:
             r = json.load(f)
-        completed_rows.append(result_to_row(r, chain, chain_key, smoke, args.value_type))
+        completed_rows.append(result_to_row(
+            r, chains_by_seed[seed], chain_key, smoke, args.value_type, args.schema, pde_name_out
+        ))
         if args.upload:
             hf_results.upload_rows(
                 args.hf_repo, args.hf_dir, csv_name, completed_rows,
                 write_token, read_token, local_dir=os.path.join(args.save_dir, "csv"),
+                schema=args.schema,
             )
         else:
             import pandas as pd
@@ -339,7 +396,8 @@ def run_orchestrator(args) -> int:
             local_dir = os.path.join(args.save_dir, "csv")
             os.makedirs(local_dir, exist_ok=True)
             local_path = os.path.join(local_dir, f"{csv_name}.csv")
-            pd.DataFrame(completed_rows, columns=hf_results.CSV_COLUMNS).to_csv(local_path, index=False)
+            columns, _ = hf_results.schema_columns(args.schema)
+            pd.DataFrame(completed_rows, columns=columns).to_csv(local_path, index=False)
 
     active: list[tuple] = []  # (proc, seed, result_json, slot)
     slots = list(range(n_parallel))
@@ -379,7 +437,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pde-name", required=True)
     parser.add_argument("--chain-json", default=DEFAULT_CHAIN_JSON)
+    parser.add_argument("--chains-json", default=None,
+                        help="JSON {seed: chain} — a separate chain per seed (csv_random baseline)")
     parser.add_argument("--chain-key", default=None, help="Label for CSV rows (default: chain file stem)")
+    parser.add_argument("--lbfgs-max-iter", type=int, default=1,
+                        help="max_iter for LBFGS stages that don't set it (optuna_trainer used 10)")
+    parser.add_argument("--schema", default="chain", choices=sorted(("chain", "random")),
+                        help="CSV layout: 'chain' (csv_chain/csv_seed) or 'random' (csv_random)")
     parser.add_argument("--n-seeds", type=int, default=10)
     parser.add_argument("--seed-base", type=int, default=42)
     parser.add_argument("--devices", default="auto", help="'auto', 'cpu', or CUDA ids like '0,1'")

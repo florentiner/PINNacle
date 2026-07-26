@@ -33,6 +33,35 @@ CSV_COLUMNS = [
 
 _KEY_COLS = ["pde_name", "chain_key", "smoke_test", "seed"]
 
+# csv_random/ predates this runner and has its own (narrower) layout: one row
+# per seed, its own random chain, and an extra `l2re` = hypot(l2re_op, l2re_bnd).
+CSV_COLUMNS_RANDOM = [
+    "pde_name",
+    "seed",
+    "mse_op",
+    "mse_bnd",
+    "mse_total",
+    "l2re_op",
+    "l2re_bnd",
+    "l2re",
+    "l2re_total",
+    "chain_json",
+]
+
+_KEY_COLS_RANDOM = ["pde_name", "seed"]
+
+SCHEMAS = {
+    "chain": (CSV_COLUMNS, _KEY_COLS),
+    "random": (CSV_COLUMNS_RANDOM, _KEY_COLS_RANDOM),
+}
+
+
+def schema_columns(schema: str = "chain"):
+    try:
+        return SCHEMAS[schema]
+    except KeyError:
+        raise ValueError(f"Unknown CSV schema '{schema}'; expected one of {sorted(SCHEMAS)}")
+
 
 def csv_path_in_repo(hf_dir: str, csv_name: str) -> str:
     """csv_name is the file stem: the pde name, or e.g. '{pde}_{value_type}'."""
@@ -70,28 +99,31 @@ def download_csv(repo_id: str, path_in_repo: str, token: str | None = None):
     return None
 
 
-def existing_seeds(df, pde_name: str, chain_key: str, smoke_test: bool) -> set:
-    """Seeds already recorded for this (pde, chain, smoke) combination."""
+def existing_seeds(df, pde_name: str, chain_key: str, smoke_test: bool,
+                   schema: str = "chain") -> set:
+    """Seeds already recorded for this PDE (and chain/smoke, on the chain schema)."""
     if df is None or df.empty:
         return set()
-    mask = (
-        (df["pde_name"] == pde_name)
-        & (df["chain_key"] == chain_key)
-        & (df["smoke_test"].astype(str).str.lower() == str(smoke_test).lower())
-    )
+    mask = df["pde_name"] == pde_name
+    if schema == "chain":
+        mask &= (
+            (df["chain_key"] == chain_key)
+            & (df["smoke_test"].astype(str).str.lower() == str(smoke_test).lower())
+        )
     return set(int(s) for s in df.loc[mask, "seed"].tolist())
 
 
-def merge_rows(remote_df, rows: list[dict]) -> pd.DataFrame:
+def merge_rows(remote_df, rows: list[dict], schema: str = "chain") -> pd.DataFrame:
     """Replace remote rows matching our keys with ours, keep everything else."""
-    ours = pd.DataFrame(rows, columns=CSV_COLUMNS)
+    columns, key_cols = schema_columns(schema)
+    ours = pd.DataFrame(rows, columns=columns)
     if remote_df is None or remote_df.empty:
         return ours
-    remote_df = remote_df.reindex(columns=CSV_COLUMNS)
+    remote_df = remote_df.reindex(columns=columns)
     keys = set(
-        tuple(r) for r in ours[_KEY_COLS].astype(str).itertuples(index=False, name=None)
+        tuple(r) for r in ours[key_cols].astype(str).itertuples(index=False, name=None)
     )
-    keep = ~remote_df[_KEY_COLS].astype(str).apply(tuple, axis=1).isin(keys)
+    keep = ~remote_df[key_cols].astype(str).apply(tuple, axis=1).isin(keys)
     return pd.concat([remote_df[keep], ours], ignore_index=True)
 
 
@@ -104,6 +136,7 @@ def upload_rows(
     read_token: str | None = None,
     local_dir: str = "csv_chain_local",
     max_attempts: int = 4,
+    schema: str = "chain",
 ) -> bool:
     """Merge `rows` into the remote CSV and upload. Always keeps a local copy."""
     path_in_repo = csv_path_in_repo(hf_dir, csv_name)
@@ -111,7 +144,7 @@ def upload_rows(
     os.makedirs(local_dir, exist_ok=True)
 
     if not write_token:
-        merged = merge_rows(download_csv(repo_id, path_in_repo, read_token), rows)
+        merged = merge_rows(download_csv(repo_id, path_in_repo, read_token), rows, schema)
         merged.to_csv(local_path, index=False)
         print(f"No HF write token — saved locally only: {local_path} ({len(merged)} rows)")
         return False
@@ -119,7 +152,7 @@ def upload_rows(
     from huggingface_hub import upload_file
 
     for attempt in range(1, max_attempts + 1):
-        merged = merge_rows(download_csv(repo_id, path_in_repo, read_token), rows)
+        merged = merge_rows(download_csv(repo_id, path_in_repo, read_token), rows, schema)
         merged.to_csv(local_path, index=False)
         try:
             upload_file(

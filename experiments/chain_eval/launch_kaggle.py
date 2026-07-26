@@ -124,6 +124,22 @@ def build_jobs(account: dict, cfg: dict, pdes: list[str]) -> list[dict]:
             "csv_name": f"{pde}_{vt}",
             "chain_key": f"{pde}_{vt}",
         })
+    # csv_random baseline: one random chain per seed, shared across all PDEs.
+    # "random_jobs": ["heat2d_longtime:heat_2d_longtime"] (registry name : csv_random spelling)
+    for entry in account.get("random_jobs", []):
+        pde, _, csv_name = entry.partition(":")
+        csv_name = csv_name or pde
+        jobs.append({
+            "pde": pde,
+            "chains_json": "experiments/chain_eval/random_chains/seed_chains.json",
+            "schema": "random",
+            "lbfgs_max_iter": account.get("random_lbfgs_max_iter",
+                                          cfg.get("random_lbfgs_max_iter", 10)),
+            "value_type": "random",
+            "hf_dir": cfg.get("random_hf_dir", "csv_random"),
+            "csv_name": csv_name,
+            "chain_key": "random",
+        })
     for pde in pdes:
         jobs.append({
             "pde": pde,
