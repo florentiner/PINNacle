@@ -1,0 +1,3 @@
+[
+    {"optimizer": "Muon", "lr": 0.02, "epochs": 31000}
+]

@@ -75,11 +75,29 @@ def load_chains_by_seed(chains_json: str, seeds: list[int], test_epochs: int | N
 # Worker: one seed, executed in a subprocess
 # ---------------------------------------------------------------------------
 
-def build_stage_optimizer(stage: dict, params, lbfgs_max_iter: int = 1):
+def _split_params_for_muon(net):
+    """(muon_params, aux_params): hidden >=2D weights -> Muon; first/last layer
+    weights + all 1D params -> aux AdamW (per the Muon README: embeddings/heads/
+    biases belong in Adam). Falls back to a pure ndim split for unusual nets."""
+    linears = getattr(net, "linears", None)
+    if linears is not None and len(linears) >= 3:
+        hidden = [l.weight for l in list(linears)[1:-1] if l.weight.ndim >= 2]
+        hidden_ids = {id(p) for p in hidden}
+        aux = [p for p in net.parameters() if id(p) not in hidden_ids]
+        if hidden:
+            return hidden, aux
+    hidden = [p for p in net.parameters() if p.ndim >= 2]
+    aux = [p for p in net.parameters() if p.ndim < 2]
+    print("Muon: net has no standard .linears — using generic ndim>=2 split.")
+    return hidden, aux
+
+
+def build_stage_optimizer(stage: dict, net, lbfgs_max_iter: int = 1):
     import torch
 
     name = (stage.get("optimizer") or stage.get("type") or "").lower()
     lr = float(stage["lr"])
+    params = net.parameters()
     if name == "adam":
         return torch.optim.Adam(params, lr=lr)
     if name in ("lbfgs", "l-bfgs", "l_bfgs"):
@@ -95,7 +113,33 @@ def build_stage_optimizer(stage: dict, params, lbfgs_max_iter: int = 1):
 
         set_PSO_options(lr=lr)
         return "PSO"
-    raise ValueError(f"Unknown optimizer '{stage}'. Expected Adam / LBFGS / PSO.")
+    if name == "soap":
+        from experiments.chain_eval.vendor.soap import SOAP
+
+        return SOAP(
+            params,
+            lr=lr,
+            betas=tuple(stage.get("betas", (0.95, 0.95))),
+            weight_decay=float(stage.get("weight_decay", 0.0)),
+            precondition_frequency=int(stage.get("precondition_frequency", 2)),
+        )
+    if name == "muon":
+        from experiments.chain_eval.vendor.muon import SingleDeviceMuonWithAuxAdam
+
+        muon_params, aux_params = _split_params_for_muon(net)
+        groups = [
+            dict(params=muon_params, lr=lr,
+                 momentum=float(stage.get("momentum", 0.95)),
+                 weight_decay=float(stage.get("weight_decay", 0.0)),
+                 use_muon=True),
+            dict(params=aux_params, lr=float(stage.get("aux_lr", 3e-4)),
+                 betas=tuple(stage.get("aux_betas", (0.9, 0.95))),
+                 eps=1e-10, weight_decay=0.0, use_muon=False),
+        ]
+        print(f"Muon: {len(muon_params)} hidden matrices via Muon, "
+              f"{len(aux_params)} params via aux AdamW.")
+        return SingleDeviceMuonWithAuxAdam(groups)
+    raise ValueError(f"Unknown optimizer '{stage}'. Expected Adam / LBFGS / PSO / SOAP / Muon.")
 
 
 def run_worker(args) -> int:
@@ -105,6 +149,7 @@ def run_worker(args) -> int:
 
     if (
         not torch.cuda.is_available()
+        and not os.environ.get("CHAIN_EVAL_FORCE_CPU")
         and getattr(torch.backends, "mps", None)
         and torch.backends.mps.is_available()
         and hasattr(torch, "set_default_device")
@@ -151,7 +196,7 @@ def run_worker(args) -> int:
         print(f"[seed {seed}] Stage {stage_idx}: {opt_name} | lr={stage['lr']} | epochs={epochs}")
         print(f"{'=' * 70}\n", flush=True)
 
-        opt = build_stage_optimizer(stage, model.net.parameters(), args.lbfgs_max_iter)
+        opt = build_stage_optimizer(stage, model.net, args.lbfgs_max_iter)
         model.compile(opt, loss_weights=loss_weights)
         model.optimizer = opt
 
@@ -353,6 +398,7 @@ def run_orchestrator(args) -> int:
         dev = devices[slot % len(devices)]
         if dev == "cpu":
             env["CUDA_VISIBLE_DEVICES"] = ""
+            env["CHAIN_EVAL_FORCE_CPU"] = "1"
         elif dev == "mps":
             env["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
         else:
