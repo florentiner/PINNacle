@@ -178,7 +178,7 @@ def build_kernel_dir(account: dict, cfg: dict, jobs: list[dict], args) -> str:
         "seeds": ",".join(str(s) for s in account.get("seeds", [])) or None,
         "no_upload": bool(account.get("no_upload", cfg.get("no_upload", False))),
         "test_epochs": 3 if args.smoke else account.get("test_epochs"),
-        "display_every": 1 if args.smoke else cfg.get("display_every", 100),
+        "display_every": 1 if args.smoke else account.get("display_every", cfg.get("display_every", 100)),
         # Benchmarked on T4x2: 2 workers/GPU is >=1.0x everywhere, 1.67x on light PDEs.
         # Set 1 per account for long chains, where per-seed latency (not throughput)
         # decides whether a seed beats the session cap.
