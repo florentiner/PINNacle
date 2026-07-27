@@ -1,0 +1,4 @@
+[
+    {"optimizer": "Adam", "lr": 0.001, "epochs": 1000},
+    {"optimizer": "SOAP", "lr": 0.003, "epochs": 30000, "precondition_frequency": 2}
+]
