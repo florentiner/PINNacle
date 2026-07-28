@@ -50,8 +50,13 @@ CSV_COLUMNS_RANDOM = [
 
 _KEY_COLS_RANDOM = ["pde_name", "seed"]
 
+# chain layout + the l2re = hypot(l2re_op, l2re_bnd) column (csv_soap/csv_muon
+# convention requested for the SOAP/Muon baselines; keyed like "chain").
+CSV_COLUMNS_CHAIN_L2RE = CSV_COLUMNS[:CSV_COLUMNS.index("l2re_total")] + ["l2re"] + CSV_COLUMNS[CSV_COLUMNS.index("l2re_total"):]
+
 SCHEMAS = {
     "chain": (CSV_COLUMNS, _KEY_COLS),
+    "chain_l2re": (CSV_COLUMNS_CHAIN_L2RE, _KEY_COLS),
     "random": (CSV_COLUMNS_RANDOM, _KEY_COLS_RANDOM),
 }
 

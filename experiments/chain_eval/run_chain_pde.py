@@ -293,6 +293,14 @@ def result_to_row(r: dict, chain: list, chain_key: str, smoke: bool, value_type:
         if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (l2re_op, l2re_bnd))
         else float("nan")
     )
+    if schema == "chain_l2re":
+        row = result_to_row(r, chain, chain_key, smoke, value_type, "chain", pde_name_out)
+        row["l2re"] = (
+            math.hypot(l2re_op, l2re_bnd)
+            if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (l2re_op, l2re_bnd))
+            else float("nan")
+        )
+        return row
     if schema == "random":
         # csv_random layout: no run metadata, plus l2re = hypot(l2re_op, l2re_bnd).
         return {
@@ -491,7 +499,7 @@ def main():
     parser.add_argument("--chain-key", default=None, help="Label for CSV rows (default: chain file stem)")
     parser.add_argument("--lbfgs-max-iter", type=int, default=1,
                         help="max_iter for LBFGS stages that don't set it (optuna_trainer used 10)")
-    parser.add_argument("--schema", default="chain", choices=sorted(("chain", "random")),
+    parser.add_argument("--schema", default="chain", choices=sorted(("chain", "chain_l2re", "random")),
                         help="CSV layout: 'chain' (csv_chain/csv_seed) or 'random' (csv_random)")
     parser.add_argument("--n-seeds", type=int, default=10)
     parser.add_argument("--seed-base", type=int, default=42)
