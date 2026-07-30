@@ -109,6 +109,49 @@ def export_project(proj_name, out_dir, n_exps, min_duration_hours, strip_solver_
     return manifest
 
 
+def pack_export(src_dir, dst_dir):
+    """Упаковывает сырой экспорт (файл на транзишен) в файл на эксперимент.
+
+    src_dir/001_<exp>/entry_step_*.pt  ->  dst_dir/001_<exp>.pt (список транзишенов)
+
+    Порядок транзишенов внутри эксперимента сохраняется (по номеру entry_step) —
+    он важен: цепочки эпизодов и chain-rewards восстанавливаются по нему.
+    Такой формат на два порядка дружелюбнее к HF (80 файлов вместо ~6000).
+    """
+    from RL.rl_utils.load_buffer.load_exps_from_comet import _entry_step_from_filename
+
+    os.makedirs(dst_dir, exist_ok=True)
+    exp_dirs = sorted(
+        d for d in os.listdir(src_dir)
+        if os.path.isdir(os.path.join(src_dir, d)) and not d.startswith(".")
+    )
+
+    total = 0
+    for exp_dir in exp_dirs:
+        dir_path = os.path.join(src_dir, exp_dir)
+        pt_files = sorted(
+            (f for f in os.listdir(dir_path) if f.endswith(".pt") and "entry_step" in f),
+            key=_entry_step_from_filename,
+        )
+        transitions = [
+            torch.load(os.path.join(dir_path, f), map_location="cpu") for f in pt_files
+        ]
+        torch.save(transitions, os.path.join(dst_dir, f"{exp_dir}.pt"))
+        total += len(transitions)
+        print(f"[pack] {exp_dir}: {len(transitions)} транзишенов")
+
+    manifest_src = os.path.join(src_dir, "manifest.json")
+    if os.path.exists(manifest_src):
+        with open(manifest_src, encoding="utf-8") as f:
+            manifest = json.load(f)
+        manifest["layout"] = "packed_per_experiment"
+        with open(os.path.join(dst_dir, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    print(f"\n📦 Упаковано {total} транзишенов из {len(exp_dirs)} экспериментов в {dst_dir}")
+    return dst_dir
+
+
 def upload_to_hf(out_dir, hf_repo, hf_subdir):
     from huggingface_hub import HfApi
 
@@ -135,21 +178,31 @@ def main():
     parser.add_argument("--min-duration-hours", type=float, default=1.0)
     parser.add_argument("--keep-solver-models", action="store_true",
                         help="Не вырезать solver_models (файлы будут сильно тяжелее).")
+    parser.add_argument("--pack-to", type=str, default=None,
+                        help="Куда сложить упакованную версию (файл на эксперимент); "
+                             "именно она заливается на HF.")
+    parser.add_argument("--pack-only", action="store_true",
+                        help="Не ходить в Comet: только упаковать уже выгруженный --out.")
     parser.add_argument("--hf-repo", type=str, default=None,
                         help="Например danil-e/rlpinn-ablation-buffers; без него — только локальный экспорт.")
     parser.add_argument("--hf-subdir", type=str, default="poisson_boltzmann_2d")
     args = parser.parse_args()
 
-    export_project(
-        proj_name=args.proj,
-        out_dir=args.out,
-        n_exps=args.n_exps,
-        min_duration_hours=args.min_duration_hours,
-        strip_solver_models=not args.keep_solver_models,
-    )
+    if not args.pack_only:
+        export_project(
+            proj_name=args.proj,
+            out_dir=args.out,
+            n_exps=args.n_exps,
+            min_duration_hours=args.min_duration_hours,
+            strip_solver_models=not args.keep_solver_models,
+        )
+
+    upload_dir = args.out
+    if args.pack_to:
+        upload_dir = pack_export(args.out, args.pack_to)
 
     if args.hf_repo:
-        upload_to_hf(args.out, args.hf_repo, args.hf_subdir)
+        upload_to_hf(upload_dir, args.hf_repo, args.hf_subdir)
 
 
 if __name__ == "__main__":

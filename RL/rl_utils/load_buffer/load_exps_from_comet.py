@@ -739,12 +739,19 @@ def collect_all_local_transitions(
 ) -> PrioritizedReplayBuffer:
     """Оффлайн-аналог collect_all_comet_transitions: читает буфер из локальной папки.
 
-    Ожидаемая структура (создаётся export_buffer_transitions.py):
+    Поддерживает две раскладки, обе создаёт export_buffer_transitions.py:
+
+      packed (по одному файлу на эксперимент — формат HF-датасета):
+        buffer_dir/
+            001_<exp_name>.pt      # список транзишенов в исходном порядке
+            002_<exp_name>.pt
+
+      per-transition (сырой экспорт из Comet):
         buffer_dir/
             001_<exp_name>/entry_step_00000.pt
             001_<exp_name>/entry_step_00001.pt
-            002_<exp_name>/...
-    Числовой префикс папки задаёт порядок экспериментов (новые первыми, как в
+
+    Числовой префикс задаёт порядок экспериментов (новые первыми, как в
     Comet-версии); фильтр по длительности уже применён на этапе экспорта.
     Обработка блоков (delta, chain-rewards, обрезка цепочек по tol) — та же,
     что и при загрузке из Comet. COMET_API_KEY не требуется.
@@ -752,38 +759,56 @@ def collect_all_local_transitions(
     if buffer_dir is None or not os.path.isdir(buffer_dir):
         raise RuntimeError(f"Локальная папка буфера не найдена: {buffer_dir}")
 
-    exp_dirs = sorted(
-        d for d in os.listdir(buffer_dir)
+    entries_in_dir = sorted(os.listdir(buffer_dir))
+    exp_dirs = [
+        d for d in entries_in_dir
         if os.path.isdir(os.path.join(buffer_dir, d)) and not d.startswith(".")
-    )
-    exp_dirs = exp_dirs[:max_exps_last]
-    print(f"📁 Локальный буфер: {buffer_dir}, экспериментов: {len(exp_dirs)}")
+    ]
+    packed_files = [f for f in entries_in_dir if f.endswith(".pt") and not f.startswith(".")]
+
+    def _read_pt(path, label, skipped):
+        try:
+            data_load = torch.load(path, map_location="cpu")
+        except Exception as exc:
+            skipped.append(f"{label}: {exc}")
+            return []
+        transitions = _extract_transitions_from_payload(data_load)
+        if transitions is None:
+            skipped.append(f"{label}: unsupported format {type(data_load).__name__}")
+            return []
+        return transitions
 
     transition_blocks = []
-    for exp_dir in exp_dirs:
-        dir_path = os.path.join(buffer_dir, exp_dir)
-        pt_files = sorted(
-            (f for f in os.listdir(dir_path) if f.endswith(".pt") and "entry_step" in f),
-            key=_entry_step_from_filename,
-        )
-        block = []
-        skipped = []
-        for fname in pt_files:
-            try:
-                data_load = torch.load(os.path.join(dir_path, fname), map_location="cpu")
-            except Exception as exc:
-                skipped.append(f"{fname}: {exc}")
-                continue
-            transitions = _extract_transitions_from_payload(data_load)
-            if transitions is None:
-                skipped.append(f"{fname}: unsupported format {type(data_load).__name__}")
-                continue
-            block.extend(transitions)
-        for msg in skipped:
-            print(f"   skipped {msg}")
-        print(f"[{exp_dir}] загружено {len(block)} переходов")
-        if block:
-            transition_blocks.append(block)
+
+    if packed_files:
+        packed_files = packed_files[:max_exps_last]
+        print(f"📦 Локальный буфер (packed): {buffer_dir}, экспериментов: {len(packed_files)}")
+        for fname in packed_files:
+            skipped = []
+            block = _read_pt(os.path.join(buffer_dir, fname), fname, skipped)
+            for msg in skipped:
+                print(f"   skipped {msg}")
+            print(f"[{fname}] загружено {len(block)} переходов")
+            if block:
+                transition_blocks.append(block)
+    else:
+        exp_dirs = exp_dirs[:max_exps_last]
+        print(f"📁 Локальный буфер: {buffer_dir}, экспериментов: {len(exp_dirs)}")
+        for exp_dir in exp_dirs:
+            dir_path = os.path.join(buffer_dir, exp_dir)
+            pt_files = sorted(
+                (f for f in os.listdir(dir_path) if f.endswith(".pt") and "entry_step" in f),
+                key=_entry_step_from_filename,
+            )
+            block = []
+            skipped = []
+            for fname in pt_files:
+                block.extend(_read_pt(os.path.join(dir_path, fname), fname, skipped))
+            for msg in skipped:
+                print(f"   skipped {msg}")
+            print(f"[{exp_dir}] загружено {len(block)} переходов")
+            if block:
+                transition_blocks.append(block)
 
     all_entries = []
     for block_index, transitions in enumerate(transition_blocks, 1):
