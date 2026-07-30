@@ -168,7 +168,8 @@ def run_deepxde_rl_training(
                         batch_size=rl_agent_params["rl_batch_size"],
                         n_transitions_reinit = rl_agent_params["n_transitions_reinit"],
                         exp = rl_agent_params["exp"],
-                        model_snapshot_dir=f"{save_path}/rl_model_snapshots")
+                        model_snapshot_dir=f"{save_path}/rl_model_snapshots",
+                        ablation=rl_agent_params.get("ablation", "none"))
 
     # init state (как у тебя в model.py: нулевые карты)
     state_shape = get_state_shape(loss_surface_params)
@@ -176,7 +177,7 @@ def run_deepxde_rl_training(
         z = torch.zeros(state_shape, device=device)
         return {"loss_total": z.clone(), "loss_oper": z.clone(), "loss_bnd": z.clone()}
     
-    rl_agent.replay_buffer = collect_all_comet_transitions(rl_agent.replay_buffer, max_exps_last=500, tolerance = rl_agent_params["tolerance"],
+    rl_agent.replay_buffer = collect_all_comet_transitions(rl_agent.replay_buffer, max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
                                                            prev_tol= rl_agent_params["prev_tol"], use_tol = rl_agent_params["use_tol"], new_tol = rl_agent_params["new_tol"],
                                                            use_log_state=rl_agent_params["log_key"], 
                                                            proj_name=rl_agent_params["proj_name"],

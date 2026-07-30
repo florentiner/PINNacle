@@ -25,12 +25,25 @@ EPS_END = 0.05
 EPS_DECAY = 50
 TAU = 0.01
 
+# Режимы абляции DQN-стека:
+#   "none"            — полный агент (PER + soft-Watkins + trust-region);
+#   "no_per"          — старый буфер: равномерная выборка без приоритетов и IS-весов
+#                       (как ReplayBuffer на deque до коммита 08ba7bf в torch_DE_solver);
+#   "no_soft_watkins" — старый таргет: 1-step Double DQN вместо G^{λ,κ}
+#                       (как до коммита 2919b34 в torch_DE_solver);
+#   "no_trust_region" — без trust-region маски: лосс по всем сэмплам батча
+#                       (маска cond1/cond2 введена тем же коммитом 2919b34).
+ABLATION_MODES = ("none", "no_per", "no_soft_watkins", "no_trust_region")
+
 
 class DQNAgent:
     def __init__(self, n_observation=None, n_action=None, optimizer_dict=None, lr=1e-3, gamma=0.98, epsilon=1.0,
                  epsilon_decay=0.995, epsilon_min=0.01, memory_size=50000, batch_size=128, n_transitions_reinit = 2000, per_alpha =  0.6, per_beta0 = 0.4, device='cpu', exp=None,
                  warmup_updates: int = 50, recalc_batch_size: int = 32, success_frac = 0.2,
-                 model_snapshot_dir="rl_model_snapshots"):
+                 model_snapshot_dir="rl_model_snapshots", ablation: str = "none"):
+        if ablation not in ABLATION_MODES:
+            raise ValueError(f"Unknown ablation mode: {ablation}. Expected one of {ABLATION_MODES}.")
+        self.ablation = ablation
         self.n_observation = n_observation
         self.n_action = n_action
         self.gamma = gamma
@@ -92,6 +105,10 @@ class DQNAgent:
         self.recalc_batch_size = recalc_batch_size
         self.transition_counter = 0
 
+        # no_per: приоритеты не используются вовсе, warmup с offline-пересчётом не нужен
+        if self.ablation == "no_per":
+            self.warmup_active = False
+
 
         self.device = device
         self.exp = exp
@@ -104,7 +121,8 @@ class DQNAgent:
             "EPS_START": EPS_START,
             "EPS_END": EPS_END,
             "EPS_DECAY": EPS_DECAY,
-            "TAU": TAU
+            "TAU": TAU,
+            "ablation": self.ablation
         }
         if self.exp is not None:
             self.exp.log_parameters(epsilon_and_warmap_params)
@@ -319,7 +337,12 @@ class DQNAgent:
             if len(self.replay_buffer) < self.batch_size:
                 break
 
-            if self.warmup_active:
+            if self.ablation == "no_per":
+                # Абляция PER: равномерная выборка без приоритетов, IS-веса = 1
+                # (поведение старого ReplayBuffer с random.sample)
+                seqs, idxs, is_w = self._sample_sequences(self.batch_size, self.seq_len, uniform=True, beta=None)
+                is_w = is_w.to(self.device)
+            elif self.warmup_active:
                 seqs, idxs, is_w = self._sample_sequences(self.batch_size, self.seq_len, uniform=True, beta=None)
                 is_w = is_w.to(self.device)           # единицы
             else:
@@ -352,11 +375,22 @@ class DQNAgent:
             q_sa = q_opt_cur.gather(1, action_o.view(-1,1)).squeeze(1)
 
             # --- SOFT/WATKINS G^{λ,κ} на каждый элемент батча из своей последовательности ---
-            with torch.no_grad():
-                soft_watkins_targets = [ self._soft_watkins_targets(seq, self.gamma) for seq in seqs ]
-                y_opt_list, lambda_weight_list = zip(*soft_watkins_targets)
-            y_opt = torch.stack(y_opt_list, dim=0)   # [B]
-            lambda_weight = torch.stack(lambda_weight_list, dim=0)   # [B]
+            if self.ablation == "no_soft_watkins":
+                # Абляция soft-Watkins: старый 1-step Double DQN таргет
+                # (код до введения G^{λ,κ}, коммит 2919b34~1 в torch_DE_solver)
+                with torch.no_grad():
+                    _, q_opt_next_online = self.model_optim(next_state)               # (B,A)
+                    a_next = q_opt_next_online.argmax(dim=1)                          # (B,)
+                    _, q_opt_next_target = self.target_model_optim(next_state)        # (B,A)
+                    q_next = q_opt_next_target.gather(1, a_next.view(-1,1)).squeeze(1)
+                    y_opt = reward + (1.0 - done) * self.gamma * q_next
+                lambda_weight = torch.ones_like(y_opt)   # [B], для единообразия метрик
+            else:
+                with torch.no_grad():
+                    soft_watkins_targets = [ self._soft_watkins_targets(seq, self.gamma) for seq in seqs ]
+                    y_opt_list, lambda_weight_list = zip(*soft_watkins_targets)
+                y_opt = torch.stack(y_opt_list, dim=0)   # [B]
+                lambda_weight = torch.stack(lambda_weight_list, dim=0)   # [B]
 
             #Функционал trust region 
 
@@ -376,9 +410,14 @@ class DQNAgent:
             gap = (q_sa.detach() - q_tgt_sa)                          # [B]
 
             # --- два условия маски (True => выкинуть из лосса) ---
-            cond1 = gap.abs() > (self.tr_alpha * sigma_t)             # далеко от таргет-значения
-            cond2 = torch.sign(gap) != torch.sign(q_sa.detach() - y_opt.detach())  # шаг уведёт ЕЩЁ дальше
-            tr_mask_drop = cond1 & cond2                              # [B] bool
+            if self.ablation == "no_trust_region":
+                # Абляция trust-region: маска отключена, учим на всех сэмплах батча
+                # (поведение до коммита 2919b34 в torch_DE_solver)
+                tr_mask_drop = torch.zeros_like(q_sa, dtype=torch.bool)   # [B] bool
+            else:
+                cond1 = gap.abs() > (self.tr_alpha * sigma_t)             # далеко от таргет-значения
+                cond2 = torch.sign(gap) != torch.sign(q_sa.detach() - y_opt.detach())  # шаг уведёт ЕЩЁ дальше
+                tr_mask_drop = cond1 & cond2                              # [B] bool
             tr_keep = (~tr_mask_drop).float()                         # [B] 1.0 = учим, 0.0 = выкинуть
 
             # --- применяем маску к лоссу оптимизаторной головы ---
@@ -440,7 +479,8 @@ class DQNAgent:
                 td_param_abs = torch.as_tensor(td_param_items, dtype=torch.float, device=self.device)
                 td_param_abs = td_param_abs * tr_keep + self.tr_eps
                 new_priors = td_opt_abs + td_param_abs
-            self.replay_buffer.update_priorities(idxs, new_priors.cpu())
+            if self.ablation != "no_per":
+                self.replay_buffer.update_priorities(idxs, new_priors.cpu())
 
             if self.warmup_active:
                 self.warmup_updates_done += 1

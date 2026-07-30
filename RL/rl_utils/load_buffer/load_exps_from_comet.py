@@ -15,7 +15,7 @@ from RL.rl_utils.load_buffer.load_transitions_into_buffer_pickle import (
 )
 
 
-WORKSPACE = "saitama32"
+WORKSPACE = os.getenv("COMET_BUFFER_WORKSPACE", "saitama32")
 PROJECT_NAME = "rlpinn-grayscott-farm-transitions"
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
