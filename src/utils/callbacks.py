@@ -400,6 +400,13 @@ class TesterCallback(Callback):
         self.rmse = np.sqrt(self.mses[-1])
         self.brmse = self.bc_rmses[-1]
 
+        # Последние значения метрик переживают очистку списков ниже — они нужны
+        # для построчного лога по траекториям (mse/l2re по оператору и границе).
+        self.mse = self.mses[-1]
+        self.bc_mse = self.bc_mses[-1] if self.bc_mses else np.nan
+        self.l2re = self.l2res[-1] if self.l2res else np.nan
+        self.bc_l2re = self.bc_l2res[-1] if self.bc_l2res else np.nan
+
         self.indexes = []
         self.maes = []   
         self.mses = []   

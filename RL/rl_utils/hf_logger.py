@@ -6,16 +6,20 @@
 `rl_agent_params["exp"]` без изменений в rl_trainer/rl_algorithms.
 
 Всё пишется локально в `run_dir`, а затем пачками синхронизируется на HF —
-загружать каждый ассет отдельным коммитом слишком дорого:
+загружать каждый ассет отдельным коммитом слишком дорого. Раскладка запуска
+разнесена по папкам, чтобы логи, результаты и модель не смешивались:
 
     run_dir/
-        params.json        # log_parameters / log_parameter
-        others.json        # log_other
-        metrics.jsonl      # по строке на вызов log_metrics/log_metric
-        log.txt            # stdout+stderr запуска (если включён Tee)
-        assets/            # снапшоты агента, транзишены и пр.
+        logs/log.txt                     # stdout+stderr запуска
+        results/params.json              # log_parameters / log_parameter
+        results/others.json              # log_other
+        results/metrics.jsonl            # по строке на вызов log_metrics
+        results/trajectory_metrics.csv   # строка на завершённую траекторию
+        model/agent_final.pt             # обученный агент (в конце обучения)
+        rl_model_snapshots/              # промежуточные снапшоты (ротация)
+        assets/                          # прочие ассеты (приоритеты буфера)
 
-В репозитории датасета всё это ложится в `<repo_path>/`, например
+В датасете всё это ложится в `<repo_path>/`, например
 `runs/poisson_boltzmann_2d/no_per/2026-07-30_12-00-00_gpu01/`.
 
 Требуется HF_TOKEN с правом записи в целевой датасет.
@@ -64,19 +68,25 @@ class HFExperiment:
         sync_every_sec=900,
         strip_solver_models=True,
         private=False,
+        keep_last_assets=5,
     ):
         self.repo_id = repo_id
         self.repo_path = repo_path.strip("/")
         self.run_dir = os.path.abspath(run_dir)
         self.assets_dir = os.path.join(self.run_dir, "assets")
+        self.results_dir = os.path.join(self.run_dir, "results")
+        self.logs_dir = os.path.join(self.run_dir, "logs")
+        self.model_dir = os.path.join(self.run_dir, "model")
         self.sync_every_sec = float(sync_every_sec)
         self.strip_solver_models = strip_solver_models
+        self.keep_last_assets = keep_last_assets
 
-        os.makedirs(self.assets_dir, exist_ok=True)
+        for path in (self.assets_dir, self.results_dir, self.logs_dir, self.model_dir):
+            os.makedirs(path, exist_ok=True)
 
         self.params = {}
         self.others = {}
-        self._metrics_path = os.path.join(self.run_dir, "metrics.jsonl")
+        self._metrics_path = os.path.join(self.results_dir, "metrics.jsonl")
         self._last_sync = time.time()
         self._sync_count = 0
         self._failed_syncs = 0
@@ -148,6 +158,36 @@ class HFExperiment:
                 shutil.copyfile(file_path, dst)
         except Exception as exc:
             print(f"⚠️ HF-логгер: не удалось сохранить ассет {name}: {exc}")
+            return
+
+        self._rotate_assets(name)
+
+    def _rotate_assets(self, name):
+        """Оставляет последние N ассетов одного семейства (например priority_step_*).
+
+        Такие ассеты пишутся на каждом шаге обучения; без ротации датасет
+        распухает, а каждая синхронизация тащит всю историю.
+        """
+        if not self.keep_last_assets or self.keep_last_assets <= 0:
+            return
+
+        base = os.path.basename(name)
+        family = "".join(ch for ch in base if not ch.isdigit())
+        folder = os.path.dirname(os.path.join(self.assets_dir, name))
+        try:
+            siblings = [
+                os.path.join(folder, f) for f in os.listdir(folder)
+                if "".join(ch for ch in f if not ch.isdigit()) == family
+            ]
+        except OSError:
+            return
+
+        siblings.sort(key=lambda p: os.path.getmtime(p))
+        for stale in siblings[:-self.keep_last_assets]:
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
 
     def end(self):
         """Финальная синхронизация — вызывать в конце запуска."""
@@ -156,7 +196,7 @@ class HFExperiment:
     # --- внутреннее ---
 
     def _write_json(self, name, payload):
-        with open(os.path.join(self.run_dir, name), "w", encoding="utf-8") as f:
+        with open(os.path.join(self.results_dir, name), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
 
     def _maybe_sync(self):
@@ -173,6 +213,12 @@ class HFExperiment:
                 repo_type="dataset",
                 path_in_repo=self.repo_path,
                 commit_message=f"sync run {self.repo_path} (#{self._sync_count + 1})",
+                # Зеркалим ротацию: снапшоты/ассеты, удалённые локально,
+                # удаляются и на HF (паттерны ограничены папкой этого запуска).
+                delete_patterns=[
+                    f"{self.repo_path}/rl_model_snapshots/*",
+                    f"{self.repo_path}/assets/*",
+                ],
             )
             self._sync_count += 1
             print(f"📤 HF sync #{self._sync_count}: {self.repo_id}/{self.repo_path}")

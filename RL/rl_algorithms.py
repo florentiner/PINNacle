@@ -39,10 +39,12 @@ class DQNAgent:
     def __init__(self, n_observation=None, n_action=None, optimizer_dict=None, lr=1e-3, gamma=0.98, epsilon=1.0,
                  epsilon_decay=0.995, epsilon_min=0.01, memory_size=50000, batch_size=128, n_transitions_reinit = 2000, per_alpha =  0.6, per_beta0 = 0.4, device='cpu', exp=None,
                  warmup_updates: int = 50, recalc_batch_size: int = 32, success_frac = 0.2,
-                 model_snapshot_dir="rl_model_snapshots", ablation: str = "none"):
+                 model_snapshot_dir="rl_model_snapshots", ablation: str = "none",
+                 snapshot_keep_last: int = 5):
         if ablation not in ABLATION_MODES:
             raise ValueError(f"Unknown ablation mode: {ablation}. Expected one of {ABLATION_MODES}.")
         self.ablation = ablation
+        self.snapshot_keep_last = snapshot_keep_last
         self.n_observation = n_observation
         self.n_action = n_action
         self.gamma = gamma
@@ -112,6 +114,10 @@ class DQNAgent:
         self.device = device
         self.exp = exp
         self.model_snapshot_dir = Path(model_snapshot_dir)
+        # Последние средние лоссы обучения агента — для лога по траекториям
+        # (сравнение ошибки обучения агента между режимами абляции).
+        self.last_optim_loss_mean = float("nan")
+        self.last_param_loss_mean = float("nan")
         epsilon_and_warmap_params = {
             "slot_bootstrap_steps": self.slot_bootstrap_steps,
             "slot_bootstrap_eps": self.slot_bootstrap_eps,
@@ -140,6 +146,59 @@ class DQNAgent:
 
         self.optimizer_opt = optim.Adam(self.model_optim.parameters(), lr=lr)
         self.optimizer_params = optim.Adam(self.model_params.parameters(), lr=lr)
+
+    def save_final_model(self, out_dir, metadata=None):
+        """Сохраняет обученного агента целиком — то, что нужно для сравнения.
+
+        Кладёт один файл agent_final.pt (обе головы, таргет-сети, состояния
+        оптимизаторов, конфиг действий) плюс отдельные веса голов, чтобы их
+        можно было подгрузить без остального.
+        """
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        payload = {
+            "model_optim": self.model_optim.state_dict(),
+            "model_params": self.model_params.state_dict(),
+            "target_model_optim": self.target_model_optim.state_dict(),
+            "target_model_params": self.target_model_params.state_dict(),
+            "optimizer_opt": self.optimizer_opt.state_dict(),
+            "optimizer_params": self.optimizer_params.state_dict(),
+            "optimizer_dict": self.optimizer_dict,
+            "i2opt": self.i2opt,
+            "ablation": self.ablation,
+            "gamma": self.gamma,
+            "steps_done": self.steps_done,
+            "opt_step": self.opt_step,
+            "metadata": metadata or {},
+        }
+        torch.save(payload, out_dir / "agent_final.pt")
+        torch.save(self.model_optim.state_dict(), out_dir / "model_optim_final.pt")
+        torch.save(self.model_params.state_dict(), out_dir / "model_params_final.pt")
+
+        print(f"\n💾 Финальная модель агента сохранена: {out_dir}/agent_final.pt "
+              f"(ablation={self.ablation}, steps_done={self.steps_done})")
+        return str(out_dir / "agent_final.pt")
+
+    def _rotate_snapshots(self, keep_last):
+        """Оставляет только последние keep_last периодических снапшотов.
+
+        Иначе за длинный запуск папка вырастает на десятки гигабайт (снапшот
+        пишется на каждый вызов optim_), и каждая синхронизация с HF тащит их
+        целиком. Финальная модель сохраняется отдельно и под ротацию не попадает.
+        """
+        if not keep_last or keep_last <= 0:
+            return
+        for prefix in ("model_optim_step_", "model_params_step_"):
+            files = sorted(
+                self.model_snapshot_dir.glob(f"{prefix}*.pt"),
+                key=lambda p: p.stat().st_mtime,
+            )
+            for stale in files[:-keep_last]:
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
 
     def reinit_target(self):
         self.target_model_optim = DQN_optim(len(self.i2opt)).to(self.device)
@@ -335,6 +394,14 @@ class DQNAgent:
         loss_arr_optim_class, loss_arr_param = [], []
         all_rewards, all_dones = [], []
         model_reward_i_ar = []
+
+        # Значения по умолчанию: цикл может не сделать ни одной итерации,
+        # если буфер меньше батча — тогда метрики ниже остались бы неопределёнными.
+        mean_abs_delta_norm = sigma_td = q_abs_mean = y_opt_mean = float("nan")
+        lambda_weight_mean = lambda_weight_min = lambda_weight_max = float("nan")
+        prio_p95 = mean_abs_delta = drop_frac = float("nan")
+        frac_len_gt1 = avg_len = frac_seq_success = float("nan")
+        policy_position_metrics = {}
 
         for _ in range(iters):
             if len(self.replay_buffer) < self.batch_size:
@@ -563,6 +630,11 @@ class DQNAgent:
             frac_seq_success = count_seq_success / max(count_seq_total, 1)
 
 
+        if not loss_arr_optim_class:
+            # Ни одного обновления (буфер меньше батча) — логировать нечего.
+            print("optim_: буфер меньше батча, обновлений не было.")
+            return loss_arr_optim_class, loss_arr_param
+
         metrics_to_log = {
             "mean_abs_delta_norm": mean_abs_delta_norm,
             "sigma_td": sigma_td,
@@ -625,7 +697,15 @@ class DQNAgent:
         bad_action = [el for el in model_reward_i_ar if el <= 0]
 
         optim_batch_loss_mean = statistics.mean(loss_arr_optim_class)
-        param_batch_loss_mean = statistics.mean(loss_arr_param) 
+        param_batch_loss_mean = statistics.mean(loss_arr_param)
+
+        # Запоминаем для построчного лога траекторий: это и есть "ошибка
+        # обучения агента" (TD-лосс голов), которую сравниваем между абляциями.
+        self.last_optim_loss_mean = optim_batch_loss_mean
+        self.last_param_loss_mean = param_batch_loss_mean
+        self.last_td_abs_mean = mean_abs_delta
+        self.last_q_abs_mean = q_abs_mean
+        self.last_tr_drop_frac = drop_frac
 
         print(f"Mean batch loss optim class: {optim_batch_loss_mean}")
         print(f"Mean batch loss param: {param_batch_loss_mean}")
@@ -658,6 +738,7 @@ class DQNAgent:
 
         torch.save(self.model_optim.state_dict(), optim_path)
         torch.save(self.model_params.state_dict(), params_path)
+        self._rotate_snapshots(self.snapshot_keep_last)
 
         if self.exp is not None:
             # Log snapshots to Comet as assets (log_asset instead of log_model

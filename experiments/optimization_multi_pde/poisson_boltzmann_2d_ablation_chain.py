@@ -37,6 +37,8 @@ import dill
 import numpy as np
 import torch
 
+PDE_NAME = "poisson_boltzmann_2d"
+
 
 def build_get_model_poisson_boltzmann2d(hidden_layers: str):
     def get_model():
@@ -133,10 +135,10 @@ def main():
     parser.add_argument(
         "--hf-results",
         type=str,
-        default=None,
-        help="HF-датасет для логов и результатов запуска, например "
-             "danil-e/rlpinn-ablation-runs (нужен HF_TOKEN с правом записи). "
-             "Подразумевает --no-comet.",
+        default="danil-e/rlpinn-ablation-runs",
+        help="Отдельный HF-датасет для логов и результатов (не тот, где буфер). "
+             "Нужен HF_TOKEN с правом записи; без токена всё останется локально. "
+             "Значение none полностью отключает выгрузку. Подразумевает --no-comet.",
     )
     parser.add_argument(
         "--hf-results-sync-sec",
@@ -150,6 +152,24 @@ def main():
         default=None,
         help="Метка запуска в пути на HF (по умолчанию дата-время + hostname).",
     )
+    parser.add_argument(
+        "--value-type",
+        type=str,
+        default=None,
+        help="Колонка value_type в CSV метрик (по умолчанию — режим абляции).",
+    )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Пометить строки CSV как smoke_test=True (проверочный, не зачётный запуск).",
+    )
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=None,
+        help="Переопределить порог успеха траектории (по умолчанию 0.039669186 "
+             "из таблицы tolerance-проектов).",
+    )
 
     args = parser.parse_args()
 
@@ -159,18 +179,22 @@ def main():
 
     # --- логирование результатов на HF (вместо Comet) ---
     hf_experiment = None
-    if args.hf_results:
+    if args.hf_results and args.hf_results.lower() != "none":
         import socket
         from RL.rl_utils.hf_logger import HFExperiment, tee_stdout
 
         run_tag = args.run_tag or f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{socket.gethostname()}"
-        tee_stdout(os.path.join(save_path, "log.txt"))
-        hf_experiment = HFExperiment(
-            repo_id=args.hf_results,
-            repo_path=f"runs/{args.hf_subdir}/{args.ablation}/{run_tag}",
-            run_dir=save_path,
-            sync_every_sec=args.hf_results_sync_sec,
-        )
+        tee_stdout(os.path.join(save_path, "logs", "log.txt"))
+        if not os.getenv("HF_TOKEN"):
+            print("⚠️  HF_TOKEN не задан — результаты останутся только локально "
+                  f"({save_path}). Для выгрузки на HF: export HF_TOKEN=<токен>.")
+        else:
+            hf_experiment = HFExperiment(
+                repo_id=args.hf_results,
+                repo_path=f"runs/{args.hf_subdir}/{args.ablation}/{run_tag}",
+                run_dir=save_path,
+                sync_every_sec=args.hf_results_sync_sec,
+            )
 
     # --- источник буфера ---
     buffer_dir = None
@@ -217,6 +241,19 @@ def main():
             "buffer_src": args.buffer_src,
             "seed": args.seed,
         })
+
+    # --- построчный CSV по траекториям (ложится в run_dir -> уезжает на HF) ---
+    from RL.rl_utils.trajectory_metrics import TrajectoryMetricsLogger
+
+    trajectory_logger = TrajectoryMetricsLogger(
+        csv_path=os.path.join(save_path, "results", "trajectory_metrics.csv"),
+        run_timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+        pde_name=PDE_NAME,
+        value_type=args.value_type or args.ablation,
+        seed=args.seed,
+        smoke_test=args.smoke_test,
+        experiment=experiment,
+    )
 
     get_model = build_get_model_poisson_boltzmann2d(args.hidden_layers)
     get_model_rec = build_get_model_poisson_boltzmann2d(args.hidden_layers)
@@ -315,7 +352,7 @@ def main():
     rl_agent_params = {
         "n_save_models": args.n_save_models,
         "n_trajectories": args.n_trajectories,
-        "tolerance": 0.039669186,
+        "tolerance": args.tolerance if args.tolerance is not None else 0.039669186,
         "use_tol": False,
         "new_tol": True,
         "prev_tol": 0.0,
@@ -338,6 +375,7 @@ def main():
         "proj_name": args.buffer_proj,
         "ablation": args.ablation,
         "buffer_dir": buffer_dir,
+        "trajectory_logger": trajectory_logger,
     }
 
     if experiment is not None:

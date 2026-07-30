@@ -139,6 +139,7 @@ def run_deepxde_rl_training(
     base_callbacks = train_args.get("callbacks", [])
     equation_params = train_args.get("equation_params", [])
     display_every = int(train_args.get("display_every", 100))
+    trajectory_logger = rl_agent_params.get("trajectory_logger")
 
     # создаём env/agent (как раньше внутри model.py, только теперь снаружи)
     env = EnvRLOptimizer(optimizers=optimizers_dict,
@@ -221,6 +222,8 @@ def run_deepxde_rl_training(
         trajectory_transitions = []
         trajectory_losses = []
         final_done = 0
+        trajectory_actions = []
+        trajectory_start_time = time.time()
 
         print('\n############################################################################' +
         f'\nStarting trajectory {idx_traj + 1}/{rl_agent_params["n_trajectories"]} ' +
@@ -247,6 +250,8 @@ def run_deepxde_rl_training(
             else:
                 print("Action by epsilon-greedy")
             print(f"\naction = {action}")
+
+            trajectory_actions.append(action)
 
             # --- compile optimizer for this chunk ---
             chunk_iters = int(action["epochs"])
@@ -429,9 +434,47 @@ def run_deepxde_rl_training(
             if len(rl_agent.replay_buffer) >= rl_agent_params["agent_min_buffer"]:
                 rl_agent.optim_(iters=rl_agent_params["agent_update_iters"])
 
+        # --- строка метрик по завершённой траектории ---
+        if trajectory_logger is not None and trajectory_actions:
+            tester = base_callbacks[0] if base_callbacks else None
+            trajectory_logger.log_trajectory(
+                mse_op=getattr(tester, "mse", float("nan")),
+                mse_bnd=getattr(tester, "bc_mse", float("nan")),
+                l2re_op=getattr(tester, "l2re", float("nan")),
+                l2re_bnd=getattr(tester, "bc_l2re", float("nan")),
+                elapsed_s=time.time() - trajectory_start_time,
+                actions=trajectory_actions,
+                trajectory_index=traj,
+                extra={
+                    "ablation": rl_agent_params.get("ablation", "none"),
+                    "done": final_done,
+                    "steps": len(trajectory_actions),
+                    "final_loss": trajectory_losses[-1] if trajectory_losses else float("nan"),
+                    "total_reward": total_reward,
+                    # Ошибка обучения самого агента — её и сравниваем между режимами
+                    "agent_loss_optim": rl_agent.last_optim_loss_mean,
+                    "agent_loss_param": rl_agent.last_param_loss_mean,
+                    "agent_td_abs": getattr(rl_agent, "last_td_abs_mean", float("nan")),
+                    "agent_q_abs": getattr(rl_agent, "last_q_abs_mean", float("nan")),
+                    "agent_tr_drop_frac": getattr(rl_agent, "last_tr_drop_frac", float("nan")),
+                },
+            )
 
         if done == 1:
             idx_traj += 1
+
+    # --- финальная модель агента: её забирает HF-логгер при последней синхронизации ---
+    final_model_dir = os.path.join(save_path, "model")
+    rl_agent.save_final_model(
+        final_model_dir,
+        metadata={
+            "ablation": rl_agent_params.get("ablation", "none"),
+            "n_trajectories": train_args["n_trajectories"],
+            "successful_trajectories": idx_traj,
+            "buffer_size": len(rl_agent.replay_buffer),
+            "steps_done": rl_agent.steps_done,
+        },
+    )
 
 
 def train_process_rl(data, save_path, device, seed, rl_agent_params):
