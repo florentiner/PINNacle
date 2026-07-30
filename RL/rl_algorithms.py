@@ -647,17 +647,18 @@ class DQNAgent:
             log_priority_to_comet(self.exp, self.replay_buffer.prior, step=self.steps_done)
             # self.exp.log_parameter('priority', self.replay_buffer.prior)
 
+        # Save model snapshots locally regardless of Comet, so that offline runs
+        # (--no-comet) still produce a trained agent for the comparison stage.
+        self.model_snapshot_dir.mkdir(parents=True, exist_ok=True)
+        optim_path = self.model_snapshot_dir / f"model_optim_step_{self.steps_done}.pt"
+        params_path = self.model_snapshot_dir / f"model_params_step_{self.steps_done}.pt"
 
+        torch.save(self.model_optim.state_dict(), optim_path)
+        torch.save(self.model_params.state_dict(), params_path)
 
-            # Save model snapshots locally and, optionally, log them to Comet as assets.
-            # We use log_asset instead of log_model to avoid the Comet model-element limit.
-            self.model_snapshot_dir.mkdir(parents=True, exist_ok=True)
-            optim_path = self.model_snapshot_dir / f"model_optim_step_{self.steps_done}.pt"
-            params_path = self.model_snapshot_dir / f"model_params_step_{self.steps_done}.pt"
-
-            torch.save(self.model_optim.state_dict(), optim_path)
-            torch.save(self.model_params.state_dict(), params_path)
-
+        if self.exp is not None:
+            # Log snapshots to Comet as assets (log_asset instead of log_model
+            # to avoid the Comet model-element limit).
             self.exp.log_asset(
                 str(optim_path),
                 file_name=f"rl_model_snapshots/model_optim_step_{self.steps_done}.pt",

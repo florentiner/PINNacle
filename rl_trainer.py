@@ -18,7 +18,10 @@ from RL.rl_algorithms import DQNAgent
 from src.utils.callbacks import ModelSaverCallback  
 from deepxde.optimizers.config import set_LBFGS_options, set_PSO_options, LBFGS_options, PSO_options
 from typing import Any, Dict
-from RL.rl_utils.load_buffer.load_exps_from_comet import collect_all_comet_transitions
+from RL.rl_utils.load_buffer.load_exps_from_comet import (
+    collect_all_comet_transitions,
+    collect_all_local_transitions,
+)
 
 # Enforce single-precision defaults before any model/layer creation.
 dde.config.set_default_float("float32")
@@ -177,9 +180,20 @@ def run_deepxde_rl_training(
         z = torch.zeros(state_shape, device=device)
         return {"loss_total": z.clone(), "loss_oper": z.clone(), "loss_bnd": z.clone()}
     
-    rl_agent.replay_buffer = collect_all_comet_transitions(rl_agent.replay_buffer, max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
+    if rl_agent_params.get("buffer_dir"):
+        # Локальный буфер (экспортированный из Comet заранее) — COMET_API_KEY не нужен
+        rl_agent.replay_buffer = collect_all_local_transitions(rl_agent.replay_buffer, buffer_dir=rl_agent_params["buffer_dir"],
+                                                               max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
+                                                               prev_tol= rl_agent_params["prev_tol"], new_tol = rl_agent_params["new_tol"],
+                                                               use_log_state=rl_agent_params["log_key"],
+                                                               proj_name=rl_agent_params["proj_name"],
+                                                               reset_success_done_to_failure=rl_agent_params.get("reset_success_done_to_failure", False),
+                                                               recompute_chain_rewards=rl_agent_params.get("recompute_chain_rewards", True),
+                                                            set_reward_from_next_loss=rl_agent_params.get("set_reward_from_next_loss", True))
+    else:
+        rl_agent.replay_buffer = collect_all_comet_transitions(rl_agent.replay_buffer, max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
                                                            prev_tol= rl_agent_params["prev_tol"], use_tol = rl_agent_params["use_tol"], new_tol = rl_agent_params["new_tol"],
-                                                           use_log_state=rl_agent_params["log_key"], 
+                                                           use_log_state=rl_agent_params["log_key"],
                                                            proj_name=rl_agent_params["proj_name"],
                                                            reset_success_done_to_failure=rl_agent_params.get("reset_success_done_to_failure", False),
                                                            recompute_chain_rewards=rl_agent_params.get("recompute_chain_rewards", True),

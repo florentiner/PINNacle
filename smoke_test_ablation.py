@@ -12,6 +12,7 @@
 """
 import os
 import random
+import tempfile
 
 os.environ.setdefault("DDEBACKEND", "pytorch")
 
@@ -19,6 +20,8 @@ import numpy as np
 import torch
 
 from RL.rl_algorithms import DQNAgent, ABLATION_MODES
+
+SNAPSHOT_TMP = tempfile.mkdtemp(prefix="rl_smoke_snapshots_")
 
 STATE_HW = 26
 OPTIMIZERS = {
@@ -91,6 +94,7 @@ def run_mode(ablation, device):
         exp=None,
         warmup_updates=1,   # короткий warmup, чтобы смок прошёл offline-recalc веткой
         ablation=ablation,
+        model_snapshot_dir=os.path.join(SNAPSHOT_TMP, ablation),
     )
 
     fill_buffer(agent, device)

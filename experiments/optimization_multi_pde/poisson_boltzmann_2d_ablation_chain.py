@@ -6,9 +6,18 @@
   no_soft_watkins — без soft-Watkins Q(λ) (старый 1-step Double DQN таргет);
   no_trust_region — без trust-region маски в лоссе.
 
-Буфер грузится из comet-проекта rlpinn-poisson-boltzmann2d-tolerance
-(workspace saitama32), параметры загрузки — из таблицы tolerance-проектов.
-Результаты пишутся в СВОЙ comet-проект: <--comet-project>-<--ablation>.
+Источник буфера (--buffer-src):
+  hf    (дефолт) — открытый HF-датасет (--hf-repo/--hf-subdir), COMET_API_KEY
+                   для чтения не нужен; датасет наполняется скриптом
+                   export_buffer_transitions.py;
+  local          — локальная папка --buffer-dir (формат экспорта);
+  comet          — как раньше: comet-проект --buffer-proj из workspace
+                   saitama32 (нужен ключ с доступом к нему).
+
+Логирование: по умолчанию в СВОЙ comet-проект <--comet-project>-<--ablation>
+(ключ/воркспейс из .env); с флагом --no-comet — вообще без Comet: метрики в
+stdout, транзишены в ./transitions/, снапшоты агента в
+<save_path>/rl_model_snapshots/.
 """
 import os
 import sys
@@ -80,32 +89,88 @@ def main():
         help="Префикс таргетного comet-проекта; итоговое имя <prefix>-<ablation>.",
     )
     parser.add_argument(
+        "--buffer-src",
+        type=str,
+        default="hf",
+        choices=["hf", "local", "comet"],
+        help="Откуда грузить буфер: hf (открытый датасет), local (--buffer-dir), comet.",
+    )
+    parser.add_argument(
+        "--buffer-dir",
+        type=str,
+        default=None,
+        help="Папка с экспортированным буфером (для --buffer-src local).",
+    )
+    parser.add_argument(
+        "--hf-repo",
+        type=str,
+        default="danil-e/rlpinn-ablation-buffers",
+        help="HF-датасет с буфером (для --buffer-src hf).",
+    )
+    parser.add_argument(
+        "--hf-subdir",
+        type=str,
+        default="poisson_boltzmann_2d",
+        help="Подпапка PDE внутри HF-датасета.",
+    )
+    parser.add_argument(
         "--buffer-proj",
         type=str,
         default="rlpinn-poisson-boltzmann2d-tolerance",
-        help="Comet-проект-источник транзишенов для буфера (только чтение).",
+        help="Comet-проект-источник транзишенов (для --buffer-src comet).",
     )
     parser.add_argument("--n-exps", type=int, default=200,
                         help="Сколько последних экспериментов источника грузить в буфер.")
+    parser.add_argument(
+        "--no-comet",
+        action="store_true",
+        help="Полностью без Comet: метрики в stdout, снапшоты/транзишены локально.",
+    )
 
     args = parser.parse_args()
 
-    # Комет стартуем после разбора аргументов: имя проекта зависит от режима абляции
-    from comet_config import start_comet_experiment
+    # --- источник буфера ---
+    buffer_dir = None
+    if args.buffer_src == "local":
+        if not args.buffer_dir:
+            raise SystemExit("--buffer-src local требует --buffer-dir")
+        buffer_dir = args.buffer_dir
+    elif args.buffer_src == "hf":
+        from huggingface_hub import snapshot_download
 
+        ds_root = snapshot_download(
+            repo_id=args.hf_repo,
+            repo_type="dataset",
+            allow_patterns=[f"{args.hf_subdir}/*"],
+        )
+        buffer_dir = os.path.join(ds_root, args.hf_subdir)
+        if not os.path.isdir(buffer_dir):
+            raise SystemExit(
+                f"В датасете {args.hf_repo} нет подпапки {args.hf_subdir} — "
+                "буфер ещё не экспортирован (см. export_buffer_transitions.py)."
+            )
+
+    # Комет стартуем после разбора аргументов: имя проекта зависит от режима абляции
     proj_name = f"{args.comet_project}-{args.ablation}"
-    experiment = start_comet_experiment(project_name=proj_name)
+    if args.no_comet:
+        experiment = None
+        print(f"[no-comet] Логирование в Comet отключено (проект был бы {proj_name}).")
+    else:
+        from comet_config import start_comet_experiment
+        experiment = start_comet_experiment(project_name=proj_name)
 
     import deepxde as dde  # noqa: F401  (инициализация backend до rl_trainer)
     from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback
     from rl_trainer import train_process_rl
 
-    experiment.log_parameters({
-        "param": "v_1",
-        "reward_function": "v_2",
-        "description": f"ablation_{args.ablation}_poisson_boltzmann_2d_rl_optimizer",
-        "ablation": args.ablation,
-    })
+    if experiment is not None:
+        experiment.log_parameters({
+            "param": "v_1",
+            "reward_function": "v_2",
+            "description": f"ablation_{args.ablation}_poisson_boltzmann_2d_rl_optimizer",
+            "ablation": args.ablation,
+            "buffer_src": args.buffer_src,
+        })
 
     date_str = time.strftime("%m.%d-%H.%M.%S", time.localtime())
     save_path = os.path.join(args.out, f"{date_str}-{args.name}-{args.ablation}")
@@ -230,9 +295,11 @@ def main():
         "log_key": False,
         "proj_name": args.buffer_proj,
         "ablation": args.ablation,
+        "buffer_dir": buffer_dir,
     }
 
-    experiment.log_parameters(rl_agent_params)
+    if experiment is not None:
+        experiment.log_parameters(rl_agent_params)
 
     data = dill.dumps((get_model, train_args, optimizers, AE_model_params, AE_train_params, loss_surface_params))
     train_process_rl(data=data, save_path=save_path, device=args.device, seed=args.seed, rl_agent_params=rl_agent_params)

@@ -168,3 +168,9 @@ cython_debug/
 # vscode
 .vscode/
 .idea/
+
+# RL run artifacts
+runs_single/
+transitions/
+rl_model_snapshots/
+buffer_export/

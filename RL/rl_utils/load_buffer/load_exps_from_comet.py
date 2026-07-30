@@ -1,6 +1,6 @@
-from comet_ml import API
 import io
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,7 +20,24 @@ PROJECT_NAME = "rlpinn-grayscott-farm-transitions"
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
-api = API(api_key=os.getenv("COMET_API_KEY"))
+
+_api = None
+
+
+def get_comet_api():
+    """Ленивая инициализация Comet API: ключ нужен только если буфер грузится из Comet."""
+    global _api
+    if _api is None:
+        from comet_ml import API
+        api_key = os.getenv("COMET_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "COMET_API_KEY не задан. Для загрузки буфера из Comet нужен ключ с доступом "
+                f"к workspace '{WORKSPACE}'. Либо используйте локальный буфер "
+                "(collect_all_local_transitions / --buffer-src local|hf)."
+            )
+        _api = API(api_key=api_key)
+    return _api
 
 
 # === Вспомогательные функции ===
@@ -568,6 +585,7 @@ def collect_all_comet_transitions(
 ) -> PrioritizedReplayBuffer:
     """Собирает все переходы из не-crashed экспериментов проекта и возвращает заполненный PrioritizedReplayBuffer."""
     print("🔍 Получаем эксперименты из Comet...")
+    api = get_comet_api()
     if proj_name is not None:
         experiments = list(api.get_experiments(workspace=WORKSPACE, project_name=proj_name))
     else:
@@ -687,6 +705,107 @@ def collect_all_comet_transitions(
             )
 
     print(f"\n🚀 Всего собрано {len(all_entries)} переходов из {len(experiments_sorted_duration)} экспериментов.")
+    if not all_entries:
+        print("⚠️ Не найдено переходов для загрузки — возвращаем пустой буфер.")
+        return PrioritizedReplayBuffer(capacity=1)
+
+    replay_buffer = load_transitions_to_replay_buffer(
+        replay_buffer,
+        all_entries,
+        prev_tol=prev_tol,
+        current_tol=tolerance,
+    )
+    return replay_buffer
+
+
+def _entry_step_from_filename(filename):
+    match = re.search(r"entry_step_(\d+)", filename)
+    return int(match.group(1)) if match else 0
+
+
+def collect_all_local_transitions(
+    replay_buffer=None,
+    buffer_dir=None,
+    max_exps_last=10,
+    tolerance=0.0,
+    prev_tol=0.0,
+    new_tol=False,
+    use_log_state=False,
+    proj_name=None,
+    mark_states=None,
+    reset_success_done_to_failure=False,
+    recompute_chain_rewards=False,
+    set_reward_from_next_loss=False,
+) -> PrioritizedReplayBuffer:
+    """Оффлайн-аналог collect_all_comet_transitions: читает буфер из локальной папки.
+
+    Ожидаемая структура (создаётся export_buffer_transitions.py):
+        buffer_dir/
+            001_<exp_name>/entry_step_00000.pt
+            001_<exp_name>/entry_step_00001.pt
+            002_<exp_name>/...
+    Числовой префикс папки задаёт порядок экспериментов (новые первыми, как в
+    Comet-версии); фильтр по длительности уже применён на этапе экспорта.
+    Обработка блоков (delta, chain-rewards, обрезка цепочек по tol) — та же,
+    что и при загрузке из Comet. COMET_API_KEY не требуется.
+    """
+    if buffer_dir is None or not os.path.isdir(buffer_dir):
+        raise RuntimeError(f"Локальная папка буфера не найдена: {buffer_dir}")
+
+    exp_dirs = sorted(
+        d for d in os.listdir(buffer_dir)
+        if os.path.isdir(os.path.join(buffer_dir, d)) and not d.startswith(".")
+    )
+    exp_dirs = exp_dirs[:max_exps_last]
+    print(f"📁 Локальный буфер: {buffer_dir}, экспериментов: {len(exp_dirs)}")
+
+    transition_blocks = []
+    for exp_dir in exp_dirs:
+        dir_path = os.path.join(buffer_dir, exp_dir)
+        pt_files = sorted(
+            (f for f in os.listdir(dir_path) if f.endswith(".pt") and "entry_step" in f),
+            key=_entry_step_from_filename,
+        )
+        block = []
+        skipped = []
+        for fname in pt_files:
+            try:
+                data_load = torch.load(os.path.join(dir_path, fname), map_location="cpu")
+            except Exception as exc:
+                skipped.append(f"{fname}: {exc}")
+                continue
+            transitions = _extract_transitions_from_payload(data_load)
+            if transitions is None:
+                skipped.append(f"{fname}: unsupported format {type(data_load).__name__}")
+                continue
+            block.extend(transitions)
+        for msg in skipped:
+            print(f"   skipped {msg}")
+        print(f"[{exp_dir}] загружено {len(block)} переходов")
+        if block:
+            transition_blocks.append(block)
+
+    all_entries = []
+    for block_index, transitions in enumerate(transition_blocks, 1):
+        block_entries = _process_loaded_transition_block(
+            transitions,
+            tolerance=tolerance,
+            prev_tol=prev_tol,
+            new_tol=new_tol,
+            use_log_state=use_log_state,
+            mark_states=mark_states,
+            proj_name=proj_name,
+            reset_success_done_to_failure=reset_success_done_to_failure,
+            set_reward_from_next_loss=set_reward_from_next_loss,
+        )
+        if recompute_chain_rewards:
+            block_entries = recompute_chain_rewards_for_terminal_chains(
+                block_entries,
+                state_loss_is_log=True,
+            )
+        all_entries.extend(block_entries)
+
+    print(f"\n🚀 Всего собрано {len(all_entries)} переходов из {len(transition_blocks)} локальных экспериментов.")
     if not all_entries:
         print("⚠️ Не найдено переходов для загрузки — возвращаем пустой буфер.")
         return PrioritizedReplayBuffer(capacity=1)
