@@ -128,9 +128,15 @@ def main():
     parser.add_argument("--n-exps", type=int, default=200,
                         help="Сколько последних экспериментов источника грузить в буфер.")
     parser.add_argument(
+        "--use-comet",
+        action="store_true",
+        help="Логировать в Comet (нужен COMET_API_KEY в .env). По умолчанию "
+             "Comet не используется вообще.",
+    )
+    parser.add_argument(
         "--no-comet",
         action="store_true",
-        help="Полностью без Comet: метрики в stdout, снапшоты/транзишены локально.",
+        help="Устарело и ничего не делает: Comet и так выключен по умолчанию.",
     )
     parser.add_argument(
         "--hf-results",
@@ -169,6 +175,15 @@ def main():
         default=None,
         help="Переопределить порог успеха траектории (по умолчанию 0.039669186 "
              "из таблицы tolerance-проектов).",
+    )
+    parser.add_argument(
+        "--max-hours",
+        type=float,
+        default=None,
+        help="Бюджет времени на запуск, часов. По исчерпании новые траектории "
+             "не начинаются: модель агента сохраняется, результаты уезжают на HF. "
+             "Одна траектория идёт 1–2 часа, так что без бюджета запуск на "
+             "n-trajectories=1000 не закончится никогда.",
     )
 
     args = parser.parse_args()
@@ -217,16 +232,18 @@ def main():
                 "буфер ещё не экспортирован (см. export_buffer_transitions.py)."
             )
 
-    # Комет стартуем после разбора аргументов: имя проекта зависит от режима абляции
-    proj_name = f"{args.comet_project}-{args.ablation}"
+    # Comet — только по явному --use-comet. Отключённая выгрузка на HF означает
+    # «пишем локально», а не «идём в Comet».
     if hf_experiment is not None:
         experiment = hf_experiment
-    elif args.no_comet:
-        experiment = None
-        print(f"[no-comet] Логирование в Comet отключено (проект был бы {proj_name}).")
-    else:
+    elif args.use_comet:
         from comet_config import start_comet_experiment
-        experiment = start_comet_experiment(project_name=proj_name)
+        experiment = start_comet_experiment(
+            project_name=f"{args.comet_project}-{args.ablation}"
+        )
+    else:
+        experiment = None
+        print(f"[local] Comet не используется; результаты только в {save_path}.")
 
     import deepxde as dde  # noqa: F401  (инициализация backend до rl_trainer)
     from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback
@@ -241,6 +258,16 @@ def main():
             "buffer_src": args.buffer_src,
             "seed": args.seed,
         })
+
+    # --- контроль запуска: бюджет времени, мягкая остановка, статус ---
+    from RL.rl_utils.run_control import RunControl
+
+    run_control = RunControl(
+        max_seconds=args.max_hours * 3600 if args.max_hours else None,
+        status_path=os.path.join(save_path, "results", "status.json"),
+    )
+    run_control.install_signal_handlers()
+    run_control.write_status("running", "запуск стартовал")
 
     # --- построчный CSV по траекториям (ложится в run_dir -> уезжает на HF) ---
     from RL.rl_utils.trajectory_metrics import TrajectoryMetricsLogger
@@ -376,6 +403,7 @@ def main():
         "ablation": args.ablation,
         "buffer_dir": buffer_dir,
         "trajectory_logger": trajectory_logger,
+        "run_control": run_control,
     }
 
     if experiment is not None:
@@ -384,8 +412,27 @@ def main():
     data = dill.dumps((get_model, train_args, optimizers, AE_model_params, AE_train_params, loss_surface_params))
     try:
         train_process_rl(data=data, save_path=save_path, device=args.device, seed=args.seed, rl_agent_params=rl_agent_params)
+    except BaseException as exc:
+        # Пишем причину в лог И в status.json: прошлый прогон оборвался
+        # молча, и понять постфактум было нечего.
+        import traceback as _tb
+        _tb.print_exc()
+        run_control.write_status(
+            "failed",
+            f"{type(exc).__name__}: {exc}",
+            extra={"traceback": _tb.format_exc()[-4000:]},
+        )
+        raise
+    else:
+        run_control.write_status(
+            "finished",
+            run_control.stop_reason or "все траектории пройдены",
+            extra={"trajectory_rows": trajectory_logger.rows_written},
+        )
     finally:
         # Финальная выгрузка логов/результатов на HF даже при падении или Ctrl-C
+        print(f"\n⏱  Время запуска: {run_control.elapsed / 3600:.2f} ч, "
+              f"строк в CSV: {trajectory_logger.rows_written}")
         if hf_experiment is not None:
             hf_experiment.end()
 

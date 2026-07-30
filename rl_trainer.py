@@ -140,6 +140,7 @@ def run_deepxde_rl_training(
     equation_params = train_args.get("equation_params", [])
     display_every = int(train_args.get("display_every", 100))
     trajectory_logger = rl_agent_params.get("trajectory_logger")
+    run_control = rl_agent_params.get("run_control")
 
     # создаём env/agent (как раньше внутри model.py, только теперь снаружи)
     env = EnvRLOptimizer(optimizers=optimizers_dict,
@@ -207,6 +208,13 @@ def run_deepxde_rl_training(
     idx_traj = 0
 
     for traj in range(train_args["n_trajectories"]):
+        # Одна траектория идёт 1–2 часа, поэтому проверяем бюджет времени и
+        # запрос на остановку ДО начала новой — иначе запуск не закончится сам.
+        if run_control is not None and run_control.should_stop():
+            print(f"\n⏹  Останавливаем набор траекторий: {run_control.stop_reason}. "
+                  f"Завершено траекторий: {traj}.")
+            break
+
         # реинициализация сети на новую траекторию
         if hasattr(model.net, "apply"):
             model.net.apply(reinit_torch_weights)
@@ -231,6 +239,12 @@ def run_deepxde_rl_training(
 
 
         for t in itertools.count():
+
+            # Не начинаем новый чанк оптимизатора после запроса на остановку:
+            # один чанк LBFGS может идти больше получаса.
+            if run_control is not None and run_control.stop_requested and t > 0:
+                print(f"\n⏹  Обрываем траекторию на шаге {t}: {run_control.stop_reason}.")
+                break
 
             # --- agent action ---
             action, action_raw, is_model = rl_agent.select_action(state)
