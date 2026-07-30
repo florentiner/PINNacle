@@ -14,10 +14,14 @@
   comet          — как раньше: comet-проект --buffer-proj из workspace
                    saitama32 (нужен ключ с доступом к нему).
 
-Логирование: по умолчанию в СВОЙ comet-проект <--comet-project>-<--ablation>
-(ключ/воркспейс из .env); с флагом --no-comet — вообще без Comet: метрики в
-stdout, транзишены в ./transitions/, снапшоты агента в
-<save_path>/rl_model_snapshots/.
+Логирование результатов (--hf-results / --no-comet / по умолчанию):
+  --hf-results <репо> — метрики, параметры, лог запуска и снапшоты агента
+                        уезжают в HF-датасет (нужен HF_TOKEN с правом записи);
+                        Comet не используется вообще. Рекомендуемый режим для
+                        запуска на удалённом GPU-сервере;
+  --no-comet          — то же самое, но без выгрузки: всё только локально;
+  по умолчанию        — свой comet-проект <--comet-project>-<--ablation>
+                        (ключ/воркспейс из .env).
 """
 import os
 import sys
@@ -126,8 +130,47 @@ def main():
         action="store_true",
         help="Полностью без Comet: метрики в stdout, снапшоты/транзишены локально.",
     )
+    parser.add_argument(
+        "--hf-results",
+        type=str,
+        default=None,
+        help="HF-датасет для логов и результатов запуска, например "
+             "danil-e/rlpinn-ablation-runs (нужен HF_TOKEN с правом записи). "
+             "Подразумевает --no-comet.",
+    )
+    parser.add_argument(
+        "--hf-results-sync-sec",
+        type=int,
+        default=900,
+        help="Как часто синхронизировать результаты на HF, секунд.",
+    )
+    parser.add_argument(
+        "--run-tag",
+        type=str,
+        default=None,
+        help="Метка запуска в пути на HF (по умолчанию дата-время + hostname).",
+    )
 
     args = parser.parse_args()
+
+    date_str = time.strftime("%m.%d-%H.%M.%S", time.localtime())
+    save_path = os.path.join(args.out, f"{date_str}-{args.name}-{args.ablation}")
+    os.makedirs(save_path, exist_ok=True)
+
+    # --- логирование результатов на HF (вместо Comet) ---
+    hf_experiment = None
+    if args.hf_results:
+        import socket
+        from RL.rl_utils.hf_logger import HFExperiment, tee_stdout
+
+        run_tag = args.run_tag or f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{socket.gethostname()}"
+        tee_stdout(os.path.join(save_path, "log.txt"))
+        hf_experiment = HFExperiment(
+            repo_id=args.hf_results,
+            repo_path=f"runs/{args.hf_subdir}/{args.ablation}/{run_tag}",
+            run_dir=save_path,
+            sync_every_sec=args.hf_results_sync_sec,
+        )
 
     # --- источник буфера ---
     buffer_dir = None
@@ -152,7 +195,9 @@ def main():
 
     # Комет стартуем после разбора аргументов: имя проекта зависит от режима абляции
     proj_name = f"{args.comet_project}-{args.ablation}"
-    if args.no_comet:
+    if hf_experiment is not None:
+        experiment = hf_experiment
+    elif args.no_comet:
         experiment = None
         print(f"[no-comet] Логирование в Comet отключено (проект был бы {proj_name}).")
     else:
@@ -170,11 +215,8 @@ def main():
             "description": f"ablation_{args.ablation}_poisson_boltzmann_2d_rl_optimizer",
             "ablation": args.ablation,
             "buffer_src": args.buffer_src,
+            "seed": args.seed,
         })
-
-    date_str = time.strftime("%m.%d-%H.%M.%S", time.localtime())
-    save_path = os.path.join(args.out, f"{date_str}-{args.name}-{args.ablation}")
-    os.makedirs(save_path, exist_ok=True)
 
     get_model = build_get_model_poisson_boltzmann2d(args.hidden_layers)
     get_model_rec = build_get_model_poisson_boltzmann2d(args.hidden_layers)
@@ -302,7 +344,12 @@ def main():
         experiment.log_parameters(rl_agent_params)
 
     data = dill.dumps((get_model, train_args, optimizers, AE_model_params, AE_train_params, loss_surface_params))
-    train_process_rl(data=data, save_path=save_path, device=args.device, seed=args.seed, rl_agent_params=rl_agent_params)
+    try:
+        train_process_rl(data=data, save_path=save_path, device=args.device, seed=args.seed, rl_agent_params=rl_agent_params)
+    finally:
+        # Финальная выгрузка логов/результатов на HF даже при падении или Ctrl-C
+        if hf_experiment is not None:
+            hf_experiment.end()
 
 
 if __name__ == "__main__":

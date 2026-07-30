@@ -1,14 +1,27 @@
-from comet_ml import API
-import torch
 import io
+import os
+
+import torch
 
 # === Настройки ===
-WORKSPACE = "saitama32"
+WORKSPACE = os.getenv("COMET_BUFFER_WORKSPACE", "saitama32")
 PROJECT_NAME = "rlpinn"
 
+_api = None
 
-api = API(api_key="aP71fQTYPNqfsYWvudPPmoBl5")  # или просто API()
-# experiment_key = "9da803bf471942d68069d835e2f95651"
+
+def _get_api():
+    """Ленивый Comet API: ключ берётся из окружения, а не из исходников."""
+    global _api
+    if _api is None:
+        from comet_ml import API
+        api_key = os.getenv("COMET_API_KEY")
+        if not api_key:
+            raise RuntimeError("COMET_API_KEY не задан — загрузка модели из Comet недоступна.")
+        _api = API(api_key=api_key)
+    return _api
+
+
 step=None
 
 def load_rl_agent_from_comet(experiment_key, map_location: str = "cpu"):
@@ -22,7 +35,7 @@ def load_rl_agent_from_comet(experiment_key, map_location: str = "cpu"):
         workspace, project: имя workspace и проекта
         api_key: API ключ (если None — берётся из конфига)
     """
-    exp = api.get_experiment(workspace=WORKSPACE, project_name=PROJECT_NAME, experiment=experiment_key)
+    exp = _get_api().get_experiment(workspace=WORKSPACE, project_name=PROJECT_NAME, experiment=experiment_key)
     assets = exp.get_asset_list()
 
     # --- фильтруем по подпапкам ---

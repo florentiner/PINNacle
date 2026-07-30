@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
 
-from comet_ml import API, start
-
 
 _ENV_LOADED = False
 _ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -47,11 +45,19 @@ def get_comet_workspace():
 
 
 def start_comet_experiment(project_name, **kwargs):
+    from comet_ml import start
     kwargs.setdefault("api_key", get_comet_api_key())
     kwargs.setdefault("workspace", get_comet_workspace())
-    return start(project_name=project_name, **kwargs)
+    experiment = start(project_name=project_name, **kwargs)
+    # Метка для кода, который умеет работать и с не-Comet логгерами (HFExperiment).
+    try:
+        experiment.is_comet = True
+    except Exception:
+        pass
+    return experiment
 
 
 def get_comet_api(**kwargs):
+    from comet_ml import API
     kwargs.setdefault("api_key", get_comet_api_key())
     return API(**kwargs)

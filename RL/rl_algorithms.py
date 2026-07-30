@@ -13,7 +13,6 @@ from math import ceil
 import statistics
 from pathlib import Path
 from RL.rl_utils.DQN_classes import DQN_optim, DQN_params
-from comet_ml.integration.pytorch import watch
 from RL.rl_utils.per_buffer import PrioritizedReplayBuffer, Transition
 from RL.rl_utils.per_offline import recalc_all_priorities_batched
 from RL.rl_utils.logger import log_priority_to_comet
@@ -129,7 +128,11 @@ class DQNAgent:
 
         self.model_optim = DQN_optim(len(self.i2opt)).to(device)
         self.model_params = DQN_params(self.optimizer_dict).to(device)
-        if self.exp is not None:
+        # watch() — специфичная для Comet телеметрия градиентов; для HF-логгера
+        # и офлайн-запусков (exp=None) она не нужна, а comet_ml может быть
+        # вообще не установлен.
+        if getattr(self.exp, "is_comet", False):
+            from comet_ml.integration.pytorch import watch
             watch(self.model_optim, log_step_interval = 200)
             watch(self.model_params, log_step_interval = 200)
 
