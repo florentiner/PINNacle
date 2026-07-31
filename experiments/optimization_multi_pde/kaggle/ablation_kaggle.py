@@ -30,6 +30,8 @@ OUT_DIR = "/kaggle/working"
 MAX_HOURS = os.getenv("MAX_HOURS", "10.5")
 SEED = os.getenv("SEED", "1234")
 MODES = os.getenv("MODES", "none no_per no_soft_watkins no_trust_region")
+# Отдельная папка результатов, чтобы не мешаться с серверной кампанией в runs/
+HF_PREFIX = os.getenv("HF_PREFIX", "runs_kaggle")
 
 
 def sh(cmd, **kwargs):
@@ -94,6 +96,7 @@ def main():
         "MAX_HOURS": MAX_HOURS,
         "SEED": SEED,
         "MODES": MODES,
+        "HF_PREFIX": HF_PREFIX,
         "PYTHON": sys.executable,
     })
 

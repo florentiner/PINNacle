@@ -1,5 +1,5 @@
 #!/bin/bash
-# Абляция DQN-стека на poisson_boltzmann_2d: все 4 режима параллельно.
+# Абляция DQN-стека: все 4 режима параллельно (PDE выбирается переменной PDE).
 # Буфер тянется с HuggingFace, логи/результаты/модель уезжают в отдельный
 # HF-датасет. Comet не нужен.
 #
@@ -16,12 +16,16 @@
 #   HF_BUFFER  — датасет с буфером (по умолчанию danil-e/rlpinn-ablation-buffers)
 #   SEED       — сид запуска (по умолчанию 1234)
 #   MODES      — режимы через пробел (по умолчанию все четыре)
+#   PDE        — уравнение: poisson_boltzmann_2d | poisson3d_complexgeometry | ns2d_liddriven
+#   HF_PREFIX  — корневая папка результатов на HF (по умолчанию runs; разводите кампании)
 #   PYTHON     — интерпретатор (по умолчанию python3, затем python)
 
 set -u
 
-SCRIPT="experiments/optimization_multi_pde/poisson_boltzmann_2d_ablation_chain.py"
+PDE="${PDE:-poisson_boltzmann_2d}"
+SCRIPT="experiments/optimization_multi_pde/${PDE}_ablation_chain.py"
 HF_RESULTS="${HF_RESULTS:-danil-e/rlpinn-ablation-runs}"
+HF_PREFIX="${HF_PREFIX:-runs}"
 HF_BUFFER="${HF_BUFFER:-danil-e/rlpinn-ablation-buffers}"
 SEED="${SEED:-1234}"
 MAX_HOURS="${MAX_HOURS:-20}"
@@ -61,7 +65,7 @@ echo "Detected GPUs: $NUM_GPUS"
 echo "Прогреваем кеш буфера ($HF_BUFFER)..."
 $PY -c "
 from huggingface_hub import snapshot_download
-p = snapshot_download('$HF_BUFFER', repo_type='dataset', allow_patterns=['poisson_boltzmann_2d/*'])
+p = snapshot_download('$HF_BUFFER', repo_type='dataset', allow_patterns=['$PDE/*'])
 print('буфер готов:', p)
 " || { echo "Не удалось скачать буфер"; exit 1; }
 
@@ -86,6 +90,7 @@ for mode in $MODES; do
         --max-hours "$MAX_HOURS" \
         --buffer-src hf --hf-repo "$HF_BUFFER" \
         --hf-results "$HF_RESULTS" \
+        --hf-results-prefix "$HF_PREFIX" \
         --run-tag "$STAMP" \
         > "logs/ablation_${mode}_seed${SEED}.log" 2>&1 &
     PIDS+=($!)
@@ -99,7 +104,7 @@ for idx in "${!PIDS[@]}"; do
     echo "  ${NAMES[$idx]}: PID ${PIDS[$idx]}"
 done
 echo "Локальные логи:   tail -f logs/ablation_*.log"
-echo "Результаты на HF: https://huggingface.co/datasets/$HF_RESULTS/tree/main/runs/poisson_boltzmann_2d"
+echo "Результаты на HF: https://huggingface.co/datasets/$HF_RESULTS/tree/main/$HF_PREFIX/$PDE"
 echo
 echo "Процессы отвязаны от сессии (setsid) — SSH можно закрывать."
 echo "Остановить досрочно и сохранить результаты: kill ${PIDS[*]}"

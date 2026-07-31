@@ -1,4 +1,4 @@
-"""Абляция DQN-стека агента на PoissonBoltzmann2D.
+"""Абляция DQN-стека агента на NS2D_LidDriven.
 
 Режимы (--ablation):
   none            — полный агент (PER + soft-Watkins + trust-region);
@@ -37,16 +37,16 @@ import dill
 import numpy as np
 import torch
 
-PDE_NAME = "poisson_boltzmann_2d"
+PDE_NAME = "ns2d_liddriven"
 
 
-def build_get_model_poisson_boltzmann2d(hidden_layers: str):
+def build_get_model_ns2d_liddriven(hidden_layers: str, **pde_kwargs):
     def get_model():
         import deepxde as dde
-        from src.pde.poisson import PoissonBoltzmann2D
+        from src.pde.ns import NS2D_LidDriven
         from src.utils.args import parse_hidden_layers
 
-        pde = PoissonBoltzmann2D()
+        pde = NS2D_LidDriven(**pde_kwargs)
 
         layers = [pde.input_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
         net = dde.nn.FNN(layers, "tanh", "Glorot normal")
@@ -55,7 +55,7 @@ def build_get_model_poisson_boltzmann2d(hidden_layers: str):
         loss_weights = np.ones(pde.num_loss, dtype=float)
         for i, c in enumerate(pde.loss_config):
             t = c.get("type", "")
-            if t in ("boundary", "initial", "ic"):
+            if t in ("boundary", "initial"):
                 loss_weights[i] = 100.0
             elif t == "pde":
                 loss_weights[i] = 1.0
@@ -70,7 +70,10 @@ def build_get_model_poisson_boltzmann2d(hidden_layers: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name", type=str, default="poisson_boltzmann2d_rl_ablation")
+    parser.add_argument("--name", type=str, default="ns2d_liddriven_rl_ablation")
+    parser.add_argument("--datapath", type=str, default="ref/lid_driven_a4.dat")
+    parser.add_argument("--a", type=float, default=4.0)
+    parser.add_argument("--nu", type=float, default=1e-2)
     parser.add_argument("--device", type=str, default="0")
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--hidden-layers", type=str, default="100*5")
@@ -91,7 +94,7 @@ def main():
     parser.add_argument(
         "--comet-project",
         type=str,
-        default="rlpinn-poisson-boltzmann2d-ablation",
+        default="rlpinn-ns2d-liddriven-ablation",
         help="Префикс таргетного comet-проекта; итоговое имя <prefix>-<ablation>.",
     )
     parser.add_argument(
@@ -116,13 +119,13 @@ def main():
     parser.add_argument(
         "--hf-subdir",
         type=str,
-        default="poisson_boltzmann_2d",
+        default="ns2d_liddriven",
         help="Подпапка PDE внутри HF-датасета.",
     )
     parser.add_argument(
         "--buffer-proj",
         type=str,
-        default="rlpinn-poisson-boltzmann2d-tolerance",
+        default="rlpinn-ns2d-liddriven-tolerance",
         help="Comet-проект-источник транзишенов (для --buffer-src comet).",
     )
     parser.add_argument("--n-exps", type=int, default=200,
@@ -181,7 +184,7 @@ def main():
         "--tolerance",
         type=float,
         default=None,
-        help="Переопределить порог успеха траектории (по умолчанию 0.039669186 "
+        help="Переопределить порог успеха траектории (по умолчанию 0.000352056 "
              "из таблицы tolerance-проектов).",
     )
     parser.add_argument(
@@ -274,7 +277,7 @@ def main():
         experiment.log_parameters({
             "param": "v_1",
             "reward_function": "v_2",
-            "description": f"ablation_{args.ablation}_poisson_boltzmann_2d_rl_optimizer",
+            "description": f"ablation_{args.ablation}_ns2d_liddriven_rl_optimizer",
             "ablation": args.ablation,
             "buffer_src": args.buffer_src,
             "seed": args.seed,
@@ -303,8 +306,9 @@ def main():
         experiment=experiment,
     )
 
-    get_model = build_get_model_poisson_boltzmann2d(args.hidden_layers)
-    get_model_rec = build_get_model_poisson_boltzmann2d(args.hidden_layers)
+    pde_kwargs = dict(datapath=args.datapath, a=args.a, nu=args.nu)
+    get_model = build_get_model_ns2d_liddriven(args.hidden_layers, **pde_kwargs)
+    get_model_rec = build_get_model_ns2d_liddriven(args.hidden_layers, **pde_kwargs)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -323,10 +327,10 @@ def main():
     }
 
     # Сетка действий должна совпадать с той, на которой фармились транзишены
-    # poisson_boltzmann_2d (см. poisson_boltzmann_2d_chain.py и ветку сравнения)
+    # ns2d_liddriven (см. experiments/NavierStokes/ns2d_liddriven_chain.py)
     optimizers = {
         "Adam": {"lr": [1e-2, 1e-3, 1e-4], "epochs": [100, 1000, 2500]},
-        "LBFGS": {"lr": [1, 5e-1, 1e-1], "epochs": [100, 500, 1500]},
+        "LBFGS": {"lr": [1, 5e-1, 1e-1], "epochs": [100, 500, 1000]},
         "PSO": {"lr": [0.0, 1e-3, 1e-4], "epochs": [100, 200, 300]},
     }
 
@@ -395,12 +399,12 @@ def main():
     }
 
     # Параметры загрузки буфера — из таблицы tolerance-проектов:
-    # 'rlpinn-poisson-boltzmann2d-tolerance': n_exps=200, tolerance=0.039669186,
+    # 'rlpinn-ns2d-liddriven-tolerance': n_exps=200, tolerance=0.000352056,
     # prev_tol=0.0, use_tol=False, new_tol=True, use_log_state=False
     rl_agent_params = {
         "n_save_models": args.n_save_models,
         "n_trajectories": args.n_trajectories,
-        "tolerance": args.tolerance if args.tolerance is not None else 0.039669186,
+        "tolerance": args.tolerance if args.tolerance is not None else 0.000352056,
         "use_tol": False,
         "new_tol": True,
         "prev_tol": 0.0,
