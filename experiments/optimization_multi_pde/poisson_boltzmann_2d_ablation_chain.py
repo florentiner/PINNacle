@@ -177,6 +177,19 @@ def main():
              "из таблицы tolerance-проектов).",
     )
     parser.add_argument(
+        "--offline-pretrain-steps",
+        type=int,
+        default=50,
+        help="Шагов оффлайн-претрена агента на буфере до онлайн-траекторий "
+             "(0 = выключить). Каждый шаг = --offline-pretrain-iters батч-апдейтов.",
+    )
+    parser.add_argument(
+        "--offline-pretrain-iters",
+        type=int,
+        default=5,
+        help="Батч-апдейтов за один шаг оффлайн-претрена.",
+    )
+    parser.add_argument(
         "--max-hours",
         type=float,
         default=None,
@@ -404,6 +417,8 @@ def main():
         "buffer_dir": buffer_dir,
         "trajectory_logger": trajectory_logger,
         "run_control": run_control,
+        "offline_pretrain_steps": args.offline_pretrain_steps,
+        "offline_pretrain_iters": args.offline_pretrain_iters,
     }
 
     if experiment is not None:

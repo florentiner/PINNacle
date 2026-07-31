@@ -34,6 +34,66 @@ output_dir = os.path.join('.', 'transitions')
 
 os.makedirs(output_dir, exist_ok=True)
 
+def _greedy_action_from_state(rl_agent, state):
+    """Чисто жадное действие агента из состояния (без ε и без инкремента steps_done)."""
+    with torch.no_grad():
+        x = rl_agent._stack_state(state).unsqueeze(0)
+        flat, q_opt = rl_agent.model_optim(x)
+        optim_class = int(torch.argmax(q_opt).item())
+        optim_name = rl_agent.i2opt[optim_class]
+        param_dict = rl_agent.model_params(flat, [optim_name])[0]
+
+        epochs_class = 0
+        param_class = {}
+        for key in param_dict:
+            if key == "epochs":
+                epochs_class = int(torch.argmax(param_dict[key]).item())
+            else:
+                param_class[key] = int(torch.argmax(param_dict[key]).item())
+    return rl_agent.post_proc_model(optim_class, epochs_class, param_class)
+
+
+def _print_offline_greedy_chain_diagnostic(rl_agent, max_len=12):
+    """Диагностика после оффлайн-претрена: что жадная политика выберет
+    из нулевого состояния и вдоль последнего успешного эпизода буфера."""
+    print("\n=== Диагностика жадной политики после оффлайн-претрена ===")
+
+    memory = rl_agent.replay_buffer.memory
+    if not memory:
+        print("Буфер пуст — диагностика пропущена.")
+        return
+
+    template = memory[0].state["loss_total"]
+    zero_state = {
+        key: torch.zeros_like(template)
+        for key in ("loss_total", "loss_oper", "loss_bnd")
+    }
+    first_action = _greedy_action_from_state(rl_agent, zero_state)
+    print(f"Из нулевого состояния: {first_action['type']}"
+          f"(lr={first_action['params'].get('lr')}, epochs={first_action['epochs']})")
+
+    # последний успешный эпизод в буфере
+    success_chain, current = [], []
+    for tr in memory:
+        current.append(tr)
+        if tr.done != 0:
+            if tr.done == 1:
+                success_chain = current
+            current = []
+
+    if not success_chain:
+        print("Успешных эпизодов в буфере нет — цепочная диагностика пропущена.")
+        return
+
+    print(f"Жадные действия вдоль успешного эпизода (длина {len(success_chain)}):")
+    for i, tr in enumerate(success_chain[:max_len]):
+        greedy = _greedy_action_from_state(rl_agent, tr.state)
+        taken_name = rl_agent.i2opt[int(tr.action[0])]
+        print(f"  s{i}: greedy={greedy['type']}"
+              f"(lr={greedy['params'].get('lr')}, epochs={greedy['epochs']})"
+              f" | в буфере был {taken_name}")
+
+
 # --- утилита: реинициализация torch модулей (для "новой траектории") ---
 def reinit_torch_weights(module):
     import torch
@@ -204,6 +264,44 @@ def run_deepxde_rl_training(
     #     optim_state, params_state = load_rl_agent_from_comet(backup_params["experiment_key"], map_location=device_type())
     #     rl_agent.model_optim.load_state_dict(optim_state)
     #     rl_agent.model_params.load_state_dict(params_state)
+
+    # --- Оффлайн-претрен агента чисто на буфере, до онлайн-траекторий ---
+    # Компромисс при малом бюджете онлайн-шагов: агент сначала выучивается на
+    # оффлайн-транзишенах, онлайн-часть стартует с осмысленной политикой.
+    offline_pretrain_steps = int(rl_agent_params.get("offline_pretrain_steps", 0))
+    offline_pretrain_iters = int(rl_agent_params.get("offline_pretrain_iters", 5))
+    if offline_pretrain_steps > 0:
+        if len(rl_agent.replay_buffer) < rl_agent.batch_size:
+            raise RuntimeError(
+                "Not enough replay transitions for offline pretraining: "
+                f"{len(rl_agent.replay_buffer)} < batch_size({rl_agent.batch_size})"
+            )
+
+        print(
+            "\nStarting offline RL pretraining: "
+            f"steps={offline_pretrain_steps}, iters_per_step={offline_pretrain_iters}."
+        )
+        offline_start_time = time.time()
+        for step in range(1, offline_pretrain_steps + 1):
+            if run_control is not None and run_control.should_stop():
+                print(f"⏹  Оффлайн-претрен прерван на шаге {step}: {run_control.stop_reason}")
+                break
+            loss_optim, loss_param = rl_agent.optim_(iters=offline_pretrain_iters)
+            rl_agent.steps_done += 1
+            if not loss_optim or not loss_param:
+                raise RuntimeError(
+                    f"Offline pretraining stopped at step {step}: no updates were made."
+                )
+            print(
+                f"[offline {step}/{offline_pretrain_steps}] "
+                f"optim_loss_mean={np.mean(loss_optim):.6f}, "
+                f"param_loss_mean={np.mean(loss_param):.6f}"
+            )
+
+        print(f"Offline pretraining took {time.time() - offline_start_time:.1f}s.")
+        _print_offline_greedy_chain_diagnostic(rl_agent)
+        rl_agent.reinit_target()
+        rl_agent.transition_counter = 0
 
     idx_traj = 0
 
