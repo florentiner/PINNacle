@@ -96,6 +96,9 @@ def main():
             all_rows = []
             for run_tag, rows in sorted(runs):
                 for r in rows:
+                    # проверочные запуски (smoke_test=True) не участвуют в итогах
+                    if str(r.get("smoke_test", "")).strip().lower() in ("true", "1"):
+                        continue
                     r["_run_tag"] = run_tag
                     all_rows.append(r)
             # без сортировки между запусками: внутри запуска порядок хронологический,
