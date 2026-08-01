@@ -23,6 +23,7 @@ PDE, MODE и прочее задаются константами ниже (пу
   runs_kaggle/<pde>/<mode>/<run_tag>/{logs,results,model,...}
 """
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,8 @@ SEED = os.getenv("SEED", "1234")
 MAX_HOURS = os.getenv("MAX_HOURS", "10.75")
 # auto: продолжить с последнего чекпоинта пары на HF; none: с нуля
 RESUME = os.getenv("RESUME", "auto")
+# Дополнительные аргументы раннера (строкой), напр. "--eval-only --fixed-steps 8"
+EXTRA_ARGS = os.getenv("EXTRA_ARGS", "")
 HF_RESULTS = os.getenv("HF_RESULTS", "danil-e/rlpinn-ablation-runs")
 HF_BUFFER = os.getenv("HF_BUFFER", "danil-e/rlpinn-ablation-buffers")
 HF_PREFIX = os.getenv("HF_PREFIX", "runs_kaggle")
@@ -112,7 +115,7 @@ def main():
         "--hf-results-prefix", HF_PREFIX,
         "--run-tag", run_tag,
         "--resume-from", RESUME,
-    ]
+    ] + shlex.split(EXTRA_ARGS)
     print("\n$ " + " ".join(cmd), flush=True)
     result = subprocess.run(cmd)
     print(f"\nраннер завершился с кодом {result.returncode}", flush=True)

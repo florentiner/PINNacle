@@ -200,6 +200,25 @@ def main():
         default=5,
         help="Батч-апдейтов за один шаг оффлайн-претрена.",
     )
+    parser.add_argument("--refine-steps", type=int, default=0,
+                        help="Вариант A: чанков доводки PINN после достижения порога "
+                             "(0 = выключено; RL-семантика не меняется).")
+    parser.add_argument("--refine-optimizer", type=str, default="LBFGS")
+    parser.add_argument("--refine-lr", type=float, default=0.5)
+    parser.add_argument("--refine-epochs", type=int, default=1500)
+    parser.add_argument("--eval-only", action="store_true",
+                        help="Вариант B: жадная оценка загруженного агента без обучения "
+                             "(буфер не грузится; требует --resume-from).")
+    parser.add_argument("--fixed-steps", type=int, default=0,
+                        help="Фиксированный бюджет шагов агента на траекторию "
+                             "(done=1 игнорируется; для честного сравнения l2re).")
+    parser.add_argument("--reset-success-done-to-failure", action="store_true",
+                        help="При смене tolerance: сбросить старые done=1 буфера и "
+                             "переразметить цепочки по новому порогу (вариант C).")
+    parser.add_argument("--resume-prefix", type=str, default=None,
+                        help="Где искать чекпоинт для резюма (по умолчанию — "
+                             "--hf-results-prefix). Нужен, когда результаты пишутся "
+                             "в отдельный префикс, а продолжаемся из основного.")
     parser.add_argument(
         "--resume-from",
         type=str,
@@ -309,7 +328,8 @@ def main():
         resume_repo = args.hf_results if args.hf_results and args.hf_results.lower() != "none" \
             else "danil-e/rlpinn-ablation-runs"
         resume_checkpoint = resolve_resume_checkpoint(
-            resume_repo, args.hf_results_prefix, args.hf_subdir, args.ablation)
+            resume_repo, args.resume_prefix or args.hf_results_prefix,
+            args.hf_subdir, args.ablation)
     elif args.resume_from.lower() != "none":
         resume_checkpoint = {"kind": "final", "path": args.resume_from, "tag": "local"}
 
@@ -452,6 +472,13 @@ def main():
         "resume_checkpoint": resume_checkpoint,
         "offline_pretrain_steps": args.offline_pretrain_steps,
         "offline_pretrain_iters": args.offline_pretrain_iters,
+        "refine_steps": args.refine_steps,
+        "refine_optimizer": args.refine_optimizer,
+        "refine_lr": args.refine_lr,
+        "refine_epochs": args.refine_epochs,
+        "eval_only": args.eval_only,
+        "fixed_steps": args.fixed_steps,
+        "reset_success_done_to_failure": args.reset_success_done_to_failure,
     }
 
     if experiment is not None:

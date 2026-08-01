@@ -59,6 +59,10 @@ CSV_FIELDS_EXTRA = [
     "agent_td_abs",
     "agent_q_abs",
     "agent_tr_drop_frac",
+    # l2re_min — лучшая точка траектории по валидациям (каждые log_every эпох);
+    # l2re_refined — l2re после пост-доводки за порогом (вариант A), пусто без неё
+    "l2re_min",
+    "l2re_refined",
 ]
 
 CSV_FIELDS = CSV_FIELDS_REQUIRED + CSV_FIELDS_EXTRA

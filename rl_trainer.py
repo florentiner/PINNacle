@@ -202,6 +202,16 @@ def run_deepxde_rl_training(
     trajectory_logger = rl_agent_params.get("trajectory_logger")
     run_control = rl_agent_params.get("run_control")
 
+    # Режим оценки: жадная политика, фиксированный бюджет шагов, агент не обучается
+    eval_only = bool(rl_agent_params.get("eval_only", False))
+    fixed_steps = int(rl_agent_params.get("fixed_steps", 0))
+
+    # Доводка PINN после достижения порога (l2re глубже, RL-семантика не меняется)
+    refine_steps = int(rl_agent_params.get("refine_steps", 0))
+    refine_optimizer = rl_agent_params.get("refine_optimizer", "LBFGS")
+    refine_lr = float(rl_agent_params.get("refine_lr", 0.5))
+    refine_epochs = int(rl_agent_params.get("refine_epochs", 1500))
+
     # создаём env/agent (как раньше внутри model.py, только теперь снаружи)
     env = EnvRLOptimizer(optimizers=optimizers_dict,
                          equation_params=equation_params,
@@ -242,7 +252,13 @@ def run_deepxde_rl_training(
         z = torch.zeros(state_shape, device=device)
         return {"loss_total": z.clone(), "loss_oper": z.clone(), "loss_bnd": z.clone()}
     
-    if rl_agent_params.get("buffer_dir"):
+    if eval_only:
+        # Буфер не нужен: агент не обучается, только исполняет жадную политику
+        print("🎯 eval-only: буфер не загружается, агент не обучается, ε-исследование выключено.")
+        rl_agent.greedy_only = True
+        if not rl_agent_params.get("resume_checkpoint"):
+            raise RuntimeError("eval-only требует чекпоинт агента (--resume-from auto/путь).")
+    elif rl_agent_params.get("buffer_dir"):
         # Локальный буфер (экспортированный из Comet заранее) — COMET_API_KEY не нужен
         rl_agent.replay_buffer = collect_all_local_transitions(rl_agent.replay_buffer, buffer_dir=rl_agent_params["buffer_dir"],
                                                                max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
@@ -333,6 +349,10 @@ def run_deepxde_rl_training(
         # реинициализация сети на новую траекторию
         if hasattr(model.net, "apply"):
             model.net.apply(reinit_torch_weights)
+
+        # сброс трекинга лучшей точки траектории (l2re_min в CSV)
+        if base_callbacks and hasattr(base_callbacks[0], "reset_trajectory_tracking"):
+            base_callbacks[0].reset_trajectory_tracking()
 
         # сброс локальных переменных траектории
         state = zero_state()
@@ -475,18 +495,23 @@ def run_deepxde_rl_training(
                     f'{"optimizers" if len(optimizers_history) > 1 else "optimizer"}: {total_reward}.\n'
                     f'\ndone = {done}')
             
-            if len(rl_agent.replay_buffer) >= rl_agent_params["agent_min_buffer"]:
+            if not eval_only and len(rl_agent.replay_buffer) >= rl_agent_params["agent_min_buffer"]:
                 rl_agent.optim_(iters=rl_agent_params["agent_update_iters"])
 
             # callbacks.callbacks[1].save_every = self.t
             # env.render()
             if transition_ready:
                 state = next_state
+            # Фиксированный бюджет шагов (режим оценки): игнорируем done=1,
+            # каждая траектория получает одинаковое число решений агента
+            if fixed_steps > 0 and (t + 1) >= fixed_steps:
+                print(f"\n⏹  Достигнут фиксированный бюджет {fixed_steps} шагов — конец траектории.")
+                break
             if done == 1:
                 break
             elif done == 0:
                 if t == 10:
-                    rl_penalty = -1 
+                    rl_penalty = -1
             elif done == -1:
                 rl_penalty = 0
                 break
@@ -563,14 +588,52 @@ def run_deepxde_rl_training(
             if len(rl_agent.replay_buffer) >= rl_agent_params["agent_min_buffer"]:
                 rl_agent.optim_(iters=rl_agent_params["agent_update_iters"])
 
+        # Снимок метрик "на пороге" — ДО доводки: основные колонки CSV должны
+        # отражать момент остановки траектории, иначе сравнение сломается.
+        tester = base_callbacks[0] if base_callbacks else None
+        at_stop = {
+            "mse_op": getattr(tester, "mse", float("nan")),
+            "mse_bnd": getattr(tester, "bc_mse", float("nan")),
+            "l2re_op": getattr(tester, "l2re", float("nan")),
+            "l2re_bnd": getattr(tester, "bc_l2re", float("nan")),
+        }
+
+        # --- Доводка PINN после достижения порога (вариант A) ---
+        # RL-семантика не меняется: транзишены доводки в буфер не пишутся,
+        # награды уже посчитаны; глубже обучается только сеть PINN.
+        refined = None
+        if refine_steps > 0 and final_done == 1 and trajectory_actions:
+            print(f"\n🔧 Доводка после порога: {refine_steps} x {refine_optimizer}"
+                  f"(lr={refine_lr}, epochs={refine_epochs})")
+            for _ in range(refine_steps):
+                if run_control is not None and run_control.should_stop():
+                    break
+                refine_opt = _build_torch_optimizer(
+                    refine_optimizer, model.net.parameters(),
+                    {"params": {"lr": refine_lr}})
+                model.compile(refine_opt, loss_weights=loss_weights)
+                model.optimizer = refine_opt
+                model.train(iterations=refine_epochs, display_every=display_every,
+                            callbacks=list(base_callbacks), model_save_path=save_path,
+                            save_model=False)
+            tester = base_callbacks[0] if base_callbacks else None
+            if tester is not None:
+                refined = {
+                    "l2re_op": getattr(tester, "l2re", float("nan")),
+                    "l2re_bnd": getattr(tester, "bc_l2re", float("nan")),
+                }
+                refined["l2re"] = float(np.hypot(refined["l2re_op"], refined["l2re_bnd"])) \
+                    if np.isfinite(refined["l2re_bnd"]) else float(refined["l2re_op"])
+                print(f"🔧 l2re после доводки: {refined['l2re']:.6g}")
+
         # --- строка метрик по завершённой траектории ---
         if trajectory_logger is not None and trajectory_actions:
-            tester = base_callbacks[0] if base_callbacks else None
+            traj_l2re_min = getattr(tester, "traj_l2re_min", float("inf"))
             trajectory_logger.log_trajectory(
-                mse_op=getattr(tester, "mse", float("nan")),
-                mse_bnd=getattr(tester, "bc_mse", float("nan")),
-                l2re_op=getattr(tester, "l2re", float("nan")),
-                l2re_bnd=getattr(tester, "bc_l2re", float("nan")),
+                mse_op=at_stop["mse_op"],
+                mse_bnd=at_stop["mse_bnd"],
+                l2re_op=at_stop["l2re_op"],
+                l2re_bnd=at_stop["l2re_bnd"],
                 elapsed_s=time.time() - trajectory_start_time,
                 actions=trajectory_actions,
                 trajectory_index=traj,
@@ -586,6 +649,10 @@ def run_deepxde_rl_training(
                     "agent_td_abs": getattr(rl_agent, "last_td_abs_mean", float("nan")),
                     "agent_q_abs": getattr(rl_agent, "last_q_abs_mean", float("nan")),
                     "agent_tr_drop_frac": getattr(rl_agent, "last_tr_drop_frac", float("nan")),
+                    # лучшая точка траектории (включая доводку, если была)
+                    "l2re_min": traj_l2re_min if traj_l2re_min != float("inf") else float("nan"),
+                    # l2re после пост-доводки (вариант A); пусто без неё
+                    "l2re_refined": refined["l2re"] if refined else "",
                 },
             )
 

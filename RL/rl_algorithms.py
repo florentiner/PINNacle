@@ -878,6 +878,10 @@ class DQNAgent:
         if self.steps_done < self.slot_bootstrap_steps:
             eps_threshold = self.slot_bootstrap_eps
 
+        # Режим оценки: чисто жадная политика, без исследования
+        if getattr(self, "greedy_only", False):
+            eps_threshold = -1.0
+
         # --- GREEDY ---
         if sample > eps_threshold:
             with torch.no_grad():

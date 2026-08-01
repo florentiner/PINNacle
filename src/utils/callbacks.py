@@ -148,6 +148,16 @@ class TesterCallback(Callback):
         self.test_x_bc = None
         self.test_y_bc = None
 
+        # Лучшая точка ТРАЕКТОРИИ (сквозь чанки): минимум полного l2re
+        # sqrt(l2re_op^2 + l2re_bnd^2) по всем валидациям с последнего reset.
+        self.reset_trajectory_tracking()
+
+    def reset_trajectory_tracking(self):
+        """Вызывается тренером в начале каждой траектории."""
+        self.traj_l2re_min = float("inf")
+        self.traj_l2re_min_op = float("nan")
+        self.traj_l2re_min_bnd = float("nan")
+
     def on_train_begin(self):
         self.save_path = self.model.model_save_path + "/"
         pde = self.model.pde
@@ -290,6 +300,12 @@ class TesterCallback(Callback):
             bc_rmse = np.nan
             bc_l2re = np.nan
 
+        # --- трекинг лучшей точки траектории (полный l2re, как в CSV) ---
+        combo_l2re = float(np.hypot(l2re, bc_l2re)) if np.isfinite(bc_l2re) else float(l2re)
+        if np.isfinite(combo_l2re) and combo_l2re < self.traj_l2re_min:
+            self.traj_l2re_min = combo_l2re
+            self.traj_l2re_min_op = float(l2re)
+            self.traj_l2re_min_bnd = float(bc_l2re)
 
         # --- Interpolation-based metrics (nearest exact on arbitrary grids) ---
         # 1) interp MSE on training points (prefer train_x; fallback to train_x_all)
