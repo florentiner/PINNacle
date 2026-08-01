@@ -62,6 +62,10 @@ def main():
     parser.add_argument("--hf-repo", default="danil-e/rlpinn-ablation-runs")
     parser.add_argument("--prefix", default="runs_kaggle")
     parser.add_argument("--out", default="ablation_final_metrics.csv")
+    parser.add_argument("--runs", choices=["latest", "all"], default="latest",
+                        help="latest — только последний запуск каждой пары "
+                             "(по умолчанию); all — все запуски суммарно "
+                             "(кумулятив по цепочке резюмов).")
     parser.add_argument("--upload", action="store_true",
                         help="Загрузить итоговый CSV в датасет (нужен HF_TOKEN).")
     args = parser.parse_args()
@@ -93,6 +97,8 @@ def main():
     for pde in PDES:
         for mode in MODES:
             runs = groups.get((pde, mode), [])
+            if args.runs == "latest" and runs:
+                runs = [max(runs, key=lambda rt: rt[0])]
             all_rows = []
             for run_tag, rows in sorted(runs):
                 for r in rows:
