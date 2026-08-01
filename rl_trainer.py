@@ -265,10 +265,27 @@ def run_deepxde_rl_training(
     #     rl_agent.model_optim.load_state_dict(optim_state)
     #     rl_agent.model_params.load_state_dict(params_state)
 
+    # --- Продолжение с чекпоинта прошлой сессии (Kaggle-цепочка) ---
+    resume_checkpoint = rl_agent_params.get("resume_checkpoint")
+    resumed = False
+    if resume_checkpoint:
+        if resume_checkpoint["kind"] == "final":
+            rl_agent.load_final_model(resume_checkpoint["path"])
+        else:
+            rl_agent.load_head_snapshots(
+                resume_checkpoint["optim"],
+                resume_checkpoint["params"],
+                steps_done=resume_checkpoint.get("steps_done"),
+            )
+        resumed = True
+        print(f"⏯  Продолжаем обучение с запуска {resume_checkpoint.get('tag')} — "
+              "оффлайн-претрен пропущен.")
+
     # --- Оффлайн-претрен агента чисто на буфере, до онлайн-траекторий ---
     # Компромисс при малом бюджете онлайн-шагов: агент сначала выучивается на
     # оффлайн-транзишенах, онлайн-часть стартует с осмысленной политикой.
-    offline_pretrain_steps = int(rl_agent_params.get("offline_pretrain_steps", 0))
+    # При продолжении с чекпоинта не нужен: агент уже обучен прошлой сессией.
+    offline_pretrain_steps = 0 if resumed else int(rl_agent_params.get("offline_pretrain_steps", 0))
     offline_pretrain_iters = int(rl_agent_params.get("offline_pretrain_iters", 5))
     if offline_pretrain_steps > 0:
         if len(rl_agent.replay_buffer) < rl_agent.batch_size:

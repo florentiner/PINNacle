@@ -180,6 +180,68 @@ class DQNAgent:
               f"(ablation={self.ablation}, steps_done={self.steps_done})")
         return str(out_dir / "agent_final.pt")
 
+    def load_final_model(self, path):
+        """Продолжение обучения: загрузка полного чекпоинта agent_final.pt.
+
+        После load_state_dict сети переводятся в .eval() (фикс коллеги:
+        батч-норм в train-режиме сдвигал running-статистику при инференсе
+        батчем размера 1 и портил загруженную политику). Warmup выключается —
+        он уже пройден в сессии, породившей чекпоинт.
+        """
+        payload = torch.load(path, map_location=self.device, weights_only=False)
+
+        ckpt_ablation = payload.get("ablation")
+        if ckpt_ablation is not None and ckpt_ablation != self.ablation:
+            raise ValueError(
+                f"Чекпоинт от режима '{ckpt_ablation}', а агент в '{self.ablation}' — "
+                "продолжать нельзя, это смешало бы условия абляции."
+            )
+
+        self.model_optim.load_state_dict(payload["model_optim"])
+        self.model_params.load_state_dict(payload["model_params"])
+        self.target_model_optim.load_state_dict(payload.get("target_model_optim", payload["model_optim"]))
+        self.target_model_params.load_state_dict(payload.get("target_model_params", payload["model_params"]))
+        for key, opt in (("optimizer_opt", self.optimizer_opt), ("optimizer_params", self.optimizer_params)):
+            if key in payload:
+                try:
+                    opt.load_state_dict(payload[key])
+                except Exception as exc:
+                    print(f"⚠️ Не удалось загрузить состояние {key} ({exc}); оптимизатор начнёт заново.")
+
+        self.model_optim.eval()
+        self.model_params.eval()
+        self.target_model_optim.eval()
+        self.target_model_params.eval()
+
+        self.steps_done = int(payload.get("steps_done", self.steps_done))
+        self.opt_step = int(payload.get("opt_step", self.opt_step))
+        self.warmup_active = False
+        self.recalc_done = True
+
+        print(f"⏯  Загружен полный чекпоинт агента: {path} "
+              f"(ablation={ckpt_ablation}, steps_done={self.steps_done}, opt_step={self.opt_step}); сети в eval().")
+        return payload.get("metadata", {})
+
+    def load_head_snapshots(self, optim_path, params_path, steps_done=None):
+        """Фоллбек-продолжение: только веса голов из периодических снапшотов
+        (когда agent_final.pt не успел сохраниться, например сессию срезал
+        жёсткий лимит). Таргеты становятся копией загруженных весов,
+        состояния Adam начинаются заново."""
+        self.model_optim.load_state_dict(torch.load(optim_path, map_location=self.device, weights_only=False))
+        self.model_params.load_state_dict(torch.load(params_path, map_location=self.device, weights_only=False))
+        self.reinit_target()
+
+        self.model_optim.eval()
+        self.model_params.eval()
+
+        if steps_done is not None:
+            self.steps_done = int(steps_done)
+        self.warmup_active = False
+        self.recalc_done = True
+
+        print(f"⏯  Загружены снапшоты голов агента (steps_done={self.steps_done}); "
+              f"таргеты = копия весов, Adam с нуля; сети в eval().")
+
     def _rotate_snapshots(self, keep_last):
         """Оставляет только последние keep_last периодических снапшотов.
 

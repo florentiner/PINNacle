@@ -199,6 +199,14 @@ def main():
         help="Батч-апдейтов за один шаг оффлайн-претрена.",
     )
     parser.add_argument(
+        "--resume-from",
+        type=str,
+        default="auto",
+        help="Продолжение обучения: auto — подхватить последний чекпоинт этой "
+             "пары (pde, ablation) из HF-датасета результатов; none — с нуля; "
+             "путь — локальный agent_final.pt. При резюме претрен пропускается.",
+    )
+    parser.add_argument(
         "--max-hours",
         type=float,
         default=None,
@@ -290,6 +298,18 @@ def main():
     )
     run_control.install_signal_handlers()
     run_control.write_status("running", "запуск стартовал")
+
+    # --- чекпоинт для продолжения обучения (цепочка сессий) ---
+    resume_checkpoint = None
+    if args.resume_from == "auto":
+        from RL.rl_utils.resume import resolve_resume_checkpoint
+
+        resume_repo = args.hf_results if args.hf_results and args.hf_results.lower() != "none" \
+            else "danil-e/rlpinn-ablation-runs"
+        resume_checkpoint = resolve_resume_checkpoint(
+            resume_repo, args.hf_results_prefix, args.hf_subdir, args.ablation)
+    elif args.resume_from.lower() != "none":
+        resume_checkpoint = {"kind": "final", "path": args.resume_from, "tag": "local"}
 
     # --- построчный CSV по траекториям (ложится в run_dir -> уезжает на HF) ---
     from RL.rl_utils.trajectory_metrics import TrajectoryMetricsLogger
@@ -428,6 +448,7 @@ def main():
         "buffer_dir": buffer_dir,
         "trajectory_logger": trajectory_logger,
         "run_control": run_control,
+        "resume_checkpoint": resume_checkpoint,
         "offline_pretrain_steps": args.offline_pretrain_steps,
         "offline_pretrain_iters": args.offline_pretrain_iters,
     }

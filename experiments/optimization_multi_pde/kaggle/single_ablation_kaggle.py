@@ -6,8 +6,11 @@
   1. клонирует ветку rlpinn_agent_ablation форка florentiner/PINNacle;
   2. ставит недостающие зависимости и чинит torch под выданную GPU;
   3. напрямую запускает <PDE>_ablation_chain.py c --ablation <MODE>:
-     буфер с HF, оффлайн-претрен коллеги (50x5), MAX_HOURS=11 — процесс сам
-     завершится, сохранит модель и выгрузит всё на HF до 12-часового лимита;
+     буфер с HF, MAX_HOURS=10.75 — процесс сам завершится, сохранит модель
+     и выгрузит всё на HF с запасом до 12-часового лимита. По умолчанию
+     RESUME=auto: продолжает с последнего чекпоинта пары на HF (претрен
+     пропускается), поэтому цепочка сессий наращивает обучение, а не
+     начинает заново;
   4. весь stdout запуска дублируется в runs_.../logs/log.txt и уезжает на HF
      (tee внутри раннера) — kernel-лог Kaggle не единственная копия;
   5. в конце копирует runs_single в /kaggle/working (output кернела).
@@ -29,7 +32,9 @@ import time
 PDE = os.getenv("PDE", "poisson_boltzmann_2d")
 MODE = os.getenv("MODE", "none")
 SEED = os.getenv("SEED", "1234")
-MAX_HOURS = os.getenv("MAX_HOURS", "11")
+MAX_HOURS = os.getenv("MAX_HOURS", "10.75")
+# auto: продолжить с последнего чекпоинта пары на HF; none: с нуля
+RESUME = os.getenv("RESUME", "auto")
 HF_RESULTS = os.getenv("HF_RESULTS", "danil-e/rlpinn-ablation-runs")
 HF_BUFFER = os.getenv("HF_BUFFER", "danil-e/rlpinn-ablation-buffers")
 HF_PREFIX = os.getenv("HF_PREFIX", "runs_kaggle")
@@ -106,6 +111,7 @@ def main():
         "--hf-results", HF_RESULTS,
         "--hf-results-prefix", HF_PREFIX,
         "--run-tag", run_tag,
+        "--resume-from", RESUME,
     ]
     print("\n$ " + " ".join(cmd), flush=True)
     result = subprocess.run(cmd)
