@@ -297,6 +297,15 @@ def run_deepxde_rl_training(
         print(f"⏯  Продолжаем обучение с запуска {resume_checkpoint.get('tag')} — "
               "оффлайн-претрен пропущен.")
 
+        # Приоритеты PER под загруженные веса: если чекпоинт их не принёс,
+        # пересчитываем оффлайн (иначе буфер остаётся с плоскими дефолтами)
+        if (not eval_only and getattr(rl_agent, "needs_priority_recalc", False)
+                and len(rl_agent.replay_buffer) > 0):
+            from RL.rl_utils.per_offline import recalc_all_priorities_batched
+            print("⏯  Оффлайн-пересчёт приоритетов PER под загруженные веса...")
+            recalc_all_priorities_batched(rl_agent, batch_size=rl_agent.recalc_batch_size)
+            rl_agent.needs_priority_recalc = False
+
     # --- Оффлайн-претрен агента чисто на буфере, до онлайн-траекторий ---
     # Компромисс при малом бюджете онлайн-шагов: агент сначала выучивается на
     # оффлайн-транзишенах, онлайн-часть стартует с осмысленной политикой.

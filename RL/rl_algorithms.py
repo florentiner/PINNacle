@@ -170,6 +170,9 @@ class DQNAgent:
             "gamma": self.gamma,
             "steps_done": self.steps_done,
             "opt_step": self.opt_step,
+            # Приоритеты PER: буфер пересобирается из HF детерминированно в том же
+            # порядке, поэтому список выровнен по индексам и восстановим.
+            "replay_prior": list(self.replay_buffer.prior),
             "metadata": metadata or {},
         }
         torch.save(payload, out_dir / "agent_final.pt")
@@ -218,6 +221,19 @@ class DQNAgent:
         self.warmup_active = False
         self.recalc_done = True
 
+        # Приоритеты PER из чекпоинта: без них резюм оставлял буфер с плоскими
+        # дефолтами (в v2 до 28% буфера так и не получило реального приоритета
+        # за всю сессию) — PER вырождался в смещённый uniform.
+        self.needs_priority_recalc = self.ablation != "no_per"
+        saved_prior = payload.get("replay_prior")
+        if saved_prior is not None and len(saved_prior) == len(self.replay_buffer.prior):
+            self.replay_buffer.prior = [float(x) for x in saved_prior]
+            self.needs_priority_recalc = False
+            print(f"⏯  Приоритеты PER восстановлены из чекпоинта ({len(saved_prior)}).")
+        elif saved_prior is not None:
+            print(f"⚠️ Приоритеты из чекпоинта не подходят по размеру "
+                  f"({len(saved_prior)} vs {len(self.replay_buffer.prior)}) — нужен пересчёт.")
+
         print(f"⏯  Загружен полный чекпоинт агента: {path} "
               f"(ablation={ckpt_ablation}, steps_done={self.steps_done}, opt_step={self.opt_step}); сети в eval().")
         return payload.get("metadata", {})
@@ -238,6 +254,7 @@ class DQNAgent:
             self.steps_done = int(steps_done)
         self.warmup_active = False
         self.recalc_done = True
+        self.needs_priority_recalc = self.ablation != "no_per"
 
         print(f"⏯  Загружены снапшоты голов агента (steps_done={self.steps_done}); "
               f"таргеты = копия весов, Adam с нуля; сети в eval().")
