@@ -1,4 +1,4 @@
-# Separate file for RL algorithms (e.g., rl_algorithms.py)
+﻿# Separate file for RL algorithms (e.g., rl_algorithms.py)
 
 import torch
 import torch.nn as nn
@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from math import ceil
 import statistics
+from contextlib import contextmanager
 from pathlib import Path
 from RL.rl_utils.DQN_classes import DQN_optim, DQN_params
 from RL.rl_utils.per_buffer import PrioritizedReplayBuffer, Transition
@@ -147,6 +148,28 @@ class DQNAgent:
         self.optimizer_opt = optim.Adam(self.model_optim.parameters(), lr=lr)
         self.optimizer_params = optim.Adam(self.model_params.parameters(), lr=lr)
 
+    @contextmanager
+    def inference_mode(self):
+        """BatchNorm в eval на время инференса, с возвратом прежнего режима.
+
+        В сети агента три BatchNorm2d, а инференс идёт батчем 1 (select_action и
+        бутстрап soft-Watkins: next_states[n:n+1]). В train-режиме BN нормирует
+        такой батч по нему самому — Q вырождаются, а running-статистика ползёт.
+        Бьёт это АСИММЕТРИЧНО: soft-Watkins делает сотни батч-1 проходов за
+        итерацию, а no_soft_watkins считает таргет полным батчем. Поэтому режимы
+        разводим явно: eval — весь инференс, train — только градиентные проходы
+        полным батчем.
+        """
+        was_optim = self.model_optim.training
+        was_params = self.model_params.training
+        self.model_optim.eval()
+        self.model_params.eval()
+        try:
+            yield
+        finally:
+            self.model_optim.train(was_optim)
+            self.model_params.train(was_params)
+
     def save_final_model(self, out_dir, metadata=None):
         """Сохраняет обученного агента целиком — то, что нужно для сравнения.
 
@@ -173,6 +196,12 @@ class DQNAgent:
             # Приоритеты PER: буфер пересобирается из HF детерминированно в том же
             # порядке, поэтому список выровнен по индексам и восстановим.
             "replay_prior": list(self.replay_buffer.prior),
+            # Бегущие статистики: без них резюм сбрасывал σ trust-region в 0 и
+            # β IS-весов в начальное — асимметричный гандикап тем режимам,
+            # которые эти механизмы используют.
+            "td_running_std": self.td_running_std,
+            "param_td_running_std": dict(self.param_td_running_std),
+            "per_beta": self.per_beta,
             "metadata": metadata or {},
         }
         torch.save(payload, out_dir / "agent_final.pt")
@@ -211,13 +240,18 @@ class DQNAgent:
                 except Exception as exc:
                     print(f"⚠️ Не удалось загрузить состояние {key} ({exc}); оптимизатор начнёт заново.")
 
-        self.model_optim.eval()
-        self.model_params.eval()
+        # Таргет-сети всегда в eval (их никто не обучает); основные — в train,
+        # а на время инференса их временно переключает inference_mode().
+        self.model_optim.train()
+        self.model_params.train()
         self.target_model_optim.eval()
         self.target_model_params.eval()
 
         self.steps_done = int(payload.get("steps_done", self.steps_done))
         self.opt_step = int(payload.get("opt_step", self.opt_step))
+        self.td_running_std = float(payload.get("td_running_std", self.td_running_std))
+        self.param_td_running_std = dict(payload.get("param_td_running_std", self.param_td_running_std))
+        self.per_beta = float(payload.get("per_beta", self.per_beta))
         self.warmup_active = False
         self.recalc_done = True
 
@@ -247,8 +281,8 @@ class DQNAgent:
         self.model_params.load_state_dict(torch.load(params_path, map_location=self.device, weights_only=False))
         self.reinit_target()
 
-        self.model_optim.eval()
-        self.model_params.eval()
+        self.model_optim.train()
+        self.model_params.train()
 
         if steps_done is not None:
             self.steps_done = int(steps_done)
@@ -418,12 +452,16 @@ class DQNAgent:
 
     def _greedy_mask(self, s_batch, a_batch):
     # s_batch: Tensor[B, ..., 26,26], a_batch: LongTensor[B]
-        with torch.no_grad():
+        with self.inference_mode(), torch.no_grad():
             _, q_all = self.model_optim(s_batch)       # [B, A]
             a_star = q_all.argmax(dim=1)               # [B]
         return (a_batch == a_star)                     # [B] bool
 
     def _soft_watkins_targets(self, seq, gamma):
+        with self.inference_mode():
+            return self._soft_watkins_targets_impl(seq, gamma)
+
+    def _soft_watkins_targets_impl(self, seq, gamma):
         states      = torch.stack([self._stack_state(tr.state)      for tr in seq])
         next_states = torch.stack([self._stack_state(tr.next_state) for tr in seq])
         actions     = torch.tensor([tr.action[0] for tr in seq], dtype=torch.long, device=self.device)
@@ -499,7 +537,8 @@ class DQNAgent:
                 self.per_beta = min(1.0, self.per_beta + self.per_beta_inc)
                 is_w = is_w.to(self.device)
 
-            policy_position_metrics = collect_policy_metrics_by_seq_position(self, seqs)    
+            with self.inference_mode():
+                policy_position_metrics = collect_policy_metrics_by_seq_position(self, seqs)
 
             first_trs = [seq[0] for seq in seqs]
 
@@ -520,6 +559,10 @@ class DQNAgent:
             opt_model_i = torch.IntTensor(opt_model_i).to(self.device)
 
             # --- OPTIMIZER HEAD: текущие Q(s_t,a_t)
+            # Явный train(): это единственный проход, который считает градиенты
+            # и обязан нормироваться по полному батчу (BN обновляет статистику).
+            self.model_optim.train()
+            self.model_params.train()
             flat, q_opt_cur = self.model_optim(state)
             q_sa = q_opt_cur.gather(1, action_o.view(-1,1)).squeeze(1)
 
@@ -527,7 +570,7 @@ class DQNAgent:
             if self.ablation == "no_soft_watkins":
                 # Абляция soft-Watkins: старый 1-step Double DQN таргет
                 # (код до введения G^{λ,κ}, коммит 2919b34~1 в torch_DE_solver)
-                with torch.no_grad():
+                with self.inference_mode(), torch.no_grad():
                     _, q_opt_next_online = self.model_optim(next_state)               # (B,A)
                     a_next = q_opt_next_online.argmax(dim=1)                          # (B,)
                     _, q_opt_next_target = self.target_model_optim(next_state)        # (B,A)
@@ -553,7 +596,7 @@ class DQNAgent:
             sigma_t = torch.full_like(q_sa, fill_value=sigma)         # [B], на девайсе
 
             # --- разность между online и target на ТЕКУЩЕМ (s_t, a_t) ---
-            with torch.no_grad():
+            with self.inference_mode(), torch.no_grad():
                 _, q_opt_tgt_cur = self.target_model_optim(state)     # [B, A]
             q_tgt_sa = q_opt_tgt_cur.gather(1, action_o.view(-1,1)).squeeze(1)  # [B]
             gap = (q_sa.detach() - q_tgt_sa)                          # [B]
@@ -580,7 +623,7 @@ class DQNAgent:
             # --- PARAM HEADS: Double per-parameter ---
             opt_names = [self.i2opt[int(i.item())] for i in action_o]
             q_params_cur = self.model_params(flat, opt_names)
-            with torch.no_grad():
+            with self.inference_mode(), torch.no_grad():
                 q_params_next_on = self.model_params(next_state, opt_names)
                 q_params_next_tg = self.target_model_params(next_state, opt_names)
 
@@ -901,7 +944,7 @@ class DQNAgent:
 
         # --- GREEDY ---
         if sample > eps_threshold:
-            with torch.no_grad():
+            with self.inference_mode(), torch.no_grad():
                 liner_out, q_opt = self.model_optim(state_tensor)
                 optim_class = int(torch.argmax(q_opt).item())
 

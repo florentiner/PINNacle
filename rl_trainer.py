@@ -36,7 +36,7 @@ os.makedirs(output_dir, exist_ok=True)
 
 def _greedy_action_from_state(rl_agent, state):
     """Чисто жадное действие агента из состояния (без ε и без инкремента steps_done)."""
-    with torch.no_grad():
+    with rl_agent.inference_mode(), torch.no_grad():
         x = rl_agent._stack_state(state).unsqueeze(0)
         flat, q_opt = rl_agent.model_optim(x)
         optim_class = int(torch.argmax(q_opt).item())

@@ -1,4 +1,4 @@
-# per_offline.py
+﻿# per_offline.py
 import torch
 
 @torch.no_grad()
@@ -79,6 +79,9 @@ def recalc_all_priorities_batched(agent, batch_size: int = 32):
         new_priors.extend(new_p_chunk)
         idxs_chunk = torch.arange(start, end, dtype=torch.long)
         buf.update_priorities(idxs_chunk, torch.tensor(new_p_chunk, dtype=torch.float))
+
+    agent.model_optim.train(prev_optim)
+    agent.model_params.train(prev_params)
 
     print(f"✅ Recalculated priorities for {N} transitions. "
           f"mean={float(torch.tensor(new_priors).mean()):.4f}, "
