@@ -24,6 +24,10 @@ def recalc_all_priorities_batched(agent, batch_size: int = 32):
         print("Replay buffer is empty; skip recalc.")
         return
 
+    # Режим основных сетей запоминаем и возвращаем в конце: иначе они остались бы
+    # в eval на всё обучение и BatchNorm перестал бы обновляться.
+    prev_optim = agent.model_optim.training
+    prev_params = agent.model_params.training
     agent.model_optim.eval(); agent.target_model_optim.eval()
     agent.model_params.eval(); agent.target_model_params.eval()
 
