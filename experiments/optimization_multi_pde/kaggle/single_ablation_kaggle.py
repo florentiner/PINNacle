@@ -1,4 +1,4 @@
-"""Kaggle-кернел кампании: ОДНА сессия = ОДИН (PDE x режим абляции).
+﻿"""Kaggle-кернел кампании: ОДНА сессия = ОДИН (PDE x режим абляции).
 
 Кампания абляции: 3 уравнения x 4 режима = 12 сессий, раскиданных по
 кагл-аккаунтам (по 2 сессии на аккаунт). Каждая сессия:
@@ -99,6 +99,8 @@ def main():
     if os.path.exists(CLONE_DIR):
         shutil.rmtree(CLONE_DIR)
     sh(f"git clone -b {BRANCH} --single-branch {REPO_URL} {CLONE_DIR}")
+    # Точная версия кода в логе: иначе постфактум не отличить, какие фиксы попали в запуск
+    sh(f"git -C {CLONE_DIR} log -1 --format='КОММИТ КОДА: %h %cd %s' --date=iso")
     sh(f"{sys.executable} -m pip install -q gym python-dotenv dill")
     ensure_torch_matches_gpu()
 

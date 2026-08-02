@@ -269,7 +269,8 @@ class DQNAgent:
                   f"({len(saved_prior)} vs {len(self.replay_buffer.prior)}) — нужен пересчёт.")
 
         print(f"⏯  Загружен полный чекпоинт агента: {path} "
-              f"(ablation={ckpt_ablation}, steps_done={self.steps_done}, opt_step={self.opt_step}); сети в eval().")
+              f"(ablation={ckpt_ablation}, steps_done={self.steps_done}, opt_step={self.opt_step}); "
+              f"режимы BN: train для градиентов, eval для инференса [bn-discipline].")
         return payload.get("metadata", {})
 
     def load_head_snapshots(self, optim_path, params_path, steps_done=None):
