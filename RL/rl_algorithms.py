@@ -349,10 +349,11 @@ class DQNAgent:
             opt_model_i=detach_item(transition.opt_model_i)
         )
     
-    def push_memory(self, rl_params, priority=None):
+    def push_memory(self, rl_params, priority=None, episode_id=None):
         tr = self.detach_transition(Transition(*rl_params))
         self.replay_buffer.push(
-            tr.state, tr.next_state, tr.action, tr.reward, tr.done, tr.model_reward, tr.opt_model_i, coeff=1.5
+            tr.state, tr.next_state, tr.action, tr.reward, tr.done, tr.model_reward, tr.opt_model_i,
+            coeff=1.5, episode_id=episode_id
         )
 
     def _stack_state(self, st):
@@ -618,8 +619,10 @@ class DQNAgent:
             loss_opt = (per_sample_loss_opt * tr_keep).sum() / tr_keep.sum().clamp_min(1.0)
 
 
-            td_opt_abs = (q_sa - y_opt).abs().detach()
-            td_opt_abs = td_opt_abs * tr_keep + self.tr_eps  
+            # Приоритет = |TD| независимо от маски. Умножение на tr_keep давало
+            # выброшенным сэмплам приоритет ~2e-6, то есть хоронило их в буфере
+            # навсегда, хотя маска — решение на ТЕКУЩИЙ шаг, а не приговор.
+            td_opt_abs = (q_sa - y_opt).abs().detach() + self.tr_eps
 
             # --- PARAM HEADS: Double per-parameter ---
             opt_names = [self.i2opt[int(i.item())] for i in action_o]
@@ -670,7 +673,7 @@ class DQNAgent:
             # --- апдейт приоритетов PER ---
             with torch.no_grad():
                 td_param_abs = torch.as_tensor(td_param_items, dtype=torch.float, device=self.device)
-                td_param_abs = td_param_abs * tr_keep + self.tr_eps
+                td_param_abs = td_param_abs + self.tr_eps
                 new_priors = td_opt_abs + td_param_abs
             if self.ablation != "no_per":
                 self.replay_buffer.update_priorities(idxs, new_priors.cpu())

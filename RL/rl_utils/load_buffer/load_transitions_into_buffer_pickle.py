@@ -1,4 +1,4 @@
-import os
+﻿import os
 import torch
 from collections import deque, namedtuple
 from sklearn.model_selection import train_test_split
@@ -121,7 +121,7 @@ def load_transitions_to_replay_buffer(replay_buffer, source, learn_or_analyze="l
             opt_model_i=data['opt_model_i']
         )
 
-        replay_buffer.push(*transition)
+        replay_buffer.push(*transition, episode_id=data.get("_block_id", -1))
         count += 1
         if data['done'] == 1:
             count_done_1 += 1

@@ -346,8 +346,12 @@ def run_deepxde_rl_training(
         rl_agent.transition_counter = 0
 
     idx_traj = 0
+    # id для онлайн-траекторий: со сдвигом от офлайн-блоков, чтобы многошаговый
+    # таргет не склеивал соседние траектории между собой и с офлайн-данными
+    online_episode_base = 1_000_000
 
     for traj in range(train_args["n_trajectories"]):
+        online_episode_id = online_episode_base + traj
         # Одна траектория идёт 1–2 часа, поэтому проверяем бюджет времени и
         # запрос на остановку ДО начала новой — иначе запуск не закончится сам.
         if run_control is not None and run_control.should_stop():
@@ -553,7 +557,7 @@ def run_deepxde_rl_training(
                     tr["done"],
                     chain_reward,
                     tr["opt_model_i"],
-                ))
+                ), episode_id=online_episode_id)
 
                 step_done = tr["agent_step"]
 

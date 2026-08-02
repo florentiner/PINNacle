@@ -1,4 +1,4 @@
-import io
+﻿import io
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -689,6 +689,8 @@ def collect_all_comet_transitions(
                 block_entries,
                 state_loss_is_log=True,
             )
+        for tr in block_entries:
+            tr["_block_id"] = block_index      # граница прогона для multi-step таргета
         all_entries.extend(block_entries)
 
         chain = []
@@ -828,6 +830,8 @@ def collect_all_local_transitions(
                 block_entries,
                 state_loss_is_log=True,
             )
+        for tr in block_entries:
+            tr["_block_id"] = block_index      # граница прогона для multi-step таргета
         all_entries.extend(block_entries)
 
     print(f"\n🚀 Всего собрано {len(all_entries)} переходов из {len(transition_blocks)} локальных экспериментов.")

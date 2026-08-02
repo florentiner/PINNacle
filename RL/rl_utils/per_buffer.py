@@ -1,4 +1,4 @@
-import torch
+﻿import torch
 import random
 from collections import namedtuple
 import math
@@ -14,6 +14,11 @@ class PrioritizedReplayBuffer:
         self.alpha = alpha
         self.eps = eps
         self.memory, self.prior, self.pos = [], [], 0
+        # id эпизода/эксперимента на каждый транзишен: буфер — плоский список
+        # склеенных подряд прогонов, и 95% из них заканчиваются НЕтерминально.
+        # Без этих меток последовательности перетекают в чужой прогон и портят
+        # многошаговый таргет (замер на pb2d: 8.2% последовательностей).
+        self.episode_ids = []
 
         # --- success replay ---
         # Порог по model_reward, выше которого терминальный переход считаем "успехом"
@@ -27,9 +32,11 @@ class PrioritizedReplayBuffer:
     def __len__(self):
         return len(self.memory)
 
-    def push(self, *args, priority=None, coeff=1.0):
+    def push(self, *args, priority=None, coeff=1.0, episode_id=None):
         """
         args: (state, next_state, action, reward, done, model_reward, opt_model_i)
+        episode_id: метка прогона/эпизода — по ней обрываются последовательности,
+        чтобы многошаговый возврат не склеивал разные траектории.
         """
         tr = Transition(*args)
 
@@ -47,14 +54,18 @@ class PrioritizedReplayBuffer:
             p = self.eps
 
         # --- индекс, в который пишем ---
+        if episode_id is None:
+            episode_id = -1
         if len(self.memory) < self.capacity:
             idx = len(self.memory)
             self.memory.append(tr)
             self.prior.append(p)
+            self.episode_ids.append(episode_id)
         else:
             idx = self.pos
             self.memory[idx] = tr
             self.prior[idx] = p
+            self.episode_ids[idx] = episode_id
             self.pos = (self.pos + 1) % self.capacity
 
         # --- обновляем success_indexes для этого индекса ---
@@ -123,7 +134,10 @@ class PrioritizedReplayBuffer:
         i = start_idx
         N = len(self.memory)
         steps = 0
+        ep0 = self.episode_ids[start_idx] if start_idx < len(self.episode_ids) else None
         while i < N and steps < L:
+            if ep0 is not None and i < len(self.episode_ids) and self.episode_ids[i] != ep0:
+                break            # начался другой прогон — дальше идти нельзя
             tr = self.memory[i]
             seq.append(tr)
             steps += 1
@@ -146,8 +160,11 @@ class PrioritizedReplayBuffer:
         i = end_idx
         steps = 0
         N = len(self.memory)
+        ep0 = self.episode_ids[end_idx] if end_idx < len(self.episode_ids) else None
 
         while i >= 0 and steps < L:
+            if ep0 is not None and i < len(self.episode_ids) and self.episode_ids[i] != ep0:
+                break            # ушли в предыдущий прогон
             tr = self.memory[i]
 
             # Если это не самый правый шаг и у него done != 0,
