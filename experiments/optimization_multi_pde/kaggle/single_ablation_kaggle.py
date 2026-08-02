@@ -1,4 +1,4 @@
-﻿"""Kaggle-кернел кампании: ОДНА сессия = ОДИН (PDE x режим абляции).
+"""Kaggle-кернел кампании: ОДНА сессия = ОДИН (PDE x режим абляции).
 
 Кампания абляции: 3 уравнения x 4 режима = 12 сессий, раскиданных по
 кагл-аккаунтам (по 2 сессии на аккаунт). Каждая сессия:
@@ -36,6 +36,9 @@ SEED = os.getenv("SEED", "1234")
 MAX_HOURS = os.getenv("MAX_HOURS", "10.75")
 # auto: продолжить с последнего чекпоинта пары на HF; none: с нуля
 RESUME = os.getenv("RESUME", "auto")
+# Конкретный коммит вместо HEAD ветки: нужен, чтобы воспроизвести прогон на
+# более ранней ревизии кода (проверка устойчивости выводов между ревизиями).
+COMMIT = os.getenv("COMMIT", "")
 # Дополнительные аргументы раннера (строкой), напр. "--eval-only --fixed-steps 8"
 EXTRA_ARGS = os.getenv("EXTRA_ARGS", "")
 HF_RESULTS = os.getenv("HF_RESULTS", "danil-e/rlpinn-ablation-runs")
@@ -100,6 +103,8 @@ def main():
         shutil.rmtree(CLONE_DIR)
     sh(f"git clone -b {BRANCH} --single-branch {REPO_URL} {CLONE_DIR}")
     # Точная версия кода в логе: иначе постфактум не отличить, какие фиксы попали в запуск
+    if COMMIT:
+        sh(f"git -C {CLONE_DIR} checkout --quiet {COMMIT}")
     sh(f"git -C {CLONE_DIR} log -1 --format='КОММИТ КОДА: %h %cd %s' --date=iso")
     sh(f"{sys.executable} -m pip install -q gym python-dotenv dill")
     ensure_torch_matches_gpu()
