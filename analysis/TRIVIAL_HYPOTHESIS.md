@@ -78,3 +78,54 @@ Landscape deliverables (step 4): vanilla loss landscape around the collapsed sta
 trajectory overlays for V, C-rand, C-triv; component-space signature of the trivial
 state in the *vanilla* objective (L_PDE ≈ 0 while L_IC ≫ 0 — a detectable pattern that
 needs no reference solution) and a test of a no-SOTA avoidance heuristic based on it.
+
+---
+
+## RESULT — step 2 (vanilla collapse): CONFIRMED (2026-08-10, kaggle-trivial-vanilla)
+
+20k iters, T4, stock config. Final **L2RE = 0.9988**; **||pred||/||ref|| = 0.031** (33x
+closer to the trivial zero than to the solution). Amplitude: 0.83 at t=0 (IC patch,
+corr 0.95 with the IC mode) -> 0.36 at t=0.2 -> 0.09 at t=5 -> machine zero beyond
+t~25. The mechanism, measured:
+
+- **All loss components converge**: PDE 2e-4, IC 2e-4, BC 1e-5 — the vanilla
+  objective reports "solved" at L2RE 0.999. A ghost with a certificate of convergence.
+- **91.6% of the total squared residual is concentrated in t<=1 — 1% of the domain.**
+  Outside the thin layer the self-gated source is off and the residual is exactly 0.
+  The uniform-in-time loss happily pays an O(1) residual on a measure-1% sliver to
+  buy zero residual on the other 99% — the trivial branch wins by construction.
+- This is precisely the trade causal weighting forbids: with W_i gated by cumulative
+  early-time residual, the boundary layer is the ONLY thing that matters until it is
+  resolved (prediction for step 3).
+
+---
+
+## Step 4 pre-registration: no-SOTA avoidance via error-space patterns (2026-08-10)
+
+**Detector (reference-free, validated offline)**: C_enrich (early-time residual
+enrichment; >3 = causality-violating layer) + A_late (late dynamics alive; <0.1 =
+frozen). Separation on saved runs: heat-vanilla (20.0, 0.000: both flags), KS-vanilla
+(4.3, 0.70: front flag), GS-vanilla (1.9, 0.005: dead flag), KS-causal control
+(0.012, 1.65: clean).
+
+**Intervention (vanilla toolbox only — no causal weights, no windows, no arch
+change)**: TrivialGuardCallback, mode "rar" — when flagged, replace 50% of PDE
+collocation points with pool points sampled proportional to squared residual (the
+measured mechanism is a *cheap* thin layer: 91.6% of squared residual in 1% of the
+domain; concentrating points there makes the trivial trade expensive). Control mode
+"uniform" resamples uniformly on the same schedule.
+
+Experiment matrix (T4, 20k iters, seed 1234): {heatlt, ks} x {rar, uniform}.
+
+Pre-registered hypotheses:
+- H-T1 (heat, rar): the guard prevents full collapse — L2RE substantially below the
+  vanilla 0.9988 and/or the collapse front (amplitude decay point) is pushed to
+  later t; possible self-organized marching (front moves -> residual moves -> samples
+  follow).
+- H-T2 (heat, uniform control): no material improvement over vanilla (the trade
+  stays cheap under uniform points).
+- H-T3 (ks, rar): escapes the trivial *flatness* (||pred|| rises toward O(||ref||),
+  mid-time structure appears, front flag clears) but final L2RE likely remains poor
+  (>0.5) — pattern-driven sampling defeats the trivial basin, not chaos itself.
+- H-T4: detector separates all vanilla-trivial runs from causal runs (incl. the
+  incoming C-rand / C-triv heat data).

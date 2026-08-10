@@ -10,6 +10,7 @@ import torch
 import deepxde as dde
 from src.pde.heat import Heat2D_LongTime
 from src.pde.wave import Wave1D
+from src.pde.chaotic import KuramotoSivashinskyEquation
 from src.utils.args import parse_hidden_layers, parse_loss_weight
 from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback
 
@@ -30,7 +31,9 @@ if __name__ == "__main__":
     parser.add_argument('--plot-every', type=int, default=2000)
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--method', type=str, default="adam")
-    parser.add_argument('--case', type=str, default="heatlt", choices=["heatlt", "wave1d", "all"])
+    parser.add_argument('--case', type=str, default="heatlt", choices=["heatlt", "wave1d", "ks", "all"])
+    parser.add_argument('--guard', type=str, default="off", choices=["off", "rar", "uniform"])
+    parser.add_argument('--guard-period', type=int, default=1000)
     parser.add_argument('--hyp-data', action='store_true', help="save forensic data (checkpoints, fields, metrics.csv)")
 
     command_args = parser.parse_args()
@@ -45,6 +48,8 @@ if __name__ == "__main__":
         pde_list = [Heat2D_LongTime]
     elif command_args.case == "wave1d":
         pde_list = [Wave1D]
+    elif command_args.case == "ks":
+        pde_list = [KuramotoSivashinskyEquation]
     else:
         pde_list = [Heat2D_LongTime, Wave1D]
 
@@ -79,6 +84,9 @@ if __name__ == "__main__":
         if command_args.hyp_data:
             from src.utils.hypothesis_callback import HypothesisDataCallback
             callbacks.append(HypothesisDataCallback(log_every=command_args.log_every, ckpt_every=command_args.plot_every))
+        if command_args.guard != "off":
+            from src.utils.trivial_guard import TrivialGuardCallback
+            callbacks.append(TrivialGuardCallback(mode=command_args.guard, period=command_args.guard_period))
 
         trainer.add_task(get_model_dde, {
             "iterations": command_args.iter,
