@@ -1,0 +1,5 @@
+[
+    {"optimizer": "SOAP", "lr": 0.003, "epochs": 15500, "precondition_frequency": 2},
+    {"boost_net": {"hidden": "64*3", "eps": "auto"}},
+    {"optimizer": "SOAP", "lr": 0.003, "epochs": "rest:31000", "precondition_frequency": 2}
+]

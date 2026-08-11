@@ -185,13 +185,67 @@ def run_worker(args) -> int:
     save_path = os.path.join(args.save_dir, f"{args.pde_name}_seed_{seed}")
     os.makedirs(save_path, exist_ok=True)
 
+    class BoostedNet(torch.nn.Module):
+        """u(x) = base(x) + eps * boost(x), base frozen (multi-stage boosting,
+        arXiv 2307.08934). Gradients w.r.t. the INPUT still flow through base
+        (needed for PDE residuals); only base's parameters are frozen."""
+
+        def __init__(self, base, boost, eps):
+            super().__init__()
+            self.base = base
+            self.boost = boost
+            self.eps = float(eps)
+            self.regularizer = None  # deepxde Model expects this attribute
+            for p in self.base.parameters():
+                p.requires_grad_(False)
+
+        def forward(self, x):
+            return self.base(x) + self.eps * self.boost(x)
+
     rmse = brmse = l2re = bc_l2re = float("inf")
     stages = []
+    spent_epochs = 0
     t0 = time.time()
 
     for stage_idx, stage in enumerate(chain):
+        if "boost_net" in stage:
+            cfg = stage["boost_net"] if isinstance(stage["boost_net"], dict) else {}
+            # eps: explicit number, or "auto" = RMS of the current PDE residual
+            # (the paper's eps ~ RMS(r1) up to the 2*pi*f_d factor we skip).
+            eps = cfg.get("eps", "auto")
+            if eps == "auto":
+                losses = np.asarray(model.train_state.loss_train, dtype=float)
+                eps = float(np.sqrt(max(losses[0], 1e-30)))  # loss[0] = PDE residual MSE
+            hidden = cfg.get("hidden", "64*3")
+            from src.utils.args import parse_hidden_layers
+            import argparse as _ap
+            layer_sizes = ([model.net.linears[0].in_features]
+                           + parse_hidden_layers(_ap.Namespace(hidden_layers=hidden))
+                           + [model.net.linears[-1].out_features]
+                           if hasattr(model.net, "linears") else None)
+            if layer_sizes is None:
+                raise RuntimeError("boost_net requires an FNN-style base net")
+            boost = dde.nn.FNN(layer_sizes, "tanh", "Glorot normal").float()
+            pde_ref = getattr(model, "pde", None)
+            model = dde.Model(model.data, BoostedNet(model.net, boost, eps))
+            model.pde = pde_ref  # PINNacle attaches the pde to the Model; TesterCallback needs it
+            print(f"[seed {seed}] Stage {stage_idx}: BOOST_NET added "
+                  f"(hidden={hidden}, eps={eps:.3e}); base frozen.", flush=True)
+            stages.append({"stage": stage_idx, "optimizer": "boost_net",
+                           "epochs": 0, "eps": eps, "hidden": hidden,
+                           "rmse": rmse, "brmse": brmse, "l2re": l2re, "bc_l2re": bc_l2re})
+            continue
+
         opt_name = stage.get("optimizer") or stage.get("type")
-        epochs = int(stage["epochs"])
+        raw_epochs = stage["epochs"]
+        if isinstance(raw_epochs, str) and raw_epochs.startswith("rest:"):
+            epochs = max(0, int(raw_epochs.split(":")[1]) - spent_epochs)
+        else:
+            epochs = int(raw_epochs)
+        if epochs == 0:
+            stages.append({"stage": stage_idx, "optimizer": opt_name, "epochs": 0,
+                           "rmse": rmse, "brmse": brmse, "l2re": l2re, "bc_l2re": bc_l2re})
+            continue
         print(f"\n{'=' * 70}")
         print(f"[seed {seed}] Stage {stage_idx}: {opt_name} | lr={stage['lr']} | epochs={epochs}")
         print(f"{'=' * 70}\n", flush=True)
@@ -200,14 +254,23 @@ def run_worker(args) -> int:
         model.compile(opt, loss_weights=loss_weights)
         model.optimizer = opt
 
-        tester = TesterCallback(log_every=args.display_every)
+        callbacks = [TesterCallback(log_every=args.display_every)]
+        tester = callbacks[0]
+        if "early_stop" in stage:
+            es = stage["early_stop"]
+            callbacks.append(dde.callbacks.EarlyStopping(
+                min_delta=float(es.get("min_delta", 1e-5)),
+                patience=int(es.get("patience", 2000)),
+            ))
+        step_before = int(model.train_state.step or 0)
         model.train(
             iterations=epochs,
             display_every=args.display_every,
-            callbacks=[tester],
+            callbacks=callbacks,
             model_save_path=save_path,
             save_model=False,
         )
+        spent_epochs += max(0, int(model.train_state.step or 0) - step_before)
 
         rmse = float(getattr(tester, "rmse", float("inf")))
         brmse = float(getattr(tester, "brmse", float("inf")))
