@@ -85,6 +85,24 @@ We tested the full action arsenal as pre-registered policy emulations:
   rung 0 climbed directly to the √π regime (fig14 green; L_IC 0.243 → 1.8e-7,
   init-independent: 0.851 vs random-init 0.832).
 
+**Generalization to constants and frozen states (user extension).** The trivial
+class is wider than u≡0: constants (GS's background), frozen patterns, every rung of
+the ladder. Their unifying property is *self-gated dynamics* — and since Heat-LT's
+forcing is explicitly time-dependent, life is mandatory for the true branch. Two
+class-level reference-free signals follow: **F_freeze** (mean |u_t|, absolute-scaled)
+and **F_drive** (spectral fraction at the known forcing frequency, read straight off
+the PDE). Validation: reference 0.95/0.76, vanilla 0.015/0.043, the march's √2π rung
+0.15/**0.006** — dead to the forcing, caught cleanly even where C_enrich/A_late were
+ambiguous (for autonomous PDEs no drive signal exists; constants there are caught by
+A_late — an honest scope limit). The **rung-veto policy** (march + frozen-tail veto →
+kick → re-march, loss untouched) then gives the sharpest measured boundary of this
+study: **6/6 dead branches correctly refused, zero false accepts** — unlike plain
+march, the veto never certified a wrong rung, and the freeze signal cannot be
+goodharted (you cannot fake being alive while being dead) — **but blind kicks never
+found the live branch** in 6 retries (its weight-space measure is negligible), and
+the budget expired back at rung 0. *Avoiding the trivial class via error space:
+YES as rejection/certification, NO as synthesis.*
+
 So the honest division of labor: the RL agent over the vanilla error space is a
 **detector, dispatcher and escape artist** — it can refuse to waste budget (wall
 detection saves the 75–90% post-collapse budget), certify basin membership, and break
@@ -128,6 +146,7 @@ The paper's machinery transfers to PINN weight space *quantitatively*:
 | honesty boundary | signals gameable when ghosts form a continuum | measured (KS-rar Goodhart); honest when the branch is exact & isolated (heat flags never lied) |
 | H-T1/T2 | resampling cures / uniform doesn't | refuted materially / confirmed |
 | H-S1/S2 | kick-controlled escape / escape ≠ cure | confirmed / confirmed |
+| rung-veto | frozen-dynamics veto rejects the whole trivial class (0, constants, rungs) | **confirmed as rejection** (6/6 refused, 0 false accepts; un-gameable signal) — synthesis of the live branch by blind kicks: refuted |
 | march | sampling-only policy escapes the trivial state | **confirmed for the state** (norm 0.76 vs 0.031) — but ALL error metrics worsen (L2RE 1.26 vs 1.00; covered-region 2.11) |
 | march→truth | …and reaches the true solution | **refuted with mechanism**: lands on rung √2π — vanilla loss cannot select branches |
 | causal escape | causal gate exits from *inside* rung 0, init-independent | confirmed (0.851 ≡ 0.832; correct rung √π) |

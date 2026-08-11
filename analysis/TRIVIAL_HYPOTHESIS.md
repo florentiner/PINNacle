@@ -302,3 +302,27 @@ init climbed to the correct sqrt(pi) regime). SSE around the march checkpoint
 (paper's stay-in-basin kicks x1/x2): local polish only (1.255 -> 1.199), no bridge
 between rungs. Final division of labor: pattern+sampling agent = detection, escape,
 economy; causal ordering = branch selection.
+
+---
+
+## RESULT — rung-veto experiment (constants generalization; 2026-08-12)
+
+User extension: the trivial class includes CONSTANTS and frozen states generally, not
+just u=0. Unifying property (measured): every member self-gates its dynamics — and
+Heat-LT's forcing is explicitly time-dependent, so the true solution MUST respond.
+New reference-free signals: F_freeze = |u_t| (abs-normalized) and F_drive = spectral
+fraction at the known forcing frequency. Validation: ref 0.95/0.76; vanilla rung-0
+0.015/0.043; march rung-sqrt(2pi) 0.15/**0.006** (dead to the forcing — caught even
+where C_enrich/A_late were weak); GS constants caught by A_late (autonomous PDE: no
+drive signal exists — honest scope limit).
+
+Veto policy (march + frozen-tail veto -> kick -> re-march, 6 retries, loss untouched):
+**6/6 dead branches correctly refused, zero false accepts** — unlike plain march
+(which settled on sqrt(2pi)) the veto never certified a dead rung. But blind kicks
+never FOUND the live branch (its weight-space measure is negligible among dead
+basins); budget expired back at rung 0 (L2RE 0.999).
+
+**Verdict on "avoid converging to constants via error space": YES as rejection —
+the class-level frozen-dynamics signal is un-gameable (you cannot fake being alive)
+and the policy never accepts a dead state; NO as synthesis — finding the live branch
+by blind exploration fails, branch construction still requires causal ordering.**
