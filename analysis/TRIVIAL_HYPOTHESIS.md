@@ -162,3 +162,30 @@ Pre-registered hypotheses:
   (barrier between them) — soup quality is itself a basin diagnostic.
 - H-S4 (selection): the reference-free trivial-score ranks children consistently
   with oracle L2RE — enabling escape-and-select without a reference solution.
+
+---
+
+## RESULT — step 4, KS guard pair (2026-08-11)
+
+| run | L2RE | norm_ratio | final C_enrich | flags | guard actions |
+|---|---|---|---|---|---|
+| vanilla (July) | 1.007 | 0.357 | 4.3 | front | — |
+| ks-rar (pattern-triggered) | 1.013 | 0.304 | **0.59** | **none** | **1** (step 3000) |
+| ks-uni (uniform control) | 1.012 | 0.373 | 5.37 | front | 20/20 |
+
+**H-T3 verdict: the optimistic half is REFUTED, and a detector blind spot is exposed.**
+One pattern-triggered resample permanently removed the front-collapse signature
+(C_enrich 3.3 -> 0.4-0.9 for the rest of training) — but accuracy did not move
+(L2RE 1.013; zero time slices track the reference). On the chaotic plateau the
+optimizer, taxed on the thin layer, does not propagate the solution — it finds
+*another ghost* with uniformly spread residual, invisible to the front-collapse
+signal (A_late also reads "alive" at 1.11 from the wash variance). The uniform
+control shows the signature only stays visible when nobody optimizes against it.
+
+Consequences: (1) on chaotic PDEs, error-space patterns are *gameable* — an
+intervention (or an RL agent rewarded on these signals) can optimize the signature
+away without touching the truth; any no-SOTA scheme needs signals that cannot be
+redistributed (the causal certificate W_min is exactly such a signal — it is
+anchored at the IC, not at a spatial pattern); (2) the trivial-signature detector
+remains valid as a *diagnostic* (it correctly never reported recovery of accuracy —
+no "solved" claim), but not as a sole optimization target.
