@@ -31,7 +31,9 @@ class TrivialGuardCallback(Callback):
     def __init__(self, mode="rar", period=1000, pool_size=20000, keep_frac=0.5,
                  resid_chunk=4096, log_dir=None, t_frac=0.05,
                  enrich_thr=3.0, dead_thr=0.10,
-                 march_t0_frac=0.02, march_dt_frac=0.02, march_eps=3e-3):
+                 march_t0_frac=0.02, march_dt_frac=0.02, march_eps=3e-3,
+                 veto=False, force_period_frac=0.08, veto_freeze_thr=0.2,
+                 kick_mult=6.0, kick_iters=1500, max_vetoes=6):
         super().__init__()
         assert mode in ("rar", "uniform", "march", "off")
         self.mode = mode
@@ -47,6 +49,15 @@ class TrivialGuardCallback(Callback):
         self.march_dt_frac = march_dt_frac
         self.march_eps = march_eps
         self._tstar_frac = march_t0_frac
+        self.veto = veto
+        self.force_period_frac = force_period_frac
+        self.veto_freeze_thr = veto_freeze_thr
+        self.kick_mult = kick_mult
+        self.kick_iters = kick_iters
+        self.max_vetoes = max_vetoes
+        self._vetoes = 0
+        self._kick_left = 0
+        self._base_lr = None
         self._since = 0
         self._rows = []
         self._bbox = None
@@ -105,6 +116,16 @@ class TrivialGuardCallback(Callback):
         r2 = (r ** 2).sum(axis=1)
         c_enrich, A, flag = self._signals(pts, u, r2)
         acted = 0
+        if self.mode == "march" and self._kick_left > 0:
+            # kick phase: hold high LR, then restart the march from scratch
+            self._kick_left -= self.period
+            if self._kick_left <= 0:
+                for gpar in self.model.opt.param_groups:
+                    gpar["lr"] = self._base_lr
+                self._tstar_frac = self.march_t0_frac
+                print(f"[guard veto] kick done -> re-march from t*={self._tstar_frac}",
+                      flush=True)
+            return
         if self.mode == "march":
             # RL-policy emulation, vanilla loss untouched: the agent only controls the
             # SAMPLING distribution — collocation points live in t in [t_lo, t_lo + tstar]
@@ -119,6 +140,34 @@ class TrivialGuardCallback(Callback):
                 self._tstar_frac = min(1.0, self._tstar_frac + self.march_dt_frac)
                 t_hi = lo[-1] + self._tstar_frac * span
                 acted = 1
+            # rung veto: once the horizon covers >1.5 forcing periods, the trailing
+            # period must show live dynamics (|u_t| at the tail); frozen tail =>
+            # self-gated wrong rung => kick out and re-march
+            if (self.veto and self._vetoes < self.max_vetoes
+                    and self._tstar_frac > 1.5 * self.force_period_frac):
+                tail_lo = t_hi - self.force_period_frac * span
+                m_tail = (pts[:, -1] > tail_lo) & (pts[:, -1] <= t_hi)
+                if m_tail.sum() > 200:
+                    pts_t = pts[m_tail].copy()
+                    eps_t = 0.01 * span
+                    pts_p = pts_t.copy(); pts_p[:, -1] += eps_t
+                    u0 = self.model.predict(pts_t); u1 = self.model.predict(pts_p)
+                    ut = np.abs((u1 - u0) / eps_t).mean()
+                    omega = 2 * np.pi / (self.force_period_frac * span)
+                    f_freeze = float(ut / (0.5 * omega))
+                    if f_freeze < self.veto_freeze_thr:
+                        self._vetoes += 1
+                        self._base_lr = self.model.opt.param_groups[0]["lr"]
+                        for gpar in self.model.opt.param_groups:
+                            gpar["lr"] = self._base_lr * self.kick_mult
+                        self._kick_left = self.kick_iters
+                        print(f"[guard veto] FROZEN TAIL (F_freeze {f_freeze:.3f} < "
+                              f"{self.veto_freeze_thr}) at t*={self._tstar_frac:.2f} "
+                              f"-> kick x{self.kick_mult} ({self._vetoes}/"
+                              f"{self.max_vetoes})", flush=True)
+                    else:
+                        print(f"[guard veto-check] tail alive: F_freeze {f_freeze:.3f}",
+                              flush=True)
             new = self._pool()[: self._n_pde]
             new[:, -1] = lo[-1] + np.random.rand(len(new)) * (t_hi - lo[-1])
             self.model.data.replace_with_anchors(new.astype(np.float32))
