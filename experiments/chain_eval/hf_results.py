@@ -110,7 +110,7 @@ def existing_seeds(df, pde_name: str, chain_key: str, smoke_test: bool,
     if df is None or df.empty:
         return set()
     mask = df["pde_name"] == pde_name
-    if schema == "chain":
+    if schema != "random":  # chain & chain_l2re both key on (chain_key, smoke_test)
         mask &= (
             (df["chain_key"] == chain_key)
             & (df["smoke_test"].astype(str).str.lower() == str(smoke_test).lower())
