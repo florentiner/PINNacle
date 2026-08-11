@@ -226,3 +226,26 @@ certification) — but no CURE: taxing the signature produces signature-free gho
 (KS guard), and escaping the basin produces neighboring ghosts (SSE). The cure
 requires changing what the objective rewards along time (the causal gate) — the
 pending C-triv run tests exactly that from the same starting point.
+
+---
+
+## RESULT — step 4, heat guard pair (2026-08-11)
+
+| run | L2RE | C_enrich | flags | collapse front (t-index of last alive slice /500) | guard actions |
+|---|---|---|---|---|---|
+| vanilla | 0.9993 | 20.0 | front+dead | 4 | — |
+| heat-rar | 0.9984 | 19.85 | front+dead | **12 (3x push)** | 20/20 |
+| heat-uni | 0.9992 | 20.0 | front+dead | 4 | 20/20 |
+
+- **H-T1: materially REFUTED.** Pattern-driven resampling produces a real but
+  microscopic propagation effect — the collapse front moves 3x later (t 0.8 -> 2.4
+  of 100) — and then stalls; self-organized marching does not bootstrap. The
+  optimizer prefers paying the concentrated-residual tax to propagating the
+  solution. L2RE unchanged (0.9984 vs 0.9993).
+- **H-T2: CONFIRMED** (uniform resampling: zero effect).
+- **Detector honesty contrast (vs the KS pair):** on Heat-LT the signature CANNOT be
+  gamed away — the trivial branch is exact, the residual has nowhere to
+  redistribute, and the flags stay correctly on (C_enrich ~20 throughout). On the
+  chaotic plateau the signature was removable without progress. Reference-free
+  signals are honest exactly when the trivial state is an *isolated exact* branch,
+  and gameable when ghosts form a continuum.
