@@ -59,15 +59,20 @@ We tested the full action arsenal as pre-registered policy emulations:
 | pattern-triggered resampling ∝ residual² | make the cheap sliver expensive | front pushed 3× (t 0.8→2.4), stalls; L2RE unchanged | **signature erased, truth untouched (Goodhart)** |
 | uniform resampling (control) | — | nothing | nothing |
 | LR-kick basin escape (×1…×32) | jump out of the basin | escapes (barrier 16) into **equivalent or deeper wrong minima** | same (fig8 "field of ghosts") |
-| **march-by-sampling** (the agent's best play) | expand collocation horizon [0, t*] only when covered residual is clean — time-marching expressed purely through the sampling distribution | **escapes the trivial attractor** (norm_ratio 0.76 vs vanilla's 0.031; field alive, fig14 orange) — **but lands on the wrong rung √2π** and stalls at t*=14 | front advances 9× (honest stall at the KS representation wall); covered part alive |
+| **march-by-sampling** (the agent's best play) | expand collocation horizon [0, t*] only when covered residual is clean — time-marching expressed purely through the sampling distribution | **escapes the trivial state** (norm_ratio 0.76 vs 0.031, fig14 orange) — but lands on the wrong rung √2π, stalls at t*=14, and every error metric worsens (L2RE 1.26 full / 2.11 covered vs vanilla 1.00) | front advances 9× (honest stall at the KS representation wall); covered part alive |
 
 **Answer to question 2, measured:**
 
-- **Avoiding the trivial solution — YES.** The march policy demonstrably defeats the
-  trivial attractor with zero loss changes: the pattern tells the agent where the
-  causality-violating layer is, and restricting *sampling* to the covered horizon
-  removes the cheap-sliver trade that made rung 0 profitable. This is the strongest
-  positive result available to a pattern-driven agent in the vanilla objective.
+- **Avoiding the trivial STATE — yes; improving the error — no.** The march policy
+  demonstrably pulls the network out of the trivial attractor with zero loss changes
+  (the field is alive: ‖pred‖/‖ref‖ = 0.764 vs vanilla's 0.031; amplitude sits on a
+  self-gating plateau instead of zero). But every **error** metric got *worse*:
+  full-domain L2RE 1.255 vs vanilla's 0.999, and even inside the covered horizon
+  t≤14 the error is 2.11 — the √2π rung is, in L2, *farther from the truth than
+  zero* (corr with the reference 0.19: it is a different dynamics, not a rescaled
+  truth). Both detector flags also remain honestly on (the field beyond t* is dead).
+  Escape without branch selection is not merely insufficient — it can be strictly
+  counterproductive by error.
 - **Converging to the TRUE solution — NO, and now we know why.** The vanilla loss
   cannot distinguish the rungs of the ghost ladder: every level is near-zero
   residual, so once the agent forces the state off rung 0, the optimizer is free to
@@ -123,7 +128,7 @@ The paper's machinery transfers to PINN weight space *quantitatively*:
 | honesty boundary | signals gameable when ghosts form a continuum | measured (KS-rar Goodhart); honest when the branch is exact & isolated (heat flags never lied) |
 | H-T1/T2 | resampling cures / uniform doesn't | refuted materially / confirmed |
 | H-S1/S2 | kick-controlled escape / escape ≠ cure | confirmed / confirmed |
-| march | sampling-only policy avoids the trivial solution | **confirmed** (escape measured) |
+| march | sampling-only policy escapes the trivial state | **confirmed for the state** (norm 0.76 vs 0.031) — but ALL error metrics worsen (L2RE 1.26 vs 1.00; covered-region 2.11) |
 | march→truth | …and reaches the true solution | **refuted with mechanism**: lands on rung √2π — vanilla loss cannot select branches |
 | causal escape | causal gate exits from *inside* rung 0, init-independent | confirmed (0.851 ≡ 0.832; correct rung √π) |
 | causal accuracy on heat | windows certify | not yet: plain/sine encodings plateau at w0 L2 0.82–0.97 (representation/collocation ceiling, not triviality); refined v3 (Δt=2 windows, 4× collocation) running — will be appended |
