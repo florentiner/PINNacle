@@ -1,0 +1,26 @@
+[
+ {
+  "optimizer": "SOAP",
+  "lr": 0.003,
+  "precondition_frequency": 2,
+  "epochs": 31000
+ },
+ {
+  "boost_net": {
+   "hidden": "64*3",
+   "eps": "auto",
+   "type": "fourier",
+   "sigmas": [
+    1,
+    10
+   ],
+   "n_feats": 64
+  }
+ },
+ {
+  "optimizer": "SOAP",
+  "lr": 0.003,
+  "precondition_frequency": 2,
+  "epochs": "rest:62000"
+ }
+]

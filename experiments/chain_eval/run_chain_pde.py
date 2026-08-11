@@ -202,6 +202,25 @@ def run_worker(args) -> int:
         def forward(self, x):
             return self.base(x) + self.eps * self.boost(x)
 
+    class FourierFNN(torch.nn.Module):
+        """FNN on fixed random Fourier features: x -> [sin(2*pi*xB), cos(2*pi*xB)].
+        Counters spectral bias so the boost net can fit the (high-frequency)
+        residual left by the converged base net (arXiv 2307.08934 uses higher
+        f_d for later stages for the same reason). Half the features per sigma."""
+
+        def __init__(self, in_dim, out_dim, hidden_sizes, sigmas, n_feats):
+            super().__init__()
+            per = max(1, n_feats // len(sigmas))
+            cols = [torch.randn(in_dim, per) * s for s in sigmas]
+            self.register_buffer("B", torch.cat(cols, dim=1))
+            self.fnn = dde.nn.FNN([2 * self.B.shape[1]] + hidden_sizes + [out_dim],
+                                  "tanh", "Glorot normal")
+            self.regularizer = None
+
+        def forward(self, x):
+            z = 2 * np.pi * (x @ self.B)
+            return self.fnn(torch.cat([torch.sin(z), torch.cos(z)], dim=1))
+
     rmse = brmse = l2re = bc_l2re = float("inf")
     stages = []
     spent_epochs = 0
@@ -216,23 +235,29 @@ def run_worker(args) -> int:
             if eps == "auto":
                 losses = np.asarray(model.train_state.loss_train, dtype=float)
                 eps = float(np.sqrt(max(losses[0], 1e-30)))  # loss[0] = PDE residual MSE
+            eps = float(eps) * float(cfg.get("eps_scale", 1.0))
             hidden = cfg.get("hidden", "64*3")
             from src.utils.args import parse_hidden_layers
             import argparse as _ap
-            layer_sizes = ([model.net.linears[0].in_features]
-                           + parse_hidden_layers(_ap.Namespace(hidden_layers=hidden))
-                           + [model.net.linears[-1].out_features]
-                           if hasattr(model.net, "linears") else None)
-            if layer_sizes is None:
+            hidden_sizes = parse_hidden_layers(_ap.Namespace(hidden_layers=hidden))
+            if not hasattr(model.net, "linears"):
                 raise RuntimeError("boost_net requires an FNN-style base net")
-            boost = dde.nn.FNN(layer_sizes, "tanh", "Glorot normal").float()
+            in_dim = model.net.linears[0].in_features
+            out_dim = model.net.linears[-1].out_features
+            net_type = cfg.get("type", "fnn")
+            if net_type == "fourier":
+                boost = FourierFNN(in_dim, out_dim, hidden_sizes,
+                                   cfg.get("sigmas", [1, 10]), cfg.get("n_feats", 64)).float()
+            else:
+                boost = dde.nn.FNN([in_dim] + hidden_sizes + [out_dim],
+                                   "tanh", "Glorot normal").float()
             pde_ref = getattr(model, "pde", None)
             model = dde.Model(model.data, BoostedNet(model.net, boost, eps))
             model.pde = pde_ref  # PINNacle attaches the pde to the Model; TesterCallback needs it
             print(f"[seed {seed}] Stage {stage_idx}: BOOST_NET added "
-                  f"(hidden={hidden}, eps={eps:.3e}); base frozen.", flush=True)
+                  f"(type={net_type}, hidden={hidden}, eps={eps:.3e}); base frozen.", flush=True)
             stages.append({"stage": stage_idx, "optimizer": "boost_net",
-                           "epochs": 0, "eps": eps, "hidden": hidden,
+                           "epochs": 0, "eps": eps, "hidden": hidden, "type": net_type,
                            "rmse": rmse, "brmse": brmse, "l2re": l2re, "bc_l2re": bc_l2re})
             continue
 

@@ -1,0 +1,8 @@
+[
+ {
+  "optimizer": "SOAP",
+  "lr": 0.003,
+  "precondition_frequency": 2,
+  "epochs": 62000
+ }
+]
