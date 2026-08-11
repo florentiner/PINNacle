@@ -1,0 +1,14 @@
+[
+ {
+  "optimizer": "SOAP",
+  "lr": 0.003,
+  "precondition_frequency": 2,
+  "epochs": 62000
+ },
+ {
+  "optimizer": "LBFGS",
+  "lr": 1.0,
+  "history_size": 100,
+  "epochs": 10000
+ }
+]
