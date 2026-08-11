@@ -285,3 +285,20 @@ region is unsampled garbage (global L2RE 1.31 is meaningless there). The stall w
 is the known KS representation ceiling of the vanilla FNN — sampling policy is not a
 representation fix. Heat-march (where the vanilla arch CAN represent the local
 solution) is the decisive test; running.
+
+---
+
+## RESULT — march-by-sampling, heat + SSE chain (2026-08-11): the ghost ladder
+
+Heat march: **escapes the trivial attractor** (norm_ratio 0.76 vs vanilla 0.031;
+field alive) — the strongest no-loss-change result — **but lands on the WRONG rung**:
+the field plateaus at 2.512 = sqrt(2*pi) to 3 digits (the SECOND zero of sin(u^2)),
+overshooting the true level sqrt(pi). March stalls honestly at t*=14/100. Mechanism:
+sin(u^2) self-gates at u in {0, sqrt(pi), sqrt(2pi), ...} — a LADDER of
+near-zero-residual branches; the vanilla loss cannot distinguish rungs, so any
+escape policy picks an arbitrary one. Branch selection = time-ordering from the IC =
+exactly what the causal gate encodes (the plain-causal run from the same trivial
+init climbed to the correct sqrt(pi) regime). SSE around the march checkpoint
+(paper's stay-in-basin kicks x1/x2): local polish only (1.255 -> 1.199), no bridge
+between rungs. Final division of labor: pattern+sampling agent = detection, escape,
+economy; causal ordering = branch selection.
