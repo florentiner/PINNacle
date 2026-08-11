@@ -129,3 +129,36 @@ Pre-registered hypotheses:
   (>0.5) — pattern-driven sampling defeats the trivial basin, not chaos itself.
 - H-T4: detector separates all vanilla-trivial runs from causal runs (incl. the
   incoming C-rand / C-triv heat data).
+
+---
+
+## Separate experiment: StarSSE basin escape (arXiv:2303.03374 adaptation, 2026-08-11)
+
+The paper (Sadrtdinov et al., NeurIPS 2023) studies ensembling from a pre-trained
+checkpoint: cyclic-LR "kicks" of controlled size either keep children inside the
+pre-train loss basin (linearly connected, soup-able) or push them out; leaving the
+basin costs transfer quality. **Inverted-sign mapping to our problem**: the
+vanilla-collapsed checkpoint sits in the *trivial* basin — a BAD basin — so their
+escape machinery becomes a candidate no-SOTA cure: same loss, same architecture,
+only LR-schedule moves in weight space.
+
+Protocol (benchmark_sse.py; T4; per case {heat-LT, KS}): star of 10 children from the
+collapsed ckpt (kick multipliers ×{1,2,4,8,32} of base LR 1e-3, 2 seeds each), one
+cosine cycle 2500 iters per child; per child: reference-free detector signals,
+oracle L2RE, ||pred||/||ref||, relative weight distance, and the paper's
+linear-connectivity barrier to the trivial point (11-point path of the unweighted
+vanilla loss); per kick: uniform soup of the 2 children.
+
+Pre-registered hypotheses:
+- H-S1 (basin picture transfers): escape is kick-controlled — small kicks give zero
+  barrier to the trivial point (same basin, score stays ~1); only large kicks
+  produce barriers.
+- H-S2 (payoff): escaped children improve over the trivial state (norm_ratio rises
+  from 0.03, front pushed later, L2RE < 0.999) but do NOT reach the true solution —
+  random kicks find *neighboring* basins, and the nearest basins of the vanilla loss
+  are other near-trivial states (front slightly later). Escape alone ≠ solution.
+- H-S3 (soups): same-kick children in the trivial basin soup to a trivial state
+  (flat basin); children that escaped to different basins produce broken soups
+  (barrier between them) — soup quality is itself a basin diagnostic.
+- H-S4 (selection): the reference-free trivial-score ranks children consistently
+  with oracle L2RE — enabling escape-and-select without a reference solution.
