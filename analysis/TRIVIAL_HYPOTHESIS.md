@@ -189,3 +189,40 @@ redistributed (the causal certificate W_min is exactly such a signal — it is
 anchored at the IC, not at a spatial pattern); (2) the trivial-signature detector
 remains valid as a *diagnostic* (it correctly never reported recovery of accuracy —
 no "solved" claim), but not as a sole optimization target.
+
+---
+
+## RESULT — StarSSE basin escape (2026-08-11)
+
+Implementation note (honesty): children within a kick are exact clones — full-batch
+deterministic training erased seed diversity (effective n=1 per kick; soup == child;
+H-S3 untested). The kick axis, which carries the main question, is unaffected.
+
+| kick | heat: barrier / loss / L2RE | KS: barrier / loss / L2RE |
+|---|---|---|
+| trivial ckpt | — / 7.72e-3 / 0.9993 | — / 3.06e-1 / 1.0068 |
+| x1 | 0 / 7.74e-3 / 0.9994 | 0 / 2.74e-1 / 1.0141 |
+| x2 | 0 / 1.06e-2 / 0.9990 | 4.4e-2 / 2.79e-1 / 1.0093 |
+| x4 | 3.0e-2 / 7.76e-3 / 0.9986 | 5.7e-1 / 3.14e-1 / 0.9784 |
+| x8 | **5.1e-1 / 5.88e-3 / 0.9987** | 6.3 / 3.24e-1 / 0.9765 |
+| x32 | 16.2 / 2.55e-2 / 0.9981 | 38.9 / 3.78e-1 / 0.9751 |
+
+- **H-S1 CONFIRMED**: escape is kick-controlled, monotone barrier growth — the
+  paper's basin picture transfers to PINN weight space exactly.
+- **H-S2: pessimistic half CONFIRMED**: escape != solution. The sharpest data point:
+  heat kick x8 LEFT the trivial basin (barrier 0.51, weight distance 0.48) and landed
+  in a *strictly deeper* minimum of the vanilla objective (loss 5.88e-3 < 7.72e-3) —
+  with identical error (L2RE 0.9987). **The vanilla loss landscape is
+  ghost-dominated: neighboring basins are equivalent trivial-class solutions, and
+  kick-based escape is a random walk between ghosts.** On KS, big kicks even worsen
+  the objective (0.27 -> 0.38) while cosmetically nudging L2RE (norm shrinks toward
+  zero-field).
+- **H-S4 (selection)**: moot at this resolution — all children score as ghosts by
+  both the detector and the oracle; nothing to select.
+
+Combined verdict of the two no-SOTA interventions (guard + SSE): error-space
+patterns give reference-free DETECTION and basin DIAGNOSIS (barriers, escape
+certification) — but no CURE: taxing the signature produces signature-free ghosts
+(KS guard), and escaping the basin produces neighboring ghosts (SSE). The cure
+requires changing what the objective rewards along time (the causal gate) — the
+pending C-triv run tests exactly that from the same starting point.
