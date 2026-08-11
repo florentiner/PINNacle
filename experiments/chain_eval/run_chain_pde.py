@@ -254,13 +254,36 @@ def run_worker(args) -> int:
         model.compile(opt, loss_weights=loss_weights)
         model.optimizer = opt
 
+        class PlateauStop(dde.callbacks.Callback):
+            """Stop the stage when total train loss stops improving.
+            (deepxde's EarlyStopping uses np.Inf, removed in NumPy 2.0.)"""
+
+            def __init__(self, patience, min_delta):
+                super().__init__()
+                self.patience = int(patience)
+                self.min_delta = float(min_delta)
+                self.best = float("inf")
+                self.wait = 0
+
+            def on_epoch_end(self):
+                cur = float(np.sum(self.model.train_state.loss_train))
+                if cur < self.best - self.min_delta:
+                    self.best = cur
+                    self.wait = 0
+                else:
+                    self.wait += 1
+                    if self.wait >= self.patience:
+                        self.model.stop_training = True
+                        print(f"PlateauStop: no improvement for {self.patience} epochs "
+                              f"(best={self.best:.4e}) — ending stage early.", flush=True)
+
         callbacks = [TesterCallback(log_every=args.display_every)]
         tester = callbacks[0]
         if "early_stop" in stage:
             es = stage["early_stop"]
-            callbacks.append(dde.callbacks.EarlyStopping(
-                min_delta=float(es.get("min_delta", 1e-5)),
-                patience=int(es.get("patience", 2000)),
+            callbacks.append(PlateauStop(
+                patience=es.get("patience", 2000),
+                min_delta=es.get("min_delta", 1e-5),
             ))
         step_before = int(model.train_state.step or 0)
         model.train(
