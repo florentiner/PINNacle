@@ -271,3 +271,17 @@ escape without accuracy* (l2 0.83 vs trivial 1.0 vs target ~1e-2).
 Fix per the synergy analysis: modal sine features (Dirichlet eigenbasis, k=1..6 per
 axis). Relaunched both inits with `--encoding sine` (ptc-heat-rand-sine on usekag1aa,
 ptc-heat-triv-sine on usekag2a).
+
+---
+
+## RESULT — march-by-sampling, KS (2026-08-11)
+
+Policy (RL emulation, vanilla loss untouched, sampling-only): expand collocation
+horizon [0, t*] when covered residual < eps. Outcome: t* marched 0.02 -> 0.18 (9x)
+and stalled honestly — covered residual plateaued at 5.6e-3..1.4e-2 > eps, the
+policy refused to advance (no goodharting, unlike KS-rar). The covered part is ALIVE
+(norm_ratio 0.995 vs trivial 0.36-flatness; first ~6% of slices track), the uncovered
+region is unsampled garbage (global L2RE 1.31 is meaningless there). The stall wall
+is the known KS representation ceiling of the vanilla FNN — sampling policy is not a
+representation fix. Heat-march (where the vanilla arch CAN represent the local
+solution) is the decisive test; running.
