@@ -34,10 +34,14 @@ AMP = 5.0          # source amplitude
 T_TOTAL = 100.0
 
 
-def modified_MLP_plain(layers, M_t=2, activation=np.tanh):
+def modified_MLP_plain(layers, M_t=2, activation=np.tanh, encoding="plain", K_s=6):
     k_t = np.power(10.0, np.arange(0, M_t + 1))   # [1,10,100]
+    k_s = np.arange(1, K_s + 1) * np.pi
 
     def input_encoding(t, x, y):
+        if encoding == "sine":
+            # modal features matched to the Dirichlet eigenbasis of the unit square
+            return np.hstack([1.0, k_t * t, np.sin(k_s * x), np.sin(k_s * y)])
         return np.hstack([1.0, k_t * t, x, y])
 
     def xavier_init(key, d_in, d_out):
@@ -77,8 +81,11 @@ class HeatCausalJax:
         self.ref = ref_grid                  # (nx, ny, nt, 1)
         self.xs, self.ys, self.t_star = xs, ys, t_star
         self.M_t = 2
-        layers = [1 + (self.M_t + 1) + 2] + [128] * 8 + [1]
-        self.init, self.apply = modified_MLP_plain(layers, M_t=self.M_t)
+        K_s = 6
+        d_in = 1 + (self.M_t + 1) + (2 * K_s if args.encoding == "sine" else 2)
+        layers = [d_in] + [128] * 8 + [1]
+        self.init, self.apply = modified_MLP_plain(layers, M_t=self.M_t,
+                                                   encoding=args.encoding, K_s=K_s)
         self.n_t, self.n_s = args.n_t, args.n_s
         self.M = np.triu(np.ones((self.n_t, self.n_t)), k=1).T
         self.steps_per_win = (len(t_star) - 1) // args.windows   # 25 for 20 windows
@@ -238,6 +245,7 @@ def main():
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--w-ic", type=float, default=1e4)
     p.add_argument("--max-hours", type=float, default=1e9)
+    p.add_argument("--encoding", type=str, default="plain", choices=["plain", "sine"])
     p.add_argument("--init-mode", type=str, default="random",
                    choices=["random", "trivial"],
                    help="trivial = distill net to u==0 first, then causal-train")
@@ -406,7 +414,7 @@ def main():
         flush_hist()
 
     with open(os.path.join(args.outdir, "jax_run_meta.json"), "w") as f:
-        json.dump({"engine": "jax-heat-lt", "args": vars(args),
+        json.dump({"engine": "jax-heat-lt-" + args.encoding, "args": vars(args),
                    "jax": jax.__version__, "windows_done": n_win}, f, indent=2)
     print(f"[DONE] {n_win} heat windows trained (jax engine).")
 

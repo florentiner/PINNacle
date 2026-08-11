@@ -249,3 +249,25 @@ pending C-triv run tests exactly that from the same starting point.
   chaotic plateau the signature was removable without progress. Reference-free
   signals are honest exactly when the trivial state is an *isolated exact* branch,
   and gameable when ghosts form a continuum.
+
+---
+
+## RESULT — step 3, causal from trivial init, PLAIN encoding (2026-08-11, 11h P100 x2)
+
+**The core escape question is answered: YES — and initialization does not matter.**
+Both runs (C-rand from random init, C-triv distilled to u==0, window-0 l2 of init =
+1.0000) behaved identically: the IC gate closed (loss_IC 0.243 -> 1.8e-7), the
+prediction's amplitude is alive through the whole window (max|u| 0.85 -> 1.85 vs ref
+1.77) — the trivial state is simply not a reachable attractor of the causal
+objective. C-rand w0 l2 = 0.832, C-triv w0 l2 = 0.851 (same ceiling, same behavior).
+
+**But the window did not certify** (W_min per stage [0.999, 0.955, 0.036, 0, 0, 0]):
+the plain-encoded network holds the correct dominant modes (kx=2, ky~1.5 = the forced
+and IC modes) at ~1/3 amplitude — spectral bias of the plain [t,x,y] encoding against
+the high-frequency sin(4pi x)sin(3pi y) content. A fresh, measured row for the
+bottleneck table of REPORT §1.4: *causality respected + representation mismatched =
+escape without accuracy* (l2 0.83 vs trivial 1.0 vs target ~1e-2).
+
+Fix per the synergy analysis: modal sine features (Dirichlet eigenbasis, k=1..6 per
+axis). Relaunched both inits with `--encoding sine` (ptc-heat-rand-sine on usekag1aa,
+ptc-heat-triv-sine on usekag2a).
