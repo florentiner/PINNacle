@@ -32,8 +32,9 @@ if __name__ == "__main__":
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--method', type=str, default="adam")
     parser.add_argument('--case', type=str, default="heatlt", choices=["heatlt", "wave1d", "ks", "all"])
-    parser.add_argument('--guard', type=str, default="off", choices=["off", "rar", "uniform"])
+    parser.add_argument('--guard', type=str, default="off", choices=["off", "rar", "uniform", "march"])
     parser.add_argument('--guard-period', type=int, default=1000)
+    parser.add_argument('--march-eps', type=float, default=3e-3)
     parser.add_argument('--hyp-data', action='store_true', help="save forensic data (checkpoints, fields, metrics.csv)")
 
     command_args = parser.parse_args()
@@ -86,7 +87,7 @@ if __name__ == "__main__":
             callbacks.append(HypothesisDataCallback(log_every=command_args.log_every, ckpt_every=command_args.plot_every))
         if command_args.guard != "off":
             from src.utils.trivial_guard import TrivialGuardCallback
-            callbacks.append(TrivialGuardCallback(mode=command_args.guard, period=command_args.guard_period))
+            callbacks.append(TrivialGuardCallback(mode=command_args.guard, period=command_args.guard_period, march_eps=command_args.march_eps))
 
         trainer.add_task(get_model_dde, {
             "iterations": command_args.iter,

@@ -30,9 +30,10 @@ class TrivialGuardCallback(Callback):
 
     def __init__(self, mode="rar", period=1000, pool_size=20000, keep_frac=0.5,
                  resid_chunk=4096, log_dir=None, t_frac=0.05,
-                 enrich_thr=3.0, dead_thr=0.10):
+                 enrich_thr=3.0, dead_thr=0.10,
+                 march_t0_frac=0.02, march_dt_frac=0.02, march_eps=3e-3):
         super().__init__()
-        assert mode in ("rar", "uniform", "off")
+        assert mode in ("rar", "uniform", "march", "off")
         self.mode = mode
         self.period = period
         self.pool_size = pool_size
@@ -42,6 +43,10 @@ class TrivialGuardCallback(Callback):
         self.t_frac = t_frac
         self.enrich_thr = enrich_thr
         self.dead_thr = dead_thr
+        self.march_t0_frac = march_t0_frac
+        self.march_dt_frac = march_dt_frac
+        self.march_eps = march_eps
+        self._tstar_frac = march_t0_frac
         self._since = 0
         self._rows = []
         self._bbox = None
@@ -100,6 +105,30 @@ class TrivialGuardCallback(Callback):
         r2 = (r ** 2).sum(axis=1)
         c_enrich, A, flag = self._signals(pts, u, r2)
         acted = 0
+        if self.mode == "march":
+            # RL-policy emulation, vanilla loss untouched: the agent only controls the
+            # SAMPLING distribution — collocation points live in t in [t_lo, t_lo + tstar]
+            # and the horizon expands when the covered residual is clean. A discrete,
+            # sampling-only version of causal marching.
+            lo, hi = self._bbox
+            span = hi[-1] - lo[-1]
+            t_hi = lo[-1] + self._tstar_frac * span
+            m_cov = pts[:, -1] <= t_hi
+            r2_cov = float(r2[m_cov].mean()) if m_cov.any() else float("inf")
+            if r2_cov < self.march_eps and self._tstar_frac < 1.0:
+                self._tstar_frac = min(1.0, self._tstar_frac + self.march_dt_frac)
+                t_hi = lo[-1] + self._tstar_frac * span
+                acted = 1
+            new = self._pool()[: self._n_pde]
+            new[:, -1] = lo[-1] + np.random.rand(len(new)) * (t_hi - lo[-1])
+            self.model.data.replace_with_anchors(new.astype(np.float32))
+            self._rows.append({"step": step, "C_enrich": c_enrich, "A_late": A,
+                               "flag": int(flag), "acted": acted, "mode": self.mode,
+                               "tstar_frac": self._tstar_frac, "r2_cov": r2_cov})
+            print(f"[guard march] step {step}: t*={self._tstar_frac:.2f} "
+                  f"r2_cov {r2_cov:.2e} C_enrich {c_enrich:.2f} A {A:.3f}", flush=True)
+            self._flush()
+            return
         if self.mode == "uniform":
             self.model.data.resample_train_points(True, False)
             acted = 1
