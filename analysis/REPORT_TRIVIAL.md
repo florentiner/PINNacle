@@ -259,6 +259,32 @@ The paper's machinery transfers to PINN weight space *quantitatively*:
   from rung 0 and certified basin membership — and still needs the causal selector
   to name the right rung.
 
+### Verdict on arXiv:2303.03374
+
+**What transfers (confirmed quantitatively):** the paper's basin picture holds in
+PINN weight space exactly as advertised — escape is kick-controlled with monotone
+barriers (heat 0 → 16.2, KS 0 → 38.9 across kicks ×1…×32), the linear-connectivity
+barrier works as a *reference-free escape/basin certificate*, and the stay-in-basin
+ensembling regime (kicks ×1–×2) delivers its promised mild local polish
+(march checkpoint: L2RE 1.255 → 1.199).
+
+**What does not transfer to the trivial-solution problem:** escape ≠ repair. The
+paper's own warning — leaving the pre-train basin degrades quality — reappears here
+in mirrored form: leaving the *trivial* basin does not improve quality either,
+because **basin-hopping conserves ghost-ness**. Neighboring basins of the vanilla
+loss are equally wrong (heat kick ×8 landed in a strictly deeper minimum, 5.9e-3 <
+7.7e-3, with identical error 0.999; no child on either PDE recovered any accuracy;
+no kick woke the dynamics — fig23d). Quality is a property of the *branch*, not of
+the basin, and the vanilla objective the kicks explore carries no branch information.
+
+**Bottom line:** use the paper as the *navigation instrumentation* of the
+anti-trivial toolkit — calibrated escape actions, basin certificates, and local
+ensembling around an already-correct state — while the *destination* (the branch
+that evolves from the IC) must be supplied by causal ordering. On its own, SSE/
+StarSSE machinery cannot prevent convergence to the trivial class or cure it; paired
+with a causal selector it becomes genuinely useful (certify the escape, polish and
+ensemble inside the true branch's basin).
+
 ## 4. Verdict table (all pre-registered)
 
 | # | claim | verdict |
