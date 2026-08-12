@@ -326,3 +326,16 @@ basins); budget expired back at rung 0 (L2RE 0.999).
 the class-level frozen-dynamics signal is un-gameable (you cannot fake being alive)
 and the policy never accepts a dead state; NO as synthesis — finding the live branch
 by blind exploration fails, branch construction still requires causal ordering.**
+
+---
+
+## RESULT — causal v3 (Dt=2 windows, 1024 colloc; 2026-08-12): branch correct
+
+w0 (t in [0,2]): l2 = 0.162 (trivial init) / 0.241 (random init), corr with reference
+0.987/0.971 — the solution now structurally TRACKS the true sqrt(pi) branch through
+the window (amplitude 0.85 -> 1.78 like the reference; contrast march corr 0.19 on
+the wrong rung). The tail of the window drifts up-ladder exactly where the causal
+front is uncertified (W_min dies at tol=0.1, stages 3-5 = 0) — the uncertified-tail
+signature. Third independent confirmation of init-independence (trivial init again
+matches/beats random). One window consumed the 11h session (227k iters at 1024
+collocation points) — the remaining limit is certification cost, not mechanism.

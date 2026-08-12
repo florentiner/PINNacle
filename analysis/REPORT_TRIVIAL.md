@@ -83,7 +83,10 @@ We tested the full action arsenal as pre-registered policy emulations:
   that evolves from the IC is unique, and `W_i = exp(−tol·(Σ_{j<i}L_j + 10⁴·L_IC))`
   is that selector written as weights. The plain-encoded causal run started *inside*
   rung 0 climbed directly to the √π regime (fig14 green; L_IC 0.243 → 1.8e-7,
-  init-independent: 0.851 vs random-init 0.832).
+  init-independent: 0.851 vs random-init 0.832). With window geometry matched to the
+  forcing (v3: Δt=2, 4× collocation) the causal solution structurally tracks the true
+  branch — corr 0.987 with the reference, w0 L2 0.162 from the trivial init — while
+  every loss-untouched policy either stayed dead or landed on a wrong rung.
 
 **Generalization to constants and frozen states (user extension).** The trivial
 class is wider than u≡0: constants (GS's background), frozen patterns, every rung of
@@ -150,7 +153,7 @@ The paper's machinery transfers to PINN weight space *quantitatively*:
 | march | sampling-only policy escapes the trivial state | **confirmed for the state** (norm 0.76 vs 0.031) — but ALL error metrics worsen (L2RE 1.26 vs 1.00; covered-region 2.11) |
 | march→truth | …and reaches the true solution | **refuted with mechanism**: lands on rung √2π — vanilla loss cannot select branches |
 | causal escape | causal gate exits from *inside* rung 0, init-independent | confirmed (0.851 ≡ 0.832; correct rung √π) |
-| causal accuracy on heat | windows certify | not yet: plain/sine encodings plateau at w0 L2 0.82–0.97 (representation/collocation ceiling, not triviality); refined v3 (Δt=2 windows, 4× collocation) running — will be appended |
+| causal accuracy on heat | windows certify | improving, not yet certified: Δt=5 plateaued at w0 L2 0.82–0.97; **v3 (Δt=2 windows, 4× collocation): w0 L2 0.162, corr 0.987 — structurally on the true √π branch** (contrast march corr 0.19 on the wrong rung); window tail drifts up-ladder exactly where W_min is uncertified; init-independent for the third time (trivial 0.162 vs random 0.241); remaining limit = certification cost (227k iters/window), not mechanism |
 
 ## Data & figures
 
