@@ -34,11 +34,14 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vendor.soap import SOAP
 
-dde.config.set_default_float("float64")
+DTYPE = os.environ.get("PC_DTYPE", "float64")
+dde.config.set_default_float(DTYPE)
 
 N_STEPS = 31_000
 SEEDS = [42, 43, 44]
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_control_results.json")
+_suf = "" if DTYPE == "float64" else f"_{DTYPE}"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"paper_control_results{_suf}.json")
+ARMS_ENV = [a for a in os.environ.get("PC_ARMS", "").split(",") if a]
 
 
 def u_star(x):
@@ -79,7 +82,7 @@ class FourierFNN(torch.nn.Module):
         super().__init__()
         per = max(1, n_feats // len(sigmas))
         self.register_buffer(
-            "B", torch.cat([torch.randn(in_dim, per, dtype=torch.float64) * s for s in sigmas], dim=1))
+            "B", torch.cat([torch.randn(in_dim, per) * s for s in sigmas], dim=1))
         self.fnn = dde.nn.FNN([2 * self.B.shape[1]] + hidden + [out_dim], "tanh", "Glorot normal")
         self.regularizer = None
 
@@ -148,6 +151,27 @@ def run_arm(arm, seed):
         model = _add_boost(model, fourier=arm_base.startswith("boostf"))
         train_soap(model, N_STEPS)
         train_lbfgs(model)
+    elif arm_base == "single_f64sw":   # precision-escalation ACTION (run under PC_DTYPE=float32)
+        train_soap(model, N_STEPS)
+        train_lbfgs(model)
+        stage1 = l2re(model)     # float32 floor
+        dde.config.set_default_float("float64")  # sets dde real + torch default dtype
+        model.net.double()
+        data64 = make_data()     # regenerate collocation/BC tensors in float64
+        model = dde.Model(data64, model.net)
+        train_soap(model, N_STEPS)
+        train_lbfgs(model)
+    elif arm_base == "single_restart":  # optimizer-state reset, same net, same lr
+        train_soap(model, N_STEPS)
+        stage1 = l2re(model)
+        train_soap(model, N_STEPS)   # fresh SOAP instance = state reset
+    elif arm_base == "single_lrdrop":   # classic lr-decay restart
+        train_soap(model, N_STEPS)
+        stage1 = l2re(model)
+        opt = SOAP([q for q in model.net.parameters() if q.requires_grad],
+                   lr=3e-4, betas=(0.95, 0.95), precondition_frequency=2)
+        model.compile(opt)
+        model.train(iterations=N_STEPS, display_every=5000)
     else:
         raise ValueError(arm)
     return {"arm": arm, "seed": seed, "l2re": l2re(model),
@@ -169,8 +193,9 @@ def main():
     if os.path.exists(OUT):
         results = json.load(open(OUT))
     done = {(r["arm"], r["seed"]) for r in results}
-    for arm in ("single_lb", "boost_lb", "boostf_lb", "single", "boost", "boostf",
-                "single_lb_small", "boost_lb_small", "boostf_lb_small"):
+    all_arms = ARMS_ENV or ["single_lb", "boost_lb", "boostf_lb", "single", "boost", "boostf",
+                            "single_lb_small", "boost_lb_small", "boostf_lb_small"]
+    for arm in all_arms:
         for seed in SEEDS:
             if (arm, seed) in done:
                 continue

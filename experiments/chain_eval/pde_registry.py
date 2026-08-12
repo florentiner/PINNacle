@@ -27,6 +27,32 @@ from src.utils.args import parse_hidden_layers
 __all__ = ["ALL_PDE_NAMES", "build_get_model"]
 
 
+class FourierFNN(dde.nn.pytorch.NN):
+    """FNN on fixed random Fourier features x -> [sin(2*pi*xB), cos(2*pi*xB)].
+    Base-architecture variant of the boost-net spectral fix: counters spectral
+    bias from step 0 instead of mid-training. B is drawn under the run's seed
+    (set_random_seed happens before model build), half the features per sigma."""
+
+    def __init__(self, in_dim, out_dim, hidden_sizes, sigmas=(1, 10), n_feats=128):
+        import torch
+        super().__init__()
+        per = max(1, n_feats // len(sigmas))
+        cols = [torch.randn(in_dim, per) * s for s in sigmas]
+        self.register_buffer("B", torch.cat(cols, dim=1))
+        self.fnn = dde.nn.FNN([2 * self.B.shape[1]] + hidden_sizes + [out_dim],
+                              "tanh", "Glorot normal")
+
+    def forward(self, x):
+        import torch
+        if self._input_transform is not None:
+            x = self._input_transform(x)
+        z = 2 * np.pi * (x @ self.B)
+        y = self.fnn(torch.cat([torch.sin(z), torch.cos(z)], dim=1))
+        if self._output_transform is not None:
+            y = self._output_transform(x, y)
+        return y
+
+
 def _loss_weights(pde):
     weights = np.ones(pde.num_loss, dtype=np.float32)
     for i, c in enumerate(pde.loss_config):
@@ -35,7 +61,7 @@ def _loss_weights(pde):
     return weights
 
 
-def build_get_model(pde_name: str, hidden_layers: str = "100*5"):
+def build_get_model(pde_name: str, hidden_layers: str = "100*5", net_type: str = "fnn"):
     """Return a get_model() -> (model, loss_weights) callable for the PDE."""
     if pde_name not in PDE_SPECS:
         raise KeyError(
@@ -55,7 +81,10 @@ def build_get_model(pde_name: str, hidden_layers: str = "100*5"):
                 + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers))
                 + [pde.output_dim]
             )
-            net = dde.nn.FNN(layers, "tanh", "Glorot normal")
+            if net_type == "fourier":
+                net = FourierFNN(pde.input_dim, pde.output_dim, layers[1:-1])
+            else:
+                net = dde.nn.FNN(layers, "tanh", "Glorot normal")
         net = net.float()
         model = pde.create_model(net)
         return model, _loss_weights(pde)

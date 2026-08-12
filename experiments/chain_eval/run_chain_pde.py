@@ -172,7 +172,8 @@ def run_worker(args) -> int:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-    model, loss_weights = build_get_model(args.pde_name, args.hidden_layers)()
+    model, loss_weights = build_get_model(args.pde_name, args.hidden_layers,
+                                          getattr(args, "net_type", "fnn"))()
 
     def reinit(module):
         if isinstance(module, torch.nn.Linear):
@@ -623,6 +624,8 @@ def main():
                         help="Seed workers per GPU (PINNacle nets are small; 2 can raise T4 throughput)")
     parser.add_argument("--display-every", type=int, default=100)
     parser.add_argument("--hidden-layers", default="100*5")
+    parser.add_argument("--net-type", default="fnn", choices=("fnn", "fourier"),
+                        help="Base net: plain FNN or fixed random-Fourier-feature FNN")
     parser.add_argument("--save-dir", default="runs_chain_eval")
     parser.add_argument("--test-epochs", type=int, default=None,
                         help="Cap every stage to N epochs (marks rows smoke_test=True)")

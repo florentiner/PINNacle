@@ -72,6 +72,8 @@ for i, job in enumerate(CONFIG["jobs"], 1):
         cmd += ["--schema", job["schema"]]
     if job.get("lbfgs_max_iter"):
         cmd += ["--lbfgs-max-iter", str(job["lbfgs_max_iter"])]
+    if job.get("net_type"):
+        cmd += ["--net-type", job["net_type"]]
     if CONFIG.get("test_epochs") is not None:
         cmd += ["--test-epochs", str(CONFIG["test_epochs"])]
     if CONFIG.get("force"):
