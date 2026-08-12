@@ -342,7 +342,67 @@ StarSSE machinery cannot prevent convergence to the trivial class or cure it; pa
 with a causal selector it becomes genuinely useful (certify the escape, polish and
 ensemble inside the true branch's basin).
 
-## 4. Verdict table (all pre-registered)
+## 4. Best-achieved metrics by method family, and the minimal-change question
+
+### 4.1 The same comparison for every family (pattern methods included)
+
+![method family metrics](report_figs/fig25_method_family_metrics.png)
+
+| method family | best KS L2RE (full domain) | best Heat-LT L2RE (full domain) | Heat-LT, window-0 scope t∈[0,2] |
+|---|---|---|---|
+| vanilla deepxde | 1.007 | 0.9988 | 0.965 |
+| pattern methods (rar / uniform / veto / march) | 1.012 (uniform; march 1.309) | 0.9984 (rar; march 1.255) | march 1.72 |
+| paper's method (best SSE child ×32; + SSE after march) | 0.9751 | 0.9981 (after-march 1.199) | — |
+| **SOTA causal** | **0.0356** (28×) | full run not attempted (cost) | **0.162** (corr 0.987) |
+
+Reading: on the chaotic case every no-SOTA family sits in the same O(1) failure band
+(spread 0.975–1.012 ≈ cosmetics of the same ghost class; the SSE ×32 "best" is a
+norm-shrunk field, not a partial solution), while the causal formulation is 28×
+below. On Heat-LT no pattern or paper method beats vanilla at all — the best
+improvement is 0.0007 of L2RE — and the two escape methods actively worsen it; the
+causal gate on the same window-0 scope is 6× better with the correct branch.
+
+> **Takeaway (question 2).** The pattern toolkit's value is *not* in the final
+> error metric — measured across 4 policies × 2 PDEs it never wins more than 0.1%
+> there. Its value is operational: detection, rejection, certification, and budget
+> economy. Any comparison table that only shows final L2RE makes pattern methods
+> look useless and SOTA look magic; the operational columns (false accepts,
+> wasted-budget saved, escape certificates) are where the patterns win.
+
+### 4.2 Can a *small* change close the gap? (question 1)
+
+**Numeric tweaks (the float32→float64 kind) cannot.** All runs here already use
+float32; the residual plateaus that block progress sit 10³–10⁵ above machine
+precision, and the collapse is a property of *what the objective rewards*, not of
+arithmetic. No precision, learning-rate, batch or sampling-size change touches the
+two real walls, both measured:
+
+1. **the branch-information wall** — the vanilla error space contains no signal
+   distinguishing the rungs (fig16, fig19; march landed on √2π, kicks land in ghost
+   basins); and
+2. **the representation wall** (chaotic only) — the plain FNN cannot fit even one
+   KS window to tolerance (the march stall, fig20-right); the July ablation shows
+   that even windows+Fourier+modified-MLP *without* causal weighting only reaches
+   8.6e-2 — and Fourier features/architecture are themselves part of the SOTA
+   bundle.
+
+**The one genuinely minimal change with a mechanism behind it** — and it is not a
+SOTA method: DeepXDE's *native* `loss_weights` knob. Setting the stock IC weight to
+10⁴ while the march policy restricts sampling to the covered horizon reproduces the
+causal gate's two ingredients (hard IC anchor + short effective horizon) using only
+vanilla machinery: march supplies the horizon, the stock weight supplies the anchor,
+the veto supplies honesty. This is the sharpest available test of "SOTA metrics
+without SOTA methods": launched as `pm-heat-icw` / `pm-ks-icw` (march + veto +
+loss_weights [1, 10⁴, 1]); the result will be appended here.
+
+**Expected honestly:** on Heat-LT this may finally hold the true branch while the
+horizon grows (the causal-v3 mechanism, expressed in vanilla parts); on chaotic KS
+it will still hit wall #2 — so the answer to (b) "SOTA-level chaotic metrics from
+vanilla loss + deepxde + these methods" remains **no**: the measured ceiling of
+every no-SOTA family on KS is the O(1) band, and the two walls behind it are not
+numeric.
+
+## 4.3 Verdict table (all pre-registered)
 
 | # | claim | verdict |
 |---|---|---|
