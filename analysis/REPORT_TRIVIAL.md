@@ -62,6 +62,15 @@ without entering it (its endpoint field measures 2.512 = √2π; cell colors are
 p95 level of each grid point). Escape policies hop between bands; nothing in the
 vanilla objective makes the green band special.*
 
+> **Takeaway of the opening figures (14–19).** The trivial solution is not an
+> isolated accident but the bottom rung of a *ladder* of self-gating branches, and
+> in the vanilla objective this whole ladder is invisible: its rungs are ordinary
+> minima (fig17-left), its region fills the entire reachable subspace (fig18-left),
+> and nothing marks the true branch (fig19). The causal objective re-scores the same
+> state space so that the trivial state becomes a wall and the descent leads to the
+> branch that evolves from the IC (fig17-right, fig15). Everything below unpacks and
+> quantifies this picture.
+
 ---
 
 ## 1. The error-space picture of the collapse, with the pattern highlighted
@@ -105,6 +114,15 @@ principle — consistent with every intervention result in §2.*
 Supporting figures: `fig10_cheap_sliver.png` (why the trivial branch is profitable:
 the uniform-in-time loss pays O(1) residual on a measure-1% sliver and gets zero
 everywhere else), `fig11_detector_map.png`.
+
+> **Takeaway of §1.** Three facts, all measured: (i) the collapse is *certified* by
+> the vanilla loss itself — every component converges while the answer is wrong
+> (fig10); (ii) it leaves a reference-free fingerprint — the causality-violating
+> residual layer and dead late-time dynamics (fig13-right, fig11) — so detection
+> requires neither SOTA methods nor the true solution; (iii) the reason no
+> intervention inside the vanilla objective can fully cure it is geometric: the
+> entire subspace explored by vanilla gradients lies inside the constant class
+> (fig16) — there is nothing alive to converge to along those directions.
 
 ## 2. RL agent + vanilla error space, loss untouched: how far can it get?
 
@@ -173,6 +191,12 @@ the veto, march reports false progress; with it, every acceptance is real. Right
 the KS march stall is honest for the same reason read in reverse: the covered
 residual never clears the threshold, so the policy refuses to advance.*
 
+> **Takeaway.** The veto signal (frozen dynamics) is the only component in the
+> no-SOTA toolkit that cannot be gamed: 6/6 dead branches refused, 0 false accepts —
+> and the moment the veto budget ran out, plain march happily reported 3× "progress"
+> along a dead branch. Any agent operating in the vanilla objective should treat
+> frozen-dynamics rejection as a hard constraint, not a soft reward term.
+
 How early can the agent act? The pattern forms long before the budget is spent:
 
 ![early warning](report_figs/fig22_early_warning.png)
@@ -180,6 +204,10 @@ How early can the agent act? The pattern forms long before the budget is spent:
 budget; on chaotic KS the signal crosses the threshold reliably only late (~14k) —
 early warning is problem-dependent, strongest exactly where the trivial branch is
 exact and isolated.*
+
+> **Takeaway.** On problems like Heat-LT the agent has ~90% of the budget still in
+> hand when the diagnosis is already certain — the economic case for a
+> detect-and-dispatch agent is strongest exactly where the detector is most honest.
 
 And the causal escape mechanism, both configurations side by side:
 
@@ -189,6 +217,11 @@ And the causal escape mechanism, both configurations side by side:
 then collapses 0.8 → 0.162 at the moment the causal front consolidates (~110k) —
 branch selection happening live.*
 
+> **Takeaway.** The escape mechanism is robust (gate closes in every config, from
+> every init), and the remaining accuracy gap is an optimization-cost issue
+> (certification of later stages), not a mechanism issue: when the front
+> consolidates, the error drops to the true branch by itself.
+
 So the honest division of labor: the RL agent over the vanilla error space is a
 **detector, dispatcher and escape artist** — it can refuse to waste budget (wall
 detection saves the 75–90% post-collapse budget), certify basin membership, and break
@@ -197,6 +230,14 @@ out of rung 0 by sampling alone; but rung *selection* requires the causal machin
 rule: **pattern signals belong in the state, never in the reward** — on KS the
 resampling intervention optimized the signature away while the truth stood still
 (Goodhart, measured).
+
+> **Verdict of §2.** Loss untouched, the pattern-driven agent achieves: reliable
+> detection (early on honest problems), certified rejection of the whole trivial
+> class, escape from any given trivial state, and large budget savings. It cannot
+> achieve: selecting or synthesizing the true branch — every escape lands on an
+> arbitrary rung because the vanilla error space contains no branch information.
+> The minimal sufficient addition is the causal gate in the action space; everything
+> else the agent already has.
 
 ## 3. What arXiv:2303.03374 (pre-train basins, SSE/StarSSE) adds
 
@@ -299,6 +340,37 @@ ensemble inside the true branch's basin).
 | march→truth | …and reaches the true solution | **refuted with mechanism**: lands on rung √2π — vanilla loss cannot select branches |
 | causal escape | causal gate exits from *inside* rung 0, init-independent | confirmed (0.851 ≡ 0.832; correct rung √π) |
 | causal accuracy on heat | windows certify | improving, not yet certified: Δt=5 plateaued at w0 L2 0.82–0.97; **v3 (Δt=2 windows, 4× collocation): w0 L2 0.162, corr 0.987 — structurally on the true √π branch** (contrast march corr 0.19 on the wrong rung); window tail drifts up-ladder exactly where W_min is uncertified; init-independent for the third time (trivial 0.162 vs random 0.241); remaining limit = certification cost (227k iters/window), not mechanism |
+
+## 5. Overall conclusions
+
+1. **The trivial solution is a certified minimum of the vanilla objective** — all
+   loss components converge while L2RE = 0.999 (fig10); on Heat-LT it is the bottom
+   rung of a whole ladder of self-gating branches at u ∈ {0, √π, √2π, …} (fig14),
+   and the true solution is just a different rung of the same ladder.
+2. **The collapse has a reference-free fingerprint** — residual concentrated in a
+   thin early-time layer (91.6% in 1% of the domain) plus dead late-time dynamics —
+   validated across three PDE families with causal solutions as clean negative
+   controls (fig11, fig13).
+3. **In the subspace vanilla gradients explore, live solutions do not exist**: 100%
+   of the trajectory-PCA plane is constant-class (fig16, fig18-left). The optimizer
+   does not choose the ghost among alternatives; it never sees an alternative.
+4. **Pattern-driven policies without loss changes**: detection and rejection work
+   (rung-veto: 6/6 refusals, un-gameable signal, fig20); escape works (march leaves
+   the trivial state, fig14); but branch selection fails — escape lands on wrong
+   rungs and can worsen every error metric (march: L2RE 1.26 vs 1.00). On chaotic
+   problems the softer signals are additionally gameable (KS Goodhart, fig11).
+5. **arXiv:2303.03374 transfers as instrumentation, not as cure**: kick-controlled
+   escape with monotone barriers and basin certificates — but basin-hopping
+   conserves ghost-ness (a deeper wrong minimum with identical error, fig23).
+6. **Only the causal objective selects the true branch** — because time-ordering
+   from the IC is exactly the branch information the vanilla loss lacks. Started
+   *inside* the trivial state it exits immediately, init-independently, and with
+   matched window geometry converges onto the true branch (corr 0.987, fig12,
+   fig15, fig17).
+7. **Division of labor for the RL agent**: detector signals → state; frozen-dynamics
+   veto → hard termination constraint; kicks/resampling/march → calibrated actions;
+   causal curriculum controls → the one action that changes the outcome; reward →
+   anchored certificates only (never the pattern signals themselves).
 
 ## Data & figures
 
