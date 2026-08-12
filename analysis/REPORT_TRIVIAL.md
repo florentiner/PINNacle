@@ -402,7 +402,49 @@ vanilla loss + deepxde + these methods" remains **no**: the measured ceiling of
 every no-SOTA family on KS is the O(1) band, and the two walls behind it are not
 numeric.
 
-## 4.3 Verdict table (all pre-registered)
+## 4.3 Gap anatomy: why escaping the trivial class still is not SOTA
+
+Escape removes exactly one deficit — being on rung 0. Behind it stand **three more,
+stacked**, and each was measured separately (all numbers on the same window-0 scope
+t∈[0,2] unless noted):
+
+![gap anatomy](report_figs/fig26_gap_anatomy.png)
+
+| step | L2RE | deficit removed | deficit remaining (mechanism, evidence) |
+|---|---|---|---|
+| vanilla | 0.965 | — | on ghost rung 0 (fig13) |
+| march (escaped) | **1.724** | trivial state | **branch selection**: landed on √2π; even an idealized wrong-rung field has L2RE ≥ \|√2−1\| = 0.414, and the real one is 2.11 in-scope because shape/phase are wrong too (corr 0.19). Plus **coverage**: full-domain error splits 44% wrong-branch / 56% never-sampled dead zone (fig26c) |
+| causal, plain enc. | 0.851 | branch (√π regime ✓) | **representation**: correct modes at ⅓ amplitude — spectral bias of the plain encoding |
+| causal, sine, Δt=5 | 0.818 | features | **window geometry**: 5/8 of a forcing period per window — the front cannot consolidate |
+| causal v3, Δt=2 | 0.162 | geometry | **certification**: W_min dies at tol=0.1; the tail τ>1.6 drifts up-ladder and carries **88.5% of the window's squared error** (fig26b) |
+| v3, certified-front zone τ≤0.8 | **0.030** | — | none: where the causal front consolidated, the error is already SOTA-grade (per-slice 0.003–0.04) |
+
+Three observations tie it together:
+
+1. **Escape can make the metric *worse*, not better** (0.965 → 1.724): a wrong live
+   branch is farther from the truth in L2 than the dead zero — being non-trivial is
+   not a quality metric.
+2. **The deficits multiply, not add.** march suffers branch + coverage
+   simultaneously; plain-causal suffers representation while branch is already
+   right; v3 suffers only certification — and its certified zone hits SOTA quality.
+   This is the same bottleneck law as in the main study's §1.4: the chain is as good
+   as its weakest remaining link, and each link needs its own mechanism (gate →
+   features → window geometry → W-annealing).
+3. **Nothing in the residual gap is mysterious**: 88.5% of v3's remaining error is
+   the uncertified tail — an optimization-budget item (the certificate died at
+   tol=0.1 after 227k iters), not a formulation failure. The pattern toolkit cannot
+   buy any of these steps because each requires information the vanilla error space
+   does not carry (branch identity, spectral content, causal ordering) — detection
+   tells you *that* you are wrong, never *toward what* to move.
+
+> **Takeaway.** "Not trivial" is the entrance ticket, not the prize. SOTA metrics
+> are the product of four mechanisms working together, and the measured ladder
+> 0.965 → 1.724 → 0.851 → 0.818 → 0.162 → 0.030 assigns a number to each. The only
+> zone where a no-SOTA run ever touched SOTA quality is the zone where the causal
+> front had fully consolidated — i.e., exactly where the SOTA mechanism was, in
+> effect, complete.
+
+## 4.4 Verdict table (all pre-registered)
 
 | # | claim | verdict |
 |---|---|---|
@@ -443,7 +485,13 @@ numeric.
    *inside* the trivial state it exits immediately, init-independently, and with
    matched window geometry converges onto the true branch (corr 0.987, fig12,
    fig15, fig17).
-7. **Division of labor for the RL agent**: detector signals → state; frozen-dynamics
+7. **Escape ≠ quality — the gap anatomy is measured** (§4.3): behind the trivial
+   state stand branch selection (wrong rung: ≥0.414 floor, 1.72 measured),
+   representation (0.851), window geometry (0.818 → 0.162) and certification
+   (88.5% of v3's residual error is the uncertified tail; the certified zone is
+   already SOTA-grade at 0.003–0.04). Each step needs its own mechanism; none is
+   purchasable with pattern information alone.
+8. **Division of labor for the RL agent**: detector signals → state; frozen-dynamics
    veto → hard termination constraint; kicks/resampling/march → calibrated actions;
    causal curriculum controls → the one action that changes the outcome; reward →
    anchored certificates only (never the pattern signals themselves).
