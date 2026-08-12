@@ -17,6 +17,18 @@ sampling policy (no loss change) escapes rung 0 — and lands on rung √2π; on
 causal gate, started from inside the trivial solution, climbs to the correct rung √π,
 because time-ordering is the only signal that says which branch evolves from the IC.*
 
+**The before/after pair (the study's core comparison).** Vanilla converges to the
+constant (trivial u≈0) — and the SOTA run whose weights are *initialized exactly at
+that collapsed state* converges to the normal solution:
+
+![before after fields](report_figs/fig15_before_after_fields.png)
+*Top: reference. Middle: what vanilla converges to — the IC fades into the constant
+u≈0 by t≲1 (L2RE 0.999); these exact weights (distilled) are the initialization of
+the bottom row. Bottom: the causal objective, started AT the trivial state, converges
+to the true solution (v3, window L2 0.162, corr 0.987; the roughness at t=2 is the
+uncertified window tail). Same architecture class, same data — the only difference is
+what the objective rewards along time.*
+
 ---
 
 ## 1. The error-space picture of the collapse, with the pattern highlighted
