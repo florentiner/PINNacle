@@ -395,12 +395,21 @@ the veto supplies honesty. This is the sharpest available test of "SOTA metrics
 without SOTA methods": launched as `pm-heat-icw` / `pm-ks-icw` (march + veto +
 loss_weights [1, 10⁴, 1]); the result will be appended here.
 
-**Expected honestly:** on Heat-LT this may finally hold the true branch while the
-horizon grows (the causal-v3 mechanism, expressed in vanilla parts); on chaotic KS
-it will still hit wall #2 — so the answer to (b) "SOTA-level chaotic metrics from
-vanilla loss + deepxde + these methods" remains **no**: the measured ceiling of
-every no-SOTA family on KS is the O(1) band, and the two walls behind it are not
-numeric.
+**RESULT (measured): refuted — with the sharpest mechanical lesson of the study.**
+Heat: the anchor worked perfectly (t=0 slice error 0.010, best of all no-SOTA runs)
+— and the march was *paralyzed at the start*: t\* never left 0.02 in 40k iterations
+(zero expansions, zero vetoes), full-domain L2RE 0.9966. KS: same pattern (t\* stuck
+at 0.06, L2RE 0.9547 — the usual norm-shrink cosmetics). The static 10⁴ weight
+starves residual descent forever, so the covered residual never clears the advance
+threshold. **This isolates exactly what makes the causal gate work: not the size of
+the IC weight but its self-removal.** `W = exp(−tol·(Σ L_j + 10⁴·L_IC))` releases
+the physics at full strength the moment the IC is certified (L_IC → 1.8e-7 ⇒ gate →
+1); a static `loss_weights` multiplier holds the 10⁴:1 gradient starvation forever —
+anchor without self-removal = paralysis instead of marching. The adaptive weighting
+is therefore not an optional refinement of the SOTA recipe; it is the minimal
+irreducible part. Final answer to (b): **no** — the measured ceiling of every
+no-SOTA family on KS is the O(1) band (best: 0.9547), and the walls behind it are
+informational and structural, not numeric.
 
 ## 4.3 Gap anatomy: why escaping the trivial class still is not SOTA
 
