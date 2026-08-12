@@ -29,6 +29,17 @@ to the true solution (v3, window L2 0.162, corr 0.987; the roughness at t=2 is t
 uncertified window tail). Same architecture class, same data — the only difference is
 what the objective rewards along time.*
 
+The same comparison **in error space, with the real training trajectories**:
+
+![two objectives](report_figs/fig17_two_objectives_trajectories.png)
+*Left — the vanilla objective (trajectory-PCA plane of the vanilla run): the training
+trajectory falls INTO the trivial state; it is the bottom of the basin. Right — the
+causal window objective (PCA plane of the causal-from-trivial run, 67 snapshots): the
+SAME trivial state now sits high on the IC-gate wall (objective ≈ 2.5e3, red star),
+and the trajectory walks down the valley to the true-branch solution (green star,
+window L2 0.162). One point in state space, two roles: minimum of one objective, wall
+of the other — this is the entire mechanism in a single picture.*
+
 ---
 
 ## 1. The error-space picture of the collapse, with the pattern highlighted
@@ -55,6 +66,19 @@ The detector map (fig11) separates every collapsed run (heat 20.0/0.000, KS 4.3
 front-flag, GS 0.005 dead-flag) from healthy causal solutions (0.012/1.65) across
 three PDE families — detection is solved, without SOTA methods and without a
 reference solution.
+
+**Where the constant class lives in this space.** Coloring the same plane by
+*late-time aliveness* (temporal std of u for t>50 — ≈0 for any constant or frozen
+pattern, ≈0.6 for the true forced solution) shows the strongest structural fact of
+the study:
+
+![constant region](report_figs/fig16_constant_region.png)
+*Every point of the plane reachable by the vanilla trajectory is inside the constant
+class: max aliveness anywhere on the plane is 0.031 vs the true solution's ≈0.6 —
+100% of the plane is frozen (hatched). The vanilla optimizer is not choosing the
+trivial solution among live alternatives; in the subspace its own gradients explore,
+live solutions do not exist at all. Escape along these directions is impossible in
+principle — consistent with every intervention result in §2.*
 
 Supporting figures: `fig10_cheap_sliver.png` (why the trivial branch is profitable:
 the uniform-in-time loss pays O(1) residual on a measure-1% sliver and gets zero
