@@ -200,6 +200,42 @@ resampling intervention optimized the signature away while the truth stood still
 
 ## 3. What arXiv:2303.03374 (pre-train basins, SSE/StarSSE) adds
 
+**The complete experimental record** (10 children × {Heat-LT, KS} from the collapsed
+vanilla checkpoints + 4 children around the march checkpoint; per child: one cosine
+cycle, the paper's linear-connectivity barrier, loss, oracle error, weight distance):
+
+![sse data](report_figs/fig23_sse_experiment_data.png)
+
+**Heat-LT SSE** (trivial ckpt: loss 7.72e-03, L2RE 0.9993)
+
+| kick | barrier | child loss | child L2RE | norm ratio | weight dist |
+|---|---|---|---|---|---|
+| 1 | 0.00e+00 | 7.74e-03 | 0.9994 | 0.027 | 0.023 |
+| 2 | 0.00e+00 | 1.06e-02 | 0.9990 | 0.030 | 0.095 |
+| 4 | 3.00e-02 | 7.76e-03 | 0.9986 | 0.029 | 0.229 |
+| 8 | 5.14e-01 | 5.88e-03 | 0.9987 | 0.029 | 0.477 |
+| 32 | 1.62e+01 | 2.55e-02 | 0.9981 | 0.028 | 1.554 |
+
+**KS SSE** (trivial ckpt: loss 3.06e-01, L2RE 1.0068)
+
+| kick | barrier | child loss | child L2RE | norm ratio | weight dist |
+|---|---|---|---|---|---|
+| 1 | 0.00e+00 | 2.74e-01 | 1.0141 | 0.382 | 0.061 |
+| 2 | 4.39e-02 | 2.79e-01 | 1.0093 | 0.373 | 0.142 |
+| 4 | 5.70e-01 | 3.14e-01 | 0.9784 | 0.265 | 0.291 |
+| 8 | 6.31e+00 | 3.24e-01 | 0.9765 | 0.261 | 0.436 |
+| 32 | 3.89e+01 | 3.78e-01 | 0.9751 | 0.219 | 1.482 |
+
+**SSE around the march checkpoint (heat)** (trivial ckpt: loss 7.83e-01, L2RE 1.2552)
+
+| kick | barrier | child loss | child L2RE | norm ratio | weight dist |
+|---|---|---|---|---|---|
+| 1 | 8.71e-02 | 3.45e-01 | 1.2264 | 0.715 | 0.108 |
+| 2 | 2.88e-03 | 4.99e-01 | 1.1988 | 0.667 | 0.141 |
+
+*(Implementation note: children within a kick are exact clones — deterministic
+full-batch training — so one row per kick is shown; soups coincide with children.)*
+
 The paper's machinery transfers to PINN weight space *quantitatively*:
 
 - **Kick-controlled escape** (H-S1 confirmed): barriers to the trivial checkpoint
