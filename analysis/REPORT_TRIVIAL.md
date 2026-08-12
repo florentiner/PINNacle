@@ -40,6 +40,28 @@ and the trajectory walks down the valley to the true-branch solution (green star
 window L2 0.162). One point in state space, two roles: minimum of one objective, wall
 of the other — this is the entire mechanism in a single picture.*
 
+With the constant-class regions overlaid and the trajectories colored by their own
+aliveness (does the path avoid the frozen class or not):
+
+![two objectives frozen](report_figs/fig18_two_objectives_frozen.png)
+*Left: 100% of the vanilla plane is constant-class (hatched) — the trajectory has
+nowhere to escape to and every point of it stays dark (frozen); note that even the
+RANDOM INIT is already near-frozen at late times (aliveness 0.023). Right: on the
+causal plane the frozen set is a sliver around the trivial init narrower than one
+grid cell — the trajectory exits the class within the first snapshots (points warm
+up along the path: 0.001 → 0.33 vs reference 0.41).*
+
+And the ladder itself as REGIONS of weight space (vanilla and march share one
+architecture, so both trajectories live on one joint plane):
+
+![ladder regions](report_figs/fig19_ladder_regions.png)
+*Each colored band is a self-gating level (plateau amplitude of the network output).
+The vanilla trajectory (white) stays inside the rung-0 band; the march trajectory
+(yellow) crosses bands and settles at √2π — walking right past the green TRUE band
+without entering it (its endpoint field measures 2.512 = √2π; cell colors are the
+p95 level of each grid point). Escape policies hop between bands; nothing in the
+vanilla objective makes the green band special.*
+
 ---
 
 ## 1. The error-space picture of the collapse, with the pattern highlighted
@@ -142,6 +164,31 @@ found the live branch** in 6 retries (its weight-space measure is negligible), a
 the budget expired back at rung 0. *Avoiding the trivial class via error space:
 YES as rejection/certification, NO as synthesis.*
 
+![policy timelines](report_figs/fig20_policy_timelines.png)
+*Left — the veto sawtooth: six march→frozen-tail-veto→kick cycles, no dead rung ever
+accepted. The tail after iteration ~25k is the cautionary detail: once the veto
+budget was exhausted, the remaining plain march expanded "successfully" to t*≈42 —
+along a DEAD branch (rung 0 has zero residual, so nothing resists expansion). Without
+the veto, march reports false progress; with it, every acceptance is real. Right —
+the KS march stall is honest for the same reason read in reverse: the covered
+residual never clears the threshold, so the policy refuses to advance.*
+
+How early can the agent act? The pattern forms long before the budget is spent:
+
+![early warning](report_figs/fig22_early_warning.png)
+*On heat the C_enrich signature saturates (20×) by iteration ~2000 — 10% of the
+budget; on chaotic KS the signal crosses the threshold reliably only late (~14k) —
+early warning is problem-dependent, strongest exactly where the trivial branch is
+exact and isolated.*
+
+And the causal escape mechanism, both configurations side by side:
+
+![gate escape](report_figs/fig12_gate_escape.png)
+*The 10⁴·L_IC gate closes within the first thousands of iterations in both configs
+(started AT the trivial state); with matched window geometry (right) the window error
+then collapses 0.8 → 0.162 at the moment the causal front consolidates (~110k) —
+branch selection happening live.*
+
 So the honest division of labor: the RL agent over the vanilla error space is a
 **detector, dispatcher and escape artist** — it can refuse to waste budget (wall
 detection saves the 75–90% post-collapse budget), certify basin membership, and break
@@ -198,6 +245,10 @@ ks-sse, heat-march, ks-march, causal-rand, causal-triv, causal-rand-sine,
 causal-triv-sine}` (+ v3 pair pending). Tools: `analysis/trivial_detector.py`,
 `src/utils/trivial_guard.py` (rar/uniform/march), `benchmark_sse.py`,
 `causalpinn/jax_runner_heat.py`. Figures: fig8 (ghost field), fig9 (two levels),
-fig10 (cheap sliver), fig11 (detector map), fig12 (gate escape), **fig13 (landscape +
-pattern)**, **fig14 (ghost ladder — the summary figure)**. Hypotheses & verdict log:
+fig10 (cheap sliver), fig11 (detector map), fig12 (gate escape, plain vs v3), **fig13
+(landscape + pattern)**, **fig14 (ghost ladder — the summary figure)**, fig15
+(before/after fields), fig16 (constant-class region: 100% of the vanilla plane),
+fig17 (two objectives + trajectories), fig18 (fig17 + frozen overlays, trajectories
+colored by aliveness), fig19 (the ladder as weight-space regions), fig20 (policy
+timelines: veto sawtooth / honest stall), fig22 (early warning). Hypotheses & verdict log:
 `analysis/TRIVIAL_HYPOTHESIS.md`.
