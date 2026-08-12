@@ -277,6 +277,22 @@ cycle, the paper's linear-connectivity barrier, loss, oracle error, weight dista
 *(Implementation note: children within a kick are exact clones — deterministic
 full-batch training — so one row per kick is shown; soups coincide with children.)*
 
+And the same machinery **in error space** — the StarSSE star drawn on the actual
+loss landscape (plane spanned by the trivial checkpoint and its children):
+
+![sse star landscape](report_figs/fig24_sse_star_landscape.png)
+*The paper's picture, as terrain: the star center (red) is the collapsed checkpoint
+at the bottom of its basin; kicks ×1–×2 stay inside (barrier 0), ×4 reaches the rim,
+×8 crosses a ridge, ×32 lands in a SEPARATE deep basin across the plane (barrier
+16.2 heat / 38.9 KS). Both dark basins are minima of the vanilla loss — and both are
+wrong (all children L2RE ≈ 1). fig8 shows the loss profiles along these same white
+rays. Escape is real terrain-crossing; it just never leads anywhere better, because
+the terrain itself contains no live minima (fig16).*
+
+> **Takeaway.** This is the paper's stay-or-leave decision rendered on real PINN
+> terrain: the mechanics work exactly as published, and the landscape explains why
+> they cannot cure triviality — every basin within reach of a kick is a ghost basin.
+
 The paper's machinery transfers to PINN weight space *quantitatively*:
 
 - **Kick-controlled escape** (H-S1 confirmed): barriers to the trivial checkpoint
