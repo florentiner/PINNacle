@@ -1,0 +1,19 @@
+[
+ {
+  "optimizer": "SOAP",
+  "lr": 0.003,
+  "epochs": 31000,
+  "precondition_frequency": 2
+ },
+ {
+  "boost_net": {
+   "hidden": "64*3",
+   "eps": "auto"
+  }
+ },
+ {
+  "optimizer": "Adam",
+  "lr": 0.001,
+  "epochs": "rest:62000"
+ }
+]
