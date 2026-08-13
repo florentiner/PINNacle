@@ -123,6 +123,7 @@ def residual_mse(model):
 
 
 def run_arm(arm, seed):
+    dde.config.set_default_float(DTYPE)  # arms may switch dtype globally (f64sw) — reset per arm
     dde.config.set_random_seed(seed)
     data = make_data()
     # *_small arms: under-parameterized stage 1 -> high floor with a SMOOTH,
