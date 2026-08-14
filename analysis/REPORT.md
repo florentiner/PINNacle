@@ -109,6 +109,31 @@ window (right) descends into a wide, **flat, well-conditioned basin** (loss vari
 `report_figs/contour_gs_causal_w5.png`) — GS is 2nd-order and benign, which §1.7 shows
 predicts its training-cost profile.*
 
+**Scope note, and the complete picture.** The panels above compare vanilla's *entire*
+training run against a *single* causal window — the causal engine only began saving
+intra-window snapshots partway through the campaign. With the full snapshot archive
+(KS: w0 and w4–w9, 47–73 snapshots each; GS: w1–w19, 10–20 each) the comparison can be
+made symmetric. The result is not one more landscape but a structural statement:
+**the causal run has no single landscape by construction** — every window trains a
+fresh network (same architecture and seed) against its *own* objective: the residual
+on its time slice plus its handoff initial condition. "Full training in error space"
+is therefore a *sequence* of landscapes:
+
+![full training KS](report_figs/fig27_full_training_ks.png)
+![full training GS](report_figs/fig27_full_training_gs.png)
+*Top-left: vanilla's complete run (it 0 → 20000) on its own landscape — one network,
+one objective, one descent, ending on the plateau (KS) / in a local dent (GS).
+Top-right: the complete causal run — all 10 (KS) / 20 (GS) window solutions in one
+joint PCA plane of weight space, the curriculum chain; note that after the first few
+windows consecutive solutions cluster, i.e. the marching net settles into a regime and
+then makes small hops. Bottom row: four individual windows spread across the time
+domain, each with its OWN objective's landscape and its OWN training trajectory
+(white path, red star = that window's solution, with its window L2). Every one of them
+is the same picture — a descent into a funnel — repeated at a new point of the chain,
+while the vanilla panel shows the single descent that has nowhere to go. Windows shown
+are those with archived snapshots (KS w1–w3 and GS w0 predate the snapshot flag);
+loss = unweighted residual + IC error on fixed points, as in the panels above.*
+
 ### 1.4 Why the combination synergizes — one principle at four scales
 
 The ingredients are not four independent improvements that happen to stack. They are
