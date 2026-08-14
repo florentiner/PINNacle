@@ -202,8 +202,11 @@ Three results come out of this construction, all measured:
 *Left: vanilla's single loss curve over its whole run. Right: the causal run's true
 error trace — every window chained, red = window edges. The contrast is the mechanism
 in one view: vanilla's loss moves less than a factor of 2 across 20k iterations (KS
-0.45 → 0.28; GS 1.0e-2 → 9.6e-3 — and on GS the whole curve outside one transient
-spike at iteration 12,900 spans just 9.6e-3–1.4e-2, i.e. **1.46×**, see the inset)
+0.45 → 0.28; GS 1.0e-2 → 9.6e-3). On GS the panel uses a broken y-axis: the narrow
+top band holds a single transient spike (6.7e-1 at iteration 12,900), the stretched
+bottom band shows the actual dynamics with that spike excised — flat at ~9.7e-3 with
+small bumps before it, a recovery decay from 1.4e-2 back to the same level after it;
+the whole curve outside the spike spans just **1.46×**. Vanilla's loss barely moves
 because it starts already inside the ghost basin and
 has nothing left to descend, while each causal window falls **~9.6 (KS) / ~8.8 (GS)
 orders of magnitude** from its re-initialization to its solution — ten (twenty)

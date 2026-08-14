@@ -14,6 +14,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, "analysis")
@@ -36,39 +37,55 @@ def main():
     hist = np.load(os.path.join(cfg["final_dir"], "causal", "history_jax.npz"),
                    allow_pickle=True)
 
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5.6))
-
-    ax = axes[0]
     st_v = m["step"].values / 1e3
     L = m["loss_train_total"].values
-    ax.semilogy(st_v, L, "-", color="tab:red", lw=1.8)
+    i_sp = int(np.argmax(L))
+    spike = L[i_sp] > 5 * np.median(L)
+    rest = L[L < 3 * np.median(L)]
+
+    fig = plt.figure(figsize=(15, 5.8))
+    outer = gridspec.GridSpec(1, 2, wspace=0.22)
+    if spike:
+        # broken y-axis: a narrow band for the spike, a stretched band for the real range
+        left = outer[0].subgridspec(2, 1, height_ratios=[1, 3.4], hspace=0.08)
+        ax_t = fig.add_subplot(left[0])
+        ax = fig.add_subplot(left[1], sharex=ax_t)
+        ax_t.semilogy(st_v, L, "-", color="tab:red", lw=1.6)
+        ax_t.set_ylim(rest.max() * 2.2, L[i_sp] * 1.5)
+        ax_t.spines["bottom"].set_visible(False)
+        ax_t.tick_params(labelbottom=False, labelsize=8)
+        ax_t.grid(alpha=0.3, which="both")
+        ax_t.set_title("VANILLA", fontsize=13)
+        ax_t.annotate(f"transient spike {L[i_sp]:.2e} at it {int(m['step'].values[i_sp]):,}",
+                      (st_v[i_sp], L[i_sp]), fontsize=9, color="darkred",
+                      xytext=(18, -8), textcoords="offset points",
+                      arrowprops=dict(arrowstyle="->", color="darkred", lw=1.2),
+                      bbox=dict(facecolor="w", alpha=0.9, edgecolor="darkred"))
+        # the curve without the spike, so the real dynamics are visible
+        Lm = L.copy()
+        Lm[L > 3 * np.median(L)] = np.nan
+        ax.semilogy(st_v, Lm, "-", color="tab:red", lw=1.8)
+        ax.axvline(st_v[i_sp], color="darkred", ls=":", lw=1.2)
+        ax.annotate("spike removed here\n(see band above)", (st_v[i_sp], rest.min() * 1.02),
+                    fontsize=8, color="darkred", xytext=(7, 4),
+                    textcoords="offset points")
+        ax.set_ylim(rest.min() * 0.97, rest.max() * 1.06)
+        ax.spines["top"].set_visible(False)
+        kw = dict(marker=[(-1, -0.6), (1, 0.6)], markersize=9, linestyle="none",
+                  color="k", mec="k", mew=1, clip_on=False)
+        ax_t.plot([0, 1], [0, 0], transform=ax_t.transAxes, **kw)
+        ax.plot([0, 1], [1, 1], transform=ax.transAxes, **kw)
+    else:
+        ax = fig.add_subplot(outer[0])
+        ax.semilogy(st_v, L, "-", color="tab:red", lw=1.8)
+        ax.set_title("VANILLA", fontsize=13)
     ax.scatter([st_v[0], st_v[-1]], [L[0], L[-1]], s=90, color="red", edgecolors="k",
                linewidths=0.6, zorder=5)
     ax.set_xlabel("training iterations (×10³)")
     ax.set_ylabel("training loss (log scale)")
-    ax.set_title("VANILLA", fontsize=13)
     ax.grid(alpha=0.3, which="both")
 
-    # a single transient spike can flatten everything else: label it and zoom the rest
-    i_sp = int(np.argmax(L))
-    rest = np.delete(L, i_sp)
-    if L[i_sp] > 5 * np.median(L):
-        ax.annotate(f"transient spike {L[i_sp]:.2e}\nat it {int(m['step'].values[i_sp]):,}",
-                    (st_v[i_sp], L[i_sp]), fontsize=9, color="darkred",
-                    xytext=(24, -18), textcoords="offset points",
-                    arrowprops=dict(arrowstyle="->", color="darkred", lw=1.3),
-                    bbox=dict(facecolor="w", alpha=0.9, edgecolor="darkred"))
-        ins = ax.inset_axes([0.30, 0.42, 0.66, 0.40])
-        ins.semilogy(st_v, L, "-", color="tab:red", lw=1.4)
-        ins.set_ylim(rest.min() * 0.93, rest.max() * 1.07)
-        ins.set_title(f"zoom without the spike: the rest spans only "
-                      f"{rest.min():.2e}–{rest.max():.2e} ({rest.max()/rest.min():.2f}×)",
-                      fontsize=8)
-        ins.tick_params(labelsize=7)
-        ins.grid(alpha=0.3, which="both")
-        ins.patch.set_alpha(0.95)
-
-    ax = axes[1]
+    ax = fig.add_subplot(outer[1])
     w, stp, ls = hist["window"], hist["step"], hist["loss"]
     order = np.lexsort((stp, w))
     w, stp, ls = w[order], stp[order], ls[order]
@@ -91,7 +108,6 @@ def main():
     ax.set_title("CAUSAL (SOTA)", fontsize=13)
     ax.grid(alpha=0.3, which="both")
 
-    fig.tight_layout()
     fig.savefig(f"{OUT}/fig32_loss_traces_{args.case}.png", dpi=args.dpi,
                 bbox_inches="tight", facecolor="white")
     print(f"saved fig32_loss_traces_{args.case}.png  "
