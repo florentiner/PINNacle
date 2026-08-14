@@ -140,6 +140,18 @@ each window trains a fresh network against its own objective (its time slice plu
 handoff IC), so "full training in error space" is a *sequence* of N landscapes chained
 by re-initialization, while vanilla is one descent on one surface.
 
+**The head-to-head picture: vanilla's whole run vs the causal run on its true global
+objective**, with the example window highlighted:
+
+![vanilla vs true global — KS](report_figs/fig31_vanilla_vs_global_ks.png)
+![vanilla vs true global — GS](report_figs/fig31_vanilla_vs_global_gs.png)
+*Left: vanilla's complete trajectory on its own landscape (start/end in red) — one
+descent that ends on the plateau. Right: the entire causal run drawn on the REAL global
+objective defined below, gold = the segment belonging to the example window, ★ = the
+full stitched solution Θ\*. Bottom: that same window alone in its own error space. The
+surface on the right is exact (every point a true evaluation, exact at Θ\*); the path is
+a 2D shadow — see the fidelity numbers below.*
+
 **The run's true global error space.** The joint plane above is a map of *where* the
 run goes, not of *what it minimizes* — each window has its own objective, so no single
 surface spanning them is legitimate (measured: that plane holds 40%/36% of the run's
