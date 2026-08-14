@@ -25,12 +25,15 @@ from landscape_full_training import CFG  # noqa: E402
 OUT = "analysis/report_figs"
 BASE = {"ks": "runs/07.18-13.19.39-baseline-chaotic/0-0",
         "gs": "runs/07.18-13.19.39-baseline-chaotic/1-0"}
+DEFAULT_CUT = {"gs": 1e-2}      # split the GS broken axis at 1e-2 (reproduces the figure)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", choices=["ks", "gs"], required=True)
     ap.add_argument("--dpi", type=int, default=300)
+    ap.add_argument("--cut", type=float, default=None,
+                    help="split value for the broken y-axis (default 1.15x median)")
     args = ap.parse_args()
     cfg = CFG[args.case]
     N = cfg["n_win"]
@@ -45,7 +48,8 @@ def main():
     med = float(np.median(L))
     i_sp = int(np.argmax(L))
     spike = L[i_sp] > 5 * med
-    core = L[L < 1.15 * med]                      # the band the curve really lives in
+    cut = args.cut or DEFAULT_CUT.get(args.case) or 1.15 * med   # broken-axis split
+    core = L[L <= cut]                            # the band the curve really lives in
 
     fig = plt.figure(figsize=(14.5, 9.4))
     outer = gridspec.GridSpec(2, 1, height_ratios=[1.0, 1.0], hspace=0.30)
@@ -56,16 +60,16 @@ def main():
         ax_t = fig.add_subplot(top[0])
         ax = fig.add_subplot(top[1], sharex=ax_t)
         ax_t.semilogy(st_v, L, "-", color="tab:red", lw=1.5)
-        ax_t.set_ylim(core.max() * 3, L[i_sp] * 1.6)
+        ax_t.set_ylim(cut, L[i_sp] * 1.6)     # bands meet at `cut`: nothing is hidden
         ax_t.spines["bottom"].set_visible(False)
         ax_t.tick_params(labelbottom=False, labelsize=8)
         ax_t.grid(alpha=0.3, which="both")
         ax_t.set_title("Vanilla", fontsize=13)
         Lm = L.copy()
-        Lm[L > 1.15 * med] = np.nan               # excise spike + its upper recovery
+        Lm[L > cut] = np.nan                      # shown in the band above instead
         ax.semilogy(st_v, Lm, "-", color="tab:red", lw=1.8)
         ax.axvline(st_v[i_sp], color="darkred", ls=":", lw=1.2)
-        ax.set_ylim(core.min() * 0.985, core.max() * 1.015)
+        ax.set_ylim(core.min() * 0.995, cut)
         ax.spines["top"].set_visible(False)
         kw = dict(marker=[(-1, -0.6), (1, 0.6)], markersize=9, linestyle="none",
                   color="k", mec="k", mew=1, clip_on=False)

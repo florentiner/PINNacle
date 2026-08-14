@@ -200,8 +200,11 @@ Three results come out of this construction, all measured:
 ![loss traces — KS](report_figs/fig32_loss_traces_ks.png)
 ![loss traces — GS](report_figs/fig32_loss_traces_gs.png)
 *Top — **Vanilla**: its single loss curve over the whole run (on GS the panel uses a
-broken y-axis: the narrow top band isolates one transient spike at iteration 12,900 so
-the stretched bottom band can show the actual dynamics before and after it). Bottom
+broken y-axis split at 1e-2: the narrow top band isolates one transient spike at
+iteration 12,900, the stretched bottom band resolves the real dynamics on either side of
+it — the initial decay to the 9.63e-3 plateau, distinct bumps at ~5.9k, ~8.5k, ~11.4k and
+~12.3k iterations, and after the spike a recovery decay back to exactly the same
+plateau; the two bands meet at the cut, so nothing is hidden). Bottom
 left — **SOTA windows**: the causal run's loss per time window, chained, red = window
 edges. Bottom right — **SOTA global**: the same run measured by the single global
 objective of the stitched solution, dropping one step per completed window down to Θ\*.
