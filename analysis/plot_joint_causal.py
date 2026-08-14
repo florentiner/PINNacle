@@ -238,6 +238,16 @@ def standalone(cfg, proj, hist, cache, ev_causal, args):
 
     ax = fig.add_subplot(gs[0, 0])
     ax.set_facecolor("#f4f4f4")
+    mos_path = f"analysis/out/mosaic_{args.case}.npz"
+    if os.path.exists(mos_path):                      # approximate terrain: true local slices
+        mo = np.load(mos_path)
+        pm = ax.pcolormesh(mo["A"], mo["B"], np.log10(mo["Z"]), cmap="viridis",
+                           shading="gouraud", zorder=1, alpha=0.95)
+        fig.colorbar(pm, ax=ax, fraction=0.040, pad=0.02,
+                     label="log10 loss (mosaic of true local slices)")
+        ow = mo["own"].astype(float)
+        ax.contour(mo["A"], mo["B"], ow, levels=np.arange(ow.min() + .5, ow.max() + .5),
+                   colors="w", linewidths=0.5, alpha=0.45, zorder=2)
     draw_run(ax, proj, hl, cfg["n_win"], label_all=True, fs=11,
              callout=f"window {hl} — the example window\n(its own landscape: fig28, bottom)")
     ax.set_title(f"The COMPLETE causal run: {cfg['n_win']} windows, "
@@ -250,14 +260,24 @@ def standalone(cfg, proj, hist, cache, ev_causal, args):
     ax.text(0.012, 0.988,
             "white dots = training steps   ·   red dots = window start / end   ·   "
             "dashed = fresh-net re-initialization\n"
-            f"no terrain is drawn: this plane holds {ev_causal*100:.0f}% of the run's parameter "
-            "variance, and a window solution projected into it\nreads ~10⁸× its true loss — "
-            "one landscape spanning all windows would be fiction (each window has its own objective)",
-            transform=ax.transAxes, fontsize=9.5, va="top",
-            bbox=dict(facecolor="w", alpha=0.9, edgecolor="0.7"))
+            "terrain = MOSAIC of true local slices: each cell shows the objective of its nearest "
+            "window, cut through that\nwindow's own solution along these directions — every value "
+            "is a real evaluation, the faint seams are region\nborders, not features. "
+            f"(A single surface spanning all windows would be fiction: this plane holds {ev_causal*100:.0f}% "
+            "of the run's\nvariance and a projected window solution reads ~10⁸× its true loss. "
+            "The exact global objective is fig30.)",
+            transform=ax.transAxes, fontsize=9.0, va="top",
+            bbox=dict(facecolor="w", alpha=0.92, edgecolor="0.7"))
 
     ax2 = fig.add_subplot(gs[0, 1])
     draw_trace(ax2, hist, cfg["n_win"], hl, fs=11)
+    wl = [float(hist["loss"][hist["window"] == k][-1]) for k in range(cfg["n_win"])]
+    wl2 = [float(hist["l2_window"][hist["window"] == k][-1]) for k in range(cfg["n_win"])]
+    ax2.text(0.99, 0.985,
+             "per-window final loss / L2:\n" + "\n".join(
+                 f"w{k}: {wl[k]:.1e} / {wl2[k]:.1e}" for k in range(cfg["n_win"])),
+             transform=ax2.transAxes, fontsize=7.2, va="top", ha="right", family="monospace",
+             bbox=dict(facecolor="w", alpha=0.9, edgecolor="0.7"))
     ax2.set_title("The same run's TRUE error trace\n(every window's loss, chained; red = window edges)",
                   fontsize=14, pad=12)
     fig.suptitle(f"{cfg['title']} — global view of the entire SOTA training run",

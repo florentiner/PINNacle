@@ -140,6 +140,46 @@ each window trains a fresh network against its own objective (its time slice plu
 handoff IC), so "full training in error space" is a *sequence* of N landscapes chained
 by re-initialization, while vanilla is one descent on one surface.
 
+**The run's true global error space.** The joint plane above is a map of *where* the
+run goes, not of *what it minimizes* — each window has its own objective, so no single
+surface spanning them is legitimate (measured: that plane holds 40%/36% of the run's
+variance and a projected window solution reads ~10⁸× its true loss; the terrain drawn
+on it is a mosaic of true local slices, honest but still N objectives). A genuinely
+global landscape does exist, and the per-window data is exactly what it needs. The
+causal method's output is the **stitched** solution, whose parameter is the *tuple* of
+all window networks Θ = (θ₀ … θ_{N−1}); on that product space one objective is
+well-defined:
+
+**L_global(Θ) = ⟨PDE residual² of each window on its own slice⟩ + ‖u₀(x,0) − u_IC‖² +
+⟨‖u_k(x,T_w) − u_{k+1}(x,0)‖²⟩** — physics everywhere, the initial condition, and
+continuity across every interface.
+
+![true global error space — KS](report_figs/fig30_global_stitched_ks.png)
+![true global error space — GS](report_figs/fig30_global_stitched_gs.png)
+*Left: the true global landscape, plane centred on the trained full solution Θ\*, with
+the whole run as one trajectory (while window k trains, only its block of coordinates
+moves; white = steps, red = window edges, ★ = Θ\*). Top-middle: zoom on Θ\* — a genuine
+funnel. Top-right: L_global as the causal front advances — every completed window
+lowers the whole solution's loss. Bottom: the loss of every window separately.*
+
+Three results come out of this construction, all measured:
+
+1. **The objective is the right one**: at the trained solution the interface-continuity
+   term is **3.9e-11 (KS) / 6.3e-9 (GS)** and the IC term **2.1e-11 / 9.2e-10** — the
+   stitched solution is continuous and IC-consistent to numerical zero, so Θ\* really
+   is the optimum of L_global, not merely near it.
+2. **There is a real global funnel**: L_global = **7.6e-5 (KS) / 8.7e-6 (GS)** at Θ\*
+   against **5.5e2 / 1.4** at the edge of the trajectory's own region — 5–7 orders of
+   depth, with the run descending into it. The "sequence of landscapes" picture (§1.3)
+   and a single global optimum are not in conflict: the curriculum is *how* this global
+   funnel is reached without ever solving it globally.
+3. **Per-window losses separate the two error sources** (bottom panel): every window's
+   final training loss stays in the same narrow band (KS 2.5e-6…1.3e-4; GS 9e-6…1.5e-4)
+   — each window is solved to the same standard — while its L2 error grows
+   monotonically (KS 2.3e-5 → 7.9e-2; GS 8.8e-4 → 2.8e-2). Same optimization quality,
+   growing true error: that is the inherited handoff error amplified by the dynamics,
+   the mechanism §2.2 measures independently.
+
 ### 1.4 Why the combination synergizes — one principle at four scales
 
 The ingredients are not four independent improvements that happen to stack. They are
