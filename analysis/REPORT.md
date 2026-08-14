@@ -281,9 +281,15 @@ live in global Fourier modes. Each component earns its place by matching a struc
 of the problem: KS (exact periodicity, broadband chaos) → Fourier features are
 load-bearing; GS (localized patterns) → they hurt.
 
-**Why the combined effect is multiplicative rather than additive.** Each ingredient
-removes a failure mode that otherwise *caps* the whole pipeline — bottleneck logic: a
-chain is as accurate as its weakest link.
+**Why the gains multiply instead of adding.** No ingredient *adds* accuracy — each one
+*lifts a ceiling*. While a ceiling stands, the other ingredients cannot work around it
+no matter how well they perform, so their factors compose rather than sum: lifting the
+"acausal fit over the whole domain" ceiling buys 11.7×, lifting the "acausal fit inside
+a window" ceiling buys a further 2.4×, and 11.7 × 2.4 is the observed 28×. The claim is
+falsifiable and we tested it the only way that counts — by removing ingredients. You
+never lose that ingredient's *share* of the gain; you fall back to exactly its ceiling:
+8.6e-2 without the causal weights (not "28× minus a bit"), and 3.2× worse with a
+representation that does not match the physics, even with every other part intact.
 
 | configuration | causality respected | representation matched | L2RE | binding failure mode |
 |---|---|---|---|---|
