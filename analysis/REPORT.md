@@ -150,7 +150,10 @@ descent that ends on the plateau. Right: the entire causal run drawn on the REAL
 objective defined below, gold = the segment belonging to the example window, ★ = the
 full stitched solution Θ\*. Bottom: that same window alone in its own error space. The
 surface on the right is exact (every point a true evaluation, exact at Θ\*); the path is
-a 2D shadow — see the fidelity numbers below.*
+a 2D shadow — see the fidelity numbers below. (The example window is w0 for KS and **w1
+for GS**: GS's window 0 was trained in the first session, before intra-window snapshot
+saving was switched on, so only its final parameters survive and it has no trajectory to
+draw; w1 is the earliest GS window with a recorded path.)*
 
 **The run's true global error space.** The joint plane above is a map of *where* the
 run goes, not of *what it minimizes* — each window has its own objective, so no single
