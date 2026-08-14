@@ -112,27 +112,33 @@ predicts its training-cost profile.*
 **Scope note, and the complete picture.** The panels above compare vanilla's *entire*
 training run against a *single* causal window — the causal engine only began saving
 intra-window snapshots partway through the campaign. With the full snapshot archive
-(KS: w0 and w4–w9, 47–73 snapshots each; GS: w1–w19, 10–20 each) the comparison can be
-made symmetric. The result is not one more landscape but a structural statement:
-**the causal run has no single landscape by construction** — every window trains a
-fresh network (same architecture and seed) against its *own* objective: the residual
-on its time slice plus its handoff initial condition. "Full training in error space"
-is therefore a *sequence* of landscapes:
+(KS: w0 and w4–w9; GS: w1–w19; 10–73 states per window) the comparison becomes
+symmetric:
 
-![full training KS](report_figs/fig27_full_training_ks.png)
-![full training GS](report_figs/fig27_full_training_gs.png)
-*Top-left: vanilla's complete run (it 0 → 20000) on its own landscape — one network,
-one objective, one descent, ending on the plateau (KS) / in a local dent (GS).
-Top-right: the complete causal run — all 10 (KS) / 20 (GS) window solutions in one
-joint PCA plane of weight space, the curriculum chain; note that after the first few
-windows consecutive solutions cluster, i.e. the marching net settles into a regime and
-then makes small hops. Bottom row: four individual windows spread across the time
-domain, each with its OWN objective's landscape and its OWN training trajectory
-(white path, red star = that window's solution, with its window L2). Every one of them
-is the same picture — a descent into a funnel — repeated at a new point of the chain,
-while the vanilla panel shows the single descent that has nowhere to go. Windows shown
-are those with archived snapshots (KS w1–w3 and GS w0 predate the snapshot flag);
-loss = unweighted residual + IC error on fixed points, as in the panels above.*
+![full training vs whole causal run — KS](report_figs/fig28_joint_causal_ks.png)
+![full training vs whole causal run — GS](report_figs/fig28_joint_causal_gs.png)
+*Left: vanilla's complete run (it 0 → 20000) on its own landscape — start and end in
+red, steps in white. Right: the **entire** causal run — every snapshot of all 10 (KS) /
+20 (GS) windows in one joint weight-space plane; white = training steps, red = window
+start/end, dashed = the fresh-net re-initialization between windows, gold = the window
+shown below; the inset is the run's true error trace (one descent per window, ~8 orders
+each). Bottom: that one window in its own error space, where a 2D plane is meaningful —
+the descent into the funnel, one link of the chain above. High-resolution standalone
+versions of the global panel: `fig29_global_causal_{ks,gs}.png`; the per-window
+landscape filmstrip: `fig27_full_training_{ks,gs}.png`.*
+
+**Why the right panel carries no terrain — a measured structural difference.** For
+vanilla, a 2D trajectory-PCA plane is an honest stage: it holds **90% (KS) / 99% (GS)**
+of that run's parameter variance, so the surface really is the landscape it descends.
+For the causal run the same construction fails: the joint plane of all windows holds
+only **40% (KS) / 36% (GS)** of the variance, and a window solution *projected into it*
+evaluates at ~10⁸× its true residual (KS: 8.4e2 in-plane vs 1.8e-6 true). Drawing a
+surface there would be fiction, so the panel shows the true path and puts the error
+axis in the trace inset instead. This is not a plotting limitation but the fact
+underneath the method: **the causal run has no single landscape by construction** —
+each window trains a fresh network against its own objective (its time slice plus its
+handoff IC), so "full training in error space" is a *sequence* of N landscapes chained
+by re-initialization, while vanilla is one descent on one surface.
 
 ### 1.4 Why the combination synergizes — one principle at four scales
 
