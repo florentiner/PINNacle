@@ -66,8 +66,7 @@ def main():
                 fontsize=10, xytext=(9, 5), textcoords="offset points")
     ax.annotate(f"end (it {st[-1]})", (van["a_traj"][-1], van["b_traj"][-1]), color="w",
                 fontsize=10, xytext=(-78, -18), textcoords="offset points")
-    ax.set_title("VANILLA — the complete training run in its error space\n"
-                 "one network, one objective, one descent → the plateau", fontsize=12)
+    ax.set_title("VANILLA", fontsize=13)
     ax.set_xlabel("PCA dir 1"); ax.set_ylabel("PCA dir 2")
 
     # ---------------- right: causal on the TRUE global landscape ----------------
@@ -106,23 +105,9 @@ def main():
                                 connectionstyle="arc3,rad=0.2"),
                 bbox=dict(facecolor="#fff4d6", alpha=0.95, edgecolor="#d17a00",
                           boxstyle="round,pad=0.4"))
-    ax.annotate(f"Θ* — full stitched solution, L_global = {res0+ic0+cont0:.1e}", (0, 0),
-                color="gold", fontsize=9.5, fontweight="bold", xytext=(-232, 22),
-                textcoords="offset points", zorder=9,
-                arrowprops=dict(arrowstyle="->", color="gold", lw=1.5),
-                bbox=dict(facecolor="#00000099", edgecolor="gold"))
-    ax.set_title(f"CAUSAL (SOTA) — the complete run on its TRUE global error space\n"
-                 f"one objective over all {N} windows: physics + IC + interface continuity",
-                 fontsize=12)
+    ax.set_title("CAUSAL (SOTA)", fontsize=13)
     ax.set_xlabel("global PCA dir 1 (all windows' parameters)")
     ax.set_ylabel("global PCA dir 2")
-    ax.text(0.015, 0.982,
-            "surface: EXACT — every point a true L_global evaluation, and exact at Θ*\n"
-            f"path: a shadow — this plane holds {ev2*100:.0f}% of the run's parameter variance,\n"
-            f"so the surface reads ~{ratio:.0f}× above a state's true loss (vs ~10⁸× for a\n"
-            "plane through the window cloud)",
-            transform=ax.transAxes, fontsize=8.2, va="top", color="w",
-            bbox=dict(facecolor="#00000077", edgecolor="none"))
 
     # ---------------- bottom: the example window alone ----------------
     ax = fig.add_subplot(gs[1, :])
@@ -140,12 +125,9 @@ def main():
                 xytext=(11, 6), textcoords="offset points")
     ax.annotate(f"window solution  (L2 = {float(cache['p0_l2']):.1e})", (0, 0), color="w",
                 fontsize=10.5, xytext=(-235, -8), textcoords="offset points")
-    ax.set_title(f"EXAMPLE — window {hl} alone, in its OWN error space (the gold segment above): "
-                 "the descent into its funnel", fontsize=12)
+    ax.set_title(f"EXAMPLE — window {hl}", fontsize=13)
     ax.set_xlabel("PCA dir 1 (window plane)"); ax.set_ylabel("PCA dir 2")
 
-    fig.suptitle(f"{cfg['title']} — complete training in error space: vanilla (left) vs the entire "
-                 f"causal run on its true global objective (right)", fontsize=14, y=0.96)
     fig.savefig(f"{OUT}/fig31_vanilla_vs_global_{args.case}.png", dpi=args.dpi,
                 bbox_inches="tight", facecolor="white")
     print(f"saved fig31_vanilla_vs_global_{args.case}.png "
