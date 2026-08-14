@@ -48,7 +48,13 @@ if CONFIG.get("hf_token_read"):
 #            value_type, hf_dir, csv_name, chain_key}
 statuses = {}
 for i, job in enumerate(CONFIG["jobs"], 1):
-    print(f"\n{'#' * 70}\n# job {i}/{len(CONFIG['jobs'])}: {job['csv_name']}\n{'#' * 70}", flush=True)
+    print(f"\n{'#' * 70}\n# job {i}/{len(CONFIG['jobs'])}: {job.get('csv_name') or job.get('script')}\n{'#' * 70}", flush=True)
+    if job.get("pip"):
+        sh(sys.executable, "-m", "pip", "install", "-q", *str(job["pip"]).split())
+    if job.get("script"):
+        cmd = [sys.executable, job["script"]] + str(job.get("args", "")).split()
+        statuses[job.get("csv_name") or job["script"]] = sh(*cmd, env=env)
+        continue
     cmd = [
         sys.executable, "experiments/chain_eval/run_chain_pde.py",
         "--pde-name", job["pde"],
