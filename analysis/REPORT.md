@@ -332,15 +332,18 @@ features? — has a measured answer:
 ablated across the whole domain — the causal weighting, on all 10 KS windows — plus one
 representation swap on GS. Everything measured:
 
-| # | configuration | causal W | windows | Fourier | modified MLP | result |
-|---|---|---|---|---|---|---|
-| 1 | vanilla DeepXDE (single-shot FNN 100×5) | – | – | – | – | KS **1.007**, GS **0.094** |
-| 2 | SOTA **minus the causal weighting** — every time chunk in a window counted equally | **W≡1** | 10 | ✓ | ✓ | KS **8.61e-2** |
-| 3 | full SOTA | ✓ | 10 | ✓ | ✓ | KS **3.56e-2**, GS **1.42e-2** |
-| 4 | full machinery, GS, plain encoding | ✓ | 20 | – (plain) | ✓ | GS w0 **2.96e-3** |
-| 5 | full machinery, GS, 2D Fourier encoding | ✓ | 20 | ✓ (2D) | ✓ | GS w0 **9.58e-3** (3.24×) |
+| # | time ordering | representation | result | failure mode left open |
+|---|---|---|---|---|
+| 1 | none — one net fits all times at once | plain FNN 100×5 | KS **1.007**, GS **0.094** | acausal global fit → the ghost |
+| 2 | coarse only — 10 windows, but inside a window every time chunk counts equally (W≡1) | Fourier + gated MLP | KS **8.61e-2** | acausal fit *within* each window |
+| 3 | coarse + fine — windows plus the causal weights | Fourier + gated MLP | KS **3.56e-2**, GS **1.42e-2** | none of the above; the floor left is inherited handoff error |
+| 4 | full (GS, 20 windows) | plain coords — matches GS's localized spots | GS w0 **2.96e-3** | none |
+| 5 | full (GS, 20 windows) | 2D Fourier — global modes vs localized spots | GS w0 **9.58e-3** (3.24×) | representation–physics mismatch |
 
-Row 2 is row 3 with a single component removed: the causal weights
+Read the rows as "which link of the chain is missing", the same bottleneck logic as
+§1.4: each configuration is only as good as the failure mode it still leaves open, which
+is why the effects multiply instead of adding. Row 2 is row 3 with exactly one link
+removed: the causal weights
 `W_i = exp(−tol·(Σ_{j<i} L_j + 10⁴·L_IC))` are replaced by `W_i ≡ 1`, so a window's loss
 becomes the plain mean of its 32 time-chunk residuals plus the IC term — the windows,
 the handoff, the Fourier encoding, the gated MLP and the network size are untouched.
