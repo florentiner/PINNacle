@@ -440,20 +440,34 @@ the agent's real leverage is.
 
 ![wall](report_figs/fig3_optimizer_wall.png)
 
-We ran twelve hand-designed optimizer strategies — Adam→L-BFGS switching at 25/50/75/90%
-of the budget, PSO injections, learning-rate ladders, alternating segments — with three
-seeds each: 36 runs.
+We ran twelve hand-designed optimizer strategies — Adam at three learning rates,
+Adam→L-BFGS switching at 25/50/75/90% of the budget, Adam↔L-BFGS alternation, a
+learning-rate ladder, and 1%-of-budget PSO injections at the start and in the middle —
+with three seeds each: 36 runs.
 
-Every strategy that runs at all ends in the same place: **L2RE 0.913–0.915, with
-essentially no spread across seeds**. Four of the twelve break outright.
+Every strategy built on Adam 1e-3/1e-4 ends in the same place, **L2RE 0.911–0.921**,
+whatever else it does; the three strategies that use Adam 1e-2 diverge instead
+(1.5–4.1). The sharpest fact is in the switch-point family: `alb_25`, `alb_50`,
+`alb_75`, `alb_90` and `alternate` reach their wall **at the same epoch** (3.1k / 7.6k /
+6.4k for the three seeds) and end within 0.001 of each other, although their switch
+points differ by 3.6×. Inside this family the outcome is fixed by the seed and by the
+learning rate of the first Adam phase — the schedule contributes nothing (H17 refuted
+for this family).
 
-The decisive detail is *when* the wall is hit: at 3.1–6.9k epochs — **before the
-earliest switch even happens**. The outcome is settled before the strategies begin to
-differ from one another, so switch timing carries no information at all (H17 refuted).
+§1.3 shows the mechanism: every one of these optimizers is exploring the same deceptive
+plateau, and §3 adds that LR kicks of ×1…×32 — a different escape mechanism entirely —
+land in equally wrong or deeper minima. **The evidence says the 26× gap sits in the
+formulation rather than in the optimizer schedule.**
 
-§1.3 shows why: every optimizer is exploring the same deceptive plateau. **The 26× gap
-sits in the formulation, not in the way it is optimized** — so no policy over
-{optimizer, hyperparameters, switch time} can cross it.
+**Scope, stated honestly.** These 36 runs do not exhaust the action space an RL agent
+would search. All twelve chains are Adam-dominated: eleven begin with Adam, PSO never
+runs for more than 1% of the budget, none begins with L-BFGS, and the finest segment is
+1% of the run. Untested — and cheap to test, ~1 h per run — are L-BFGS from step zero,
+PSO as the dominant phase, fine-grained switching every 100–500 epochs, and much longer
+budgets. The claim that *no* optimizer policy can cross the gap is therefore an
+extrapolation from the landscape mechanism, supported by every configuration we ran but
+not proven by exhaustion; what the data does establish is that the natural family — the
+one a scheduler explores first — is uniformly stuck at ~0.92.
 
 The corollary is the agent's first and largest lever:
 
