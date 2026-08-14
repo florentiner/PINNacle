@@ -328,6 +328,49 @@ features? — has a measured answer:
   spots don't match global Fourier modes. Fourier features are load-bearing for KS
   (exact periodicity), not universal.
 
+**The complete ablation record (and what it does not cover).** Only one ingredient was
+ablated across the whole domain — the causal weighting, on all 10 KS windows — plus one
+representation swap on GS. Everything measured:
+
+| # | configuration | causal W | windows | Fourier | modified MLP | result |
+|---|---|---|---|---|---|---|
+| 1 | vanilla DeepXDE (single-shot FNN 100×5) | – | – | – | – | KS **1.007**, GS **0.094** |
+| 2 | ablation: same recipe, uniform weights | **W≡1** | 10 | ✓ | ✓ | KS **8.61e-2** |
+| 3 | full SOTA | ✓ | 10 | ✓ | ✓ | KS **3.56e-2**, GS **1.42e-2** |
+| 4 | full machinery, GS, plain encoding | ✓ | 20 | – (plain) | ✓ | GS w0 **2.96e-3** |
+| 5 | full machinery, GS, 2D Fourier encoding | ✓ | 20 | ✓ (2D) | ✓ | GS w0 **9.58e-3** (3.24×) |
+
+Rows 2 vs 3 per window (the finest-grained data in the study):
+
+| window | causal L2 | W≡1 L2 | penalty | causal iters | W≡1 iters |
+|---|---|---|---|---|---|
+| 0 | 2.30e-5 | 2.88e-5 | 1.25× | 237k | 250k |
+| 1 | 5.67e-5 | 1.47e-4 | 2.59× | 307k | 250k |
+| 2 | 2.23e-4 | 5.02e-4 | 2.25× | 218k | **484k** |
+| 3 | 9.73e-4 | 1.56e-3 | 1.61× | 356k | 250k |
+| 4 | 1.83e-3 | 3.25e-3 | 1.78× | 785k | 485k |
+| 5 | 4.04e-3 | 7.35e-3 | 1.82× | 733k | 250k |
+| 6 | 5.30e-3 | 9.80e-3 | 1.85× | 735k | 486k |
+| 7 | 1.11e-2 | 2.12e-2 | 1.91× | 735k | 250k |
+| 8 | 4.40e-2 | 8.85e-2 | 2.01× | 735k | 484k |
+| 9 | 7.87e-2 | 1.99e-1 | 2.53× | 736k | 250k |
+
+The budgets are not equal (5.58M causal vs 3.44M ablation iterations in total: the
+ablation cannot use the W_min ≥ 0.99 stopping rule, so it ran fixed per-window caps),
+which raises the obvious objection that the penalty is a compute artifact. Window 2
+settles it: the ablation there received **2.2× more** iterations than the causal run and
+was still **2.25× worse**. The same holds at w6 and w8 within a factor of 1.5 in budget.
+
+**Not covered.** A full factorial over the four ingredients {time windows, Fourier /
+multi-scale features, gated modified MLP, causal weighting} is 16 configurations; the
+table above measures 3 of them on KS (all-off, one-off, all-on) plus one representation
+swap on GS. Untested cells include: windows alone; windows + Fourier without the gated
+architecture; windows + architecture without Fourier; causal weighting without windows;
+and the KS encoding swap. Their cost is what stopped us — one complete 10-window KS run
+is 3.4–5.6M iterations ≈ 40–50 GPU-hours, so the remaining twelve cells are ~500 GPU-h.
+A reduced version is cheap and would settle most of them: window-0-only runs at matched
+budget (the protocol of rows 4/5), ≈4 h each on a T4.
+
 ![per-window](report_figs/fig2_perwindow_floor.png)
 *Per-window error, causal vs ablation. Both ride the Lyapunov amplification line
 (gray); causal sits uniformly below. The red star is the P1 experiment (§2.2): re-run
