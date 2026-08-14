@@ -335,10 +335,17 @@ representation swap on GS. Everything measured:
 | # | configuration | causal W | windows | Fourier | modified MLP | result |
 |---|---|---|---|---|---|---|
 | 1 | vanilla DeepXDE (single-shot FNN 100×5) | – | – | – | – | KS **1.007**, GS **0.094** |
-| 2 | ablation: same recipe, uniform weights | **W≡1** | 10 | ✓ | ✓ | KS **8.61e-2** |
+| 2 | SOTA **minus the causal weighting** — every time chunk in a window counted equally | **W≡1** | 10 | ✓ | ✓ | KS **8.61e-2** |
 | 3 | full SOTA | ✓ | 10 | ✓ | ✓ | KS **3.56e-2**, GS **1.42e-2** |
 | 4 | full machinery, GS, plain encoding | ✓ | 20 | – (plain) | ✓ | GS w0 **2.96e-3** |
 | 5 | full machinery, GS, 2D Fourier encoding | ✓ | 20 | ✓ (2D) | ✓ | GS w0 **9.58e-3** (3.24×) |
+
+Row 2 is row 3 with a single component removed: the causal weights
+`W_i = exp(−tol·(Σ_{j<i} L_j + 10⁴·L_IC))` are replaced by `W_i ≡ 1`, so a window's loss
+becomes the plain mean of its 32 time-chunk residuals plus the IC term — the windows,
+the handoff, the Fourier encoding, the gated MLP and the network size are untouched.
+With constant weights the tolerance ladder has nothing to act on, so that run also loses
+the `W_min ≥ 0.99` stopping rule and instead spends fixed per-window budgets.
 
 Rows 2 vs 3 per window (the finest-grained data in the study):
 
