@@ -39,14 +39,34 @@ def main():
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.6))
 
     ax = axes[0]
-    ax.semilogy(m["step"] / 1e3, m["loss_train_total"], "-", color="tab:red", lw=1.8)
-    ax.scatter([m["step"].iloc[0] / 1e3, m["step"].iloc[-1] / 1e3],
-               [m["loss_train_total"].iloc[0], m["loss_train_total"].iloc[-1]],
-               s=90, color="red", edgecolors="k", linewidths=0.6, zorder=5)
+    st_v = m["step"].values / 1e3
+    L = m["loss_train_total"].values
+    ax.semilogy(st_v, L, "-", color="tab:red", lw=1.8)
+    ax.scatter([st_v[0], st_v[-1]], [L[0], L[-1]], s=90, color="red", edgecolors="k",
+               linewidths=0.6, zorder=5)
     ax.set_xlabel("training iterations (×10³)")
-    ax.set_ylabel("training loss")
+    ax.set_ylabel("training loss (log scale)")
     ax.set_title("VANILLA", fontsize=13)
-    ax.grid(alpha=0.3)
+    ax.grid(alpha=0.3, which="both")
+
+    # a single transient spike can flatten everything else: label it and zoom the rest
+    i_sp = int(np.argmax(L))
+    rest = np.delete(L, i_sp)
+    if L[i_sp] > 5 * np.median(L):
+        ax.annotate(f"transient spike {L[i_sp]:.2e}\nat it {int(m['step'].values[i_sp]):,}",
+                    (st_v[i_sp], L[i_sp]), fontsize=9, color="darkred",
+                    xytext=(24, -18), textcoords="offset points",
+                    arrowprops=dict(arrowstyle="->", color="darkred", lw=1.3),
+                    bbox=dict(facecolor="w", alpha=0.9, edgecolor="darkred"))
+        ins = ax.inset_axes([0.30, 0.42, 0.66, 0.40])
+        ins.semilogy(st_v, L, "-", color="tab:red", lw=1.4)
+        ins.set_ylim(rest.min() * 0.93, rest.max() * 1.07)
+        ins.set_title(f"zoom without the spike: the rest spans only "
+                      f"{rest.min():.2e}–{rest.max():.2e} ({rest.max()/rest.min():.2f}×)",
+                      fontsize=8)
+        ins.tick_params(labelsize=7)
+        ins.grid(alpha=0.3, which="both")
+        ins.patch.set_alpha(0.95)
 
     ax = axes[1]
     w, stp, ls = hist["window"], hist["step"], hist["loss"]
@@ -67,9 +87,9 @@ def main():
                         xytext=(2, -11), textcoords="offset points")
         off += stp[sel].max()
     ax.set_xlabel("cumulative training iterations (×10⁶)")
-    ax.set_ylabel("training loss")
+    ax.set_ylabel("training loss (log scale)")
     ax.set_title("CAUSAL (SOTA)", fontsize=13)
-    ax.grid(alpha=0.3)
+    ax.grid(alpha=0.3, which="both")
 
     fig.tight_layout()
     fig.savefig(f"{OUT}/fig32_loss_traces_{args.case}.png", dpi=args.dpi,
