@@ -195,25 +195,26 @@ Three results come out of this construction, all measured:
    growing true error: that is the inherited handoff error amplified by the dynamics,
    the mechanism §2.2 measures independently.
 
-**The two training runs as loss traces**, side by side:
+**The two training runs as loss traces:**
 
 ![loss traces — KS](report_figs/fig32_loss_traces_ks.png)
 ![loss traces — GS](report_figs/fig32_loss_traces_gs.png)
-*Left: vanilla's single loss curve over its whole run. Right: the causal run's true
-error trace — every window chained, red = window edges. The contrast is the mechanism
-in one view: vanilla's loss moves less than a factor of 2 across 20k iterations (KS
-0.45 → 0.28; GS 1.0e-2 → 9.6e-3). On GS the panel uses a broken y-axis: the narrow
-top band holds a single transient spike (6.7e-1 at iteration 12,900), the stretched
-bottom band shows the actual dynamics with that spike excised — flat at ~9.7e-3 with
-small bumps before it, a recovery decay from 1.4e-2 back to the same level after it;
-the whole curve outside the spike spans just **1.46×**. Vanilla's loss barely moves
-because it starts already inside the ghost basin and
-has nothing left to descend, while each causal window falls **~9.6 (KS) / ~8.8 (GS)
-orders of magnitude** from its re-initialization to its solution — ten (twenty)
-separate deep descents instead of one shallow drift. Note also that every window ends
-at the same loss level: each is solved to the same standard (cf. the per-window panel
-of fig30), and the growth of the true error across windows therefore comes from
-inherited handoff error, not from worse optimization.*
+*Top — **Vanilla**: its single loss curve over the whole run (on GS the panel uses a
+broken y-axis: the narrow top band isolates one transient spike at iteration 12,900 so
+the stretched bottom band can show the actual dynamics before and after it). Bottom
+left — **SOTA windows**: the causal run's loss per time window, chained, red = window
+edges. Bottom right — **SOTA global**: the same run measured by the single global
+objective of the stitched solution, dropping one step per completed window down to Θ\*.
+
+The three panels together are the mechanism: vanilla's loss barely moves — 0.45 → 0.28
+on KS, and on GS the whole curve outside the spike spans just **1.46×** (9.6e-3–1.4e-2)
+— because it starts already inside the ghost basin and has nothing left to descend.
+Each causal window instead falls **~9.6 (KS) / ~8.8 (GS) orders of magnitude** from its
+re-initialization to its solution, all of them ending at the same loss level (each
+window solved to the same standard), and the global objective follows them down the
+staircase: **4.9 → 7.6e-5 (KS)** and **1.3e-2 → 8.7e-6 (GS)**. Since every window is
+optimized equally well, the growth of the true error across windows (fig30, bottom) is
+inherited handoff error, not degrading optimization.*
 
 ### 1.4 Why the combination synergizes — one principle at four scales
 

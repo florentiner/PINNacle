@@ -1,8 +1,10 @@
-"""fig32: the training-loss trace of both methods, side by side.
+"""fig32: training-loss traces — Vanilla on top, and below it the SOTA run seen two
+ways: per time window (left) and as the single global loss of the stitched solution
+as the causal front advances (right).
 
-Left  — vanilla: its single loss curve over the whole run.
-Right — causal: the true error trace of the complete run, every window chained,
-        red = window edges.
+The vanilla panel uses a broken y-axis when one transient spike would otherwise flatten
+the whole curve: the narrow top band holds the spike, the stretched bottom band shows
+the real dynamics before and after it.
 """
 import argparse
 import os
@@ -36,40 +38,34 @@ def main():
     m = pd.read_csv(os.path.join(BASE[args.case], "metrics.csv"))
     hist = np.load(os.path.join(cfg["final_dir"], "causal", "history_jax.npz"),
                    allow_pickle=True)
+    gl = np.load(f"analysis/out/global_stitched_{args.case}.npz", allow_pickle=True)
 
     st_v = m["step"].values / 1e3
     L = m["loss_train_total"].values
+    med = float(np.median(L))
     i_sp = int(np.argmax(L))
-    spike = L[i_sp] > 5 * np.median(L)
-    rest = L[L < 3 * np.median(L)]
+    spike = L[i_sp] > 5 * med
+    core = L[L < 1.15 * med]                      # the band the curve really lives in
 
-    fig = plt.figure(figsize=(15, 5.8))
-    outer = gridspec.GridSpec(1, 2, wspace=0.22)
+    fig = plt.figure(figsize=(14.5, 9.4))
+    outer = gridspec.GridSpec(2, 1, height_ratios=[1.0, 1.0], hspace=0.30)
+
+    # ---------------- top: Vanilla ----------------
     if spike:
-        # broken y-axis: a narrow band for the spike, a stretched band for the real range
-        left = outer[0].subgridspec(2, 1, height_ratios=[1, 3.4], hspace=0.08)
-        ax_t = fig.add_subplot(left[0])
-        ax = fig.add_subplot(left[1], sharex=ax_t)
-        ax_t.semilogy(st_v, L, "-", color="tab:red", lw=1.6)
-        ax_t.set_ylim(rest.max() * 2.2, L[i_sp] * 1.5)
+        top = outer[0].subgridspec(2, 1, height_ratios=[1, 3.6], hspace=0.07)
+        ax_t = fig.add_subplot(top[0])
+        ax = fig.add_subplot(top[1], sharex=ax_t)
+        ax_t.semilogy(st_v, L, "-", color="tab:red", lw=1.5)
+        ax_t.set_ylim(core.max() * 3, L[i_sp] * 1.6)
         ax_t.spines["bottom"].set_visible(False)
         ax_t.tick_params(labelbottom=False, labelsize=8)
         ax_t.grid(alpha=0.3, which="both")
-        ax_t.set_title("VANILLA", fontsize=13)
-        ax_t.annotate(f"transient spike {L[i_sp]:.2e} at it {int(m['step'].values[i_sp]):,}",
-                      (st_v[i_sp], L[i_sp]), fontsize=9, color="darkred",
-                      xytext=(18, -8), textcoords="offset points",
-                      arrowprops=dict(arrowstyle="->", color="darkred", lw=1.2),
-                      bbox=dict(facecolor="w", alpha=0.9, edgecolor="darkred"))
-        # the curve without the spike, so the real dynamics are visible
+        ax_t.set_title("Vanilla", fontsize=13)
         Lm = L.copy()
-        Lm[L > 3 * np.median(L)] = np.nan
+        Lm[L > 1.15 * med] = np.nan               # excise spike + its upper recovery
         ax.semilogy(st_v, Lm, "-", color="tab:red", lw=1.8)
         ax.axvline(st_v[i_sp], color="darkred", ls=":", lw=1.2)
-        ax.annotate("spike removed here\n(see band above)", (st_v[i_sp], rest.min() * 1.02),
-                    fontsize=8, color="darkred", xytext=(7, 4),
-                    textcoords="offset points")
-        ax.set_ylim(rest.min() * 0.97, rest.max() * 1.06)
+        ax.set_ylim(core.min() * 0.985, core.max() * 1.015)
         ax.spines["top"].set_visible(False)
         kw = dict(marker=[(-1, -0.6), (1, 0.6)], markersize=9, linestyle="none",
                   color="k", mec="k", mew=1, clip_on=False)
@@ -78,41 +74,63 @@ def main():
     else:
         ax = fig.add_subplot(outer[0])
         ax.semilogy(st_v, L, "-", color="tab:red", lw=1.8)
-        ax.set_title("VANILLA", fontsize=13)
+        ax.set_title("Vanilla", fontsize=13)
     ax.scatter([st_v[0], st_v[-1]], [L[0], L[-1]], s=90, color="red", edgecolors="k",
                linewidths=0.6, zorder=5)
     ax.set_xlabel("training iterations (×10³)")
     ax.set_ylabel("training loss (log scale)")
     ax.grid(alpha=0.3, which="both")
 
-    ax = fig.add_subplot(outer[1])
+    # ---------------- bottom-left: SOTA per window ----------------
+    bot = outer[1].subgridspec(1, 2, wspace=0.24)
+    ax = fig.add_subplot(bot[0])
     w, stp, ls = hist["window"], hist["step"], hist["loss"]
     order = np.lexsort((stp, w))
     w, stp, ls = w[order], stp[order], ls[order]
-    off = 0
+    off, offsets, wmax = 0, {}, {}
     for k in range(N):
         sel = w == k
         if not sel.any():
             continue
+        offsets[k] = off
+        wmax[k] = float(stp[sel].max())
         xx, yy = off + stp[sel], ls[sel]
-        ax.semilogy(xx / 1e6, yy, "-", lw=1.0,
-                    color=plt.cm.plasma(k / max(N - 1, 1)))
+        ax.semilogy(xx / 1e6, yy, "-", lw=1.0, color=plt.cm.plasma(k / max(N - 1, 1)))
         ax.plot([xx[0] / 1e6, xx[-1] / 1e6], [yy[0], yy[-1]], "o", ms=5, color="red",
                 markeredgecolor="k", markeredgewidth=0.4, zorder=5)
         if N <= 10 or k % 2 == 0:
             ax.annotate(f"w{k}", (xx[-1] / 1e6, yy[-1]), fontsize=8,
                         xytext=(2, -11), textcoords="offset points")
-        off += stp[sel].max()
+        off += wmax[k]
     ax.set_xlabel("cumulative training iterations (×10⁶)")
     ax.set_ylabel("training loss (log scale)")
-    ax.set_title("CAUSAL (SOTA)", fontsize=13)
+    ax.set_title("SOTA windows", fontsize=13)
+    ax.grid(alpha=0.3, which="both")
+
+    # ---------------- bottom-right: SOTA global ----------------
+    ax = fig.add_subplot(bot[1])
+    lt, lab = gl["loss_traj"], gl["labels"]
+    xs = np.array([offsets.get(int(k), 0) + (st if st >= 0 else wmax.get(int(k), 0))
+                   for k, st in lab]) / 1e6
+    ok = ~np.isnan(lt)
+    ax.semilogy(xs[ok], lt[ok], "-", color="0.35", lw=1.4, zorder=3)
+    ends = np.array([np.where(lab[:, 0] == k)[0][-1] for k in range(N)
+                     if (lab[:, 0] == k).any()])
+    ax.scatter(xs[ends], lt[ends], s=52, color="red", edgecolors="k", linewidths=0.5,
+               zorder=5)
+    fin = float(gl["parts"].sum())
+    ax.axhline(fin, color="gold", ls="--", lw=1.5)
+    ax.annotate(f"final Θ* = {fin:.1e}", (xs.max(), fin), fontsize=9,
+                color="darkgoldenrod", xytext=(-120, 9), textcoords="offset points")
+    ax.set_xlabel("cumulative training iterations (×10⁶)")
+    ax.set_ylabel("global loss of the stitched solution (log)")
+    ax.set_title("SOTA global", fontsize=13)
     ax.grid(alpha=0.3, which="both")
 
     fig.savefig(f"{OUT}/fig32_loss_traces_{args.case}.png", dpi=args.dpi,
                 bbox_inches="tight", facecolor="white")
-    print(f"saved fig32_loss_traces_{args.case}.png  "
-          f"(vanilla {m['loss_train_total'].iloc[0]:.2e} -> {m['loss_train_total'].iloc[-1]:.2e}; "
-          f"causal per-window drops ~{np.log10(ls[w == 0][0] / ls[w == 0][-1]):.1f} orders)")
+    print(f"saved fig32_loss_traces_{args.case}.png (vanilla core band "
+          f"{core.min():.3e}-{core.max():.3e}; global {lt[ok][0]:.2e} -> {fin:.2e})")
 
 
 if __name__ == "__main__":
