@@ -146,7 +146,7 @@ def build_jobs(account: dict, cfg: dict, pdes: list[str]) -> list[dict]:
         j.setdefault("chain_json", None)
         j.setdefault("value_type", "chain")
         j.setdefault("hf_dir", cfg.get("hf_dir", "csv_chain"))
-        j.setdefault("csv_name", j["pde"])
+        j.setdefault("csv_name", j.get("pde") or j.get("script", "job"))
         j.setdefault("chain_key", main_chain_key)
         jobs.append(j)
     for pde in pdes:
