@@ -440,14 +440,20 @@ the agent's real leverage is.
 
 ![wall](report_figs/fig3_optimizer_wall.png)
 
-Twelve hand-designed chains (Adam→L-BFGS switches at 25/50/75/90%, PSO injections, LR
-ladders, alternating segments; 3 seeds each): **every viable chain lands at KS L2RE =
-0.913–0.915 with cross-seed std ≈ 0.000** — the same ghost attractor — and 4 of the 12
-chains actively diverge or break. The wall is reached at 3.1–6.9k epochs, *before the
-earliest switch point*, so switch timing carries zero signal on chaotic KS (H17
-refuted). The landscape of §1.3 says why: every optimizer explores the same deceptive
-plateau. **No policy over {optimizer, hyperparameters, switch time} can cross a 26× gap
-that is formulation-bound.**
+We ran twelve hand-designed optimizer strategies — Adam→L-BFGS switching at 25/50/75/90%
+of the budget, PSO injections, learning-rate ladders, alternating segments — with three
+seeds each: 36 runs.
+
+Every strategy that runs at all ends in the same place: **L2RE 0.913–0.915, with
+essentially no spread across seeds**. Four of the twelve break outright.
+
+The decisive detail is *when* the wall is hit: at 3.1–6.9k epochs — **before the
+earliest switch even happens**. The outcome is settled before the strategies begin to
+differ from one another, so switch timing carries no information at all (H17 refuted).
+
+§1.3 shows why: every optimizer is exploring the same deceptive plateau. **The 26× gap
+sits in the formulation, not in the way it is optimized** — so no policy over
+{optimizer, hyperparameters, switch time} can cross it.
 
 The corollary is the agent's first and largest lever:
 
