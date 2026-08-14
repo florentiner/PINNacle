@@ -195,6 +195,21 @@ Three results come out of this construction, all measured:
    growing true error: that is the inherited handoff error amplified by the dynamics,
    the mechanism §2.2 measures independently.
 
+**The two training runs as loss traces**, side by side:
+
+![loss traces — KS](report_figs/fig32_loss_traces_ks.png)
+![loss traces — GS](report_figs/fig32_loss_traces_gs.png)
+*Left: vanilla's single loss curve over its whole run. Right: the causal run's true
+error trace — every window chained, red = window edges. The contrast is the mechanism
+in one view: vanilla's loss moves less than a factor of 2 across 20k iterations (KS
+0.45 → 0.28, GS 1.0e-2 → 9.6e-3) because it starts already inside the ghost basin and
+has nothing left to descend, while each causal window falls **~9.6 (KS) / ~8.8 (GS)
+orders of magnitude** from its re-initialization to its solution — ten (twenty)
+separate deep descents instead of one shallow drift. Note also that every window ends
+at the same loss level: each is solved to the same standard (cf. the per-window panel
+of fig30), and the growth of the true error across windows therefore comes from
+inherited handoff error, not from worse optimization.*
+
 ### 1.4 Why the combination synergizes — one principle at four scales
 
 The ingredients are not four independent improvements that happen to stack. They are
