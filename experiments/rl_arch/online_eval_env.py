@@ -101,7 +101,10 @@ def load_agent(model_file):
 
 
 def pick_action(agent, state, mean, std, variant):
-    x = torch.as_tensor((state[None] - mean) / std).float()
+    # deepxde на GPU ставит default device = cuda, поэтому вход надо создавать
+    # на том же устройстве, где лежат веса агента
+    dev = next(agent.model.parameters()).device
+    x = torch.as_tensor((state[None] - mean) / std, device=dev).float()
     with torch.no_grad():
         q = (agent.q_cvar(x) if variant in ("cnn_qrdqn", "cnx_cql_qr")
              else agent.q_scalar(x))
