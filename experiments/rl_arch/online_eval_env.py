@@ -195,16 +195,22 @@ def run_seed(seed, args):
             break
 
         # ---- state: AE over the saved trajectory, then latent loss surface ----
+        t_ae = time.time()
         ae = vm.train(args.ae_lr, args.ae_cosine_patience, args.ae_epochs, 100,
                       args.ae_batch, True, finetune_AE_model=False,
                       callbacks=[EarlyStopping(patience=args.ae_es_patience)],
                       solver_models=saver.saved_models)
+        t_ae = time.time() - t_ae
+        t_srf = time.time()
         pls = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae,
                               dde_pde_model=get_model_rec, x_range=GRID_RANGE,
                               batch_size=args.ae_batch, loss_types=LOSS_TYPES,
                               loss_name="loss_total", path_to_plot_model=None,
                               path_to_trajectories=None, img_dir="")
         raw = pls.save_equation_loss_surface(log_key=True)
+        t_srf = time.time() - t_srf
+        print(f"[seed {seed}] state built: AE {t_ae:.1f}s (epochs={args.ae_epochs}), "
+              f"surface {t_srf:.1f}s", flush=True)
         state = build_state(raw, prev_raw)
         prev_raw = raw
         del pls, ae
@@ -258,8 +264,11 @@ def main():
     ap.add_argument("--tag", default=None)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
-    if args.smoke:
-        args.budget, args.ae_epochs, args.n_save_models = 300, 50, 3
+    if args.smoke:  # только как дефолты — явные флаги не перезаписываем
+        given = set(a.split("=")[0] for a in sys.argv[1:] if a.startswith("--"))
+        if "--budget" not in given: args.budget = 300
+        if "--ae-epochs" not in given: args.ae_epochs = 50
+        if "--n-save-models" not in given: args.n_save_models = 3
 
     tag = args.tag or (os.path.basename(args.model_file).replace(".pt", "")
                        if args.model_file else "random")
