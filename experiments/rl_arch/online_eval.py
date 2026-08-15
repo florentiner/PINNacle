@@ -133,6 +133,7 @@ def pick_action(net, state, mean, std, variant, torch):
 
 
 def run_episode(seed, policy, ckpt_path, args):
+    pde_name = getattr(args, "pde", "poissonboltzmann2d")
     budget = args.budget
     import torch
     import deepxde as dde
@@ -146,7 +147,7 @@ def run_episode(seed, policy, ckpt_path, args):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-    model, loss_weights = build_get_model("poissonboltzmann2d", "100*5")()
+    model, loss_weights = build_get_model(pde_name, "100*5")()
 
     def reinit(m):
         if isinstance(m, torch.nn.Linear):
@@ -233,6 +234,7 @@ def main():
     ap.add_argument("--model-file", default=None,
                     help="HF path rl_arch/models/<name>.pt (required for agent)")
     ap.add_argument("--seeds", default="42,43,44,45,46,47,48,49,50,51")
+    ap.add_argument("--pde", default="poissonboltzmann2d")
     ap.add_argument("--budget", type=int, default=BUDGET)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
@@ -255,6 +257,8 @@ def main():
         row["smoke"] = args.smoke
         tag = (os.path.basename(args.model_file).replace(".pt", "")
                if args.model_file else "random")
+        if args.pde != "poissonboltzmann2d":
+            tag = f"{args.pde}_{tag}"
         print(json.dumps(row), flush=True)
         if not args.smoke:
             upload_result(row, f"{tag}_{args.policy}_seed{seed}")

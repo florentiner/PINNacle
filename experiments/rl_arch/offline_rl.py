@@ -45,7 +45,7 @@ OUT_REPO = "danil-e/pinnacle-optuna-db"
 # Data
 # --------------------------------------------------------------------------
 
-def load_episodes(data_dir: str | None):
+def load_episodes(data_dir: str | None, subdir: str = SUBDIR):
     import torch
     from huggingface_hub import list_repo_files, hf_hub_download
 
@@ -53,7 +53,7 @@ def load_episodes(data_dir: str | None):
         paths = sorted(os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith(".pt"))
     else:
         names = [f for f in list_repo_files(REPO, repo_type="dataset")
-                 if f.startswith(SUBDIR + "/") and f.endswith(".pt")]
+                 if f.startswith(subdir + "/") and f.endswith(".pt")]
         paths = [hf_hub_download(REPO, f, repo_type="dataset") for f in sorted(names)]
     episodes = []
     for p in paths:
@@ -534,6 +534,8 @@ def main():
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--cql-alpha", type=float, default=1.0)
     ap.add_argument("--data-dir", default=None)
+    ap.add_argument("--subdir", default=SUBDIR,
+                    help="Buffer folder in the HF dataset (e.g. poisson3d_complexgeometry)")
     ap.add_argument("--fix-next-state", action="store_true",
                     help="Reconstruct s'=state[t+1] (poisson_boltzmann_2d dump has s'==s)")
     ap.add_argument("--save-model", action="store_true",
@@ -550,7 +552,7 @@ def main():
     import torch  # noqa
 
     print(f"loading episodes...", flush=True)
-    episodes = load_episodes(args.data_dir)
+    episodes = load_episodes(args.data_dir, args.subdir)
     data = episodes_to_arrays(episodes, fix_next_state=args.fix_next_state)
     train_mask, test_mask = split_by_episode(data)
     print(f"episodes={len(episodes)} transitions={len(data['A'])} "
@@ -564,18 +566,21 @@ def main():
             m, _ = evaluate(net, stats, data, test_mask, policy=pol)
             fq = fqe(net, stats, data, train_mask, test_mask, pol, args, seed)
             row = dict(variant=args.variant, policy=pol, seed=seed,
-                       fixed_ns=bool(args.fix_next_state),
+                       fixed_ns=bool(args.fix_next_state), dataset=args.subdir,
                        n_params=net.n_params(), train_time_s=round(train_time, 1),
                        epochs=args.epochs, smoke=args.smoke, **m, **fq)
             print(json.dumps(row), flush=True)
             if not args.smoke:
-                upload_result(row, f"{args.variant}{'_fixns' if args.fix_next_state else ''}_{pol}_seed{seed}")
+                tag = ("_fixns" if args.fix_next_state else "") + \
+                      ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0])
+                upload_result(row, f"{args.variant}{tag}_{pol}_seed{seed}")
         if args.save_model and not args.smoke:
             import torch as _t
             ckpt = {"variant": args.variant, "seed": seed,
                     "state_dict": {k: v.cpu() for k, v in net.model.state_dict().items()},
                     "mean": stats["mean"], "std": stats["std"]}
-            sfx = "_fixns" if args.fix_next_state else ""
+            sfx = ("_fixns" if args.fix_next_state else "") + \
+                  ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0])
             fn = f"/tmp/agent_{args.variant}{sfx}_seed{seed}.pt"
             _t.save(ckpt, fn)
             tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
