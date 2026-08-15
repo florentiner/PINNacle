@@ -108,6 +108,35 @@ def pick_action(agent, state, mean, std, variant):
     return int(q.argmax(1).item())
 
 
+def landscape_stall_prob(state, trig):
+    """Ландшафтный триггер коллеги в сильнейшей форме: логистическая модель,
+    обученная на здоровом буфере (landscape_trigger.json, AUC 0.657)."""
+    m = state[0].astype(np.float64)
+    g = np.gradient(m)
+    f = np.array([m.std(),
+                  np.mean(np.abs(g[0])) + np.mean(np.abs(g[1])),
+                  np.abs(np.gradient(g[0])[0] + np.gradient(g[1])[1]).mean(),
+                  m[13, 13] - m.min(),
+                  np.percentile(m, 95) - np.percentile(m, 5),
+                  m[13, 13], m.mean()])
+    z = (f - np.array(trig["mean"])) / np.array(trig["std"])
+    return float(1.0 / (1.0 + np.exp(-(z @ np.array(trig["coef"]) + trig["intercept"]))))
+
+
+class BoostedNet(torch.nn.Module):
+    """u = base + eps*boost, база заморожена (arXiv 2307.08934)."""
+
+    def __init__(self, base, boost, eps):
+        super().__init__()
+        self.base, self.boost, self.eps = base, boost, float(eps)
+        self.regularizer = None
+        for p in self.base.parameters():
+            p.requires_grad_(False)
+
+    def forward(self, x):
+        return self.base(x) + self.eps * self.boost(x)
+
+
 def build_state(raw, prev_raw):
     """Replicates EnvRLOptimizer.step delta logic + channel order."""
     tot = raw["loss_total"].detach().float().cpu()
@@ -164,12 +193,19 @@ def run_seed(seed, args, progress_cb=None):
     # initial state: zero maps (rl_trainer.zero_state)
     state = np.zeros((4, 26, 26), dtype=np.float32)
     prev_raw = None
+    trig = (json.load(open(os.path.join(SCRIPT_DIR, "landscape_trigger.json")))
+            if args.boost_trigger == "landscape" else None)
+    boosted, loss_hist = False, []
     spent, chain, t0 = 0, [], time.time()
     rmse = brmse = l2re_op = l2re_bnd = float("inf")
 
     while spent < args.budget:
-        a = (pick_action(agent, state, mean, std, variant) if args.policy == "agent"
-             else int(rng.integers(0, 27)))
+        if args.policy == "agent":
+            a = pick_action(agent, state, mean, std, variant)
+        elif args.policy == "fixed":
+            a = args.fixed_action
+        else:
+            a = int(rng.integers(0, 27))
         opt_name, lr, epochs = ACTION_TABLE[a]
         epochs = min(epochs, args.budget - spent)
         optimizer = build_optimizer(opt_name, lr, model.net)
@@ -200,6 +236,31 @@ def run_seed(seed, args, progress_cb=None):
         if spent >= args.budget:
             break
 
+        # ---- решение о бустинге: проверка идеи статьи с ландшафтным триггером ----
+        loss_hist.append(float(np.asarray(model.train_state.loss_train, dtype=float).sum()))
+        if args.boost_trigger != "none" and not boosted and spent < args.budget:
+            fire = False
+            if trig is not None and len(chain) > 1:
+                p_stall = landscape_stall_prob(state, trig)
+                fire = p_stall > args.boost_threshold
+                print(f"[seed {seed}] ландшафтный триггер: P(застой)={p_stall:.3f}", flush=True)
+            elif args.boost_trigger == "plateau" and len(loss_hist) >= 4:
+                r4 = loss_hist[-4:]
+                fire = (max(r4) - min(r4)) < 1e-3 * abs(r4[-1] + 1e-12)
+            if fire:
+                eps = float(np.sqrt(max(float(np.asarray(model.train_state.loss_train,
+                                                         dtype=float)[0]), 1e-30)))
+                layers = [model.net.linears[0].in_features, 64, 64, 64,
+                          model.net.linears[-1].out_features]
+                boost = dde.nn.FNN(layers, "tanh", "Glorot normal").float()
+                pde_ref = getattr(model, "pde", None)
+                model = dde.Model(model.data, BoostedNet(model.net, boost, eps))
+                model.pde = pde_ref
+                boosted = True
+                chain.append(["BOOST", eps, 0])
+                print(f"[seed {seed}] БУСТИНГ подключён (eps={eps:.3e}, триггер "
+                      f"{args.boost_trigger})", flush=True)
+
         # ---- state: AE over the saved trajectory, then latent loss surface ----
         t_ae = time.time()
         ae = vm.train(args.ae_lr, args.ae_cosine_patience, args.ae_epochs, 100,
@@ -225,7 +286,8 @@ def run_seed(seed, args, progress_cb=None):
             torch.cuda.empty_cache()
 
     l2re = math.hypot(l2re_op, l2re_bnd)
-    return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re, rmse=rmse,
+    return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
+                boost_trigger=args.boost_trigger, boosted=boosted, rmse=rmse,
                 brmse=brmse, l2re_op=l2re_op, l2re_bnd=l2re_bnd, budget=args.budget,
                 n_steps=len(chain), chain=chain, ae_epochs=args.ae_epochs,
                 elapsed_s=round(time.time() - t0, 1))
@@ -253,7 +315,10 @@ def upload(row, name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--policy", required=True, choices=["agent", "random"])
+    ap.add_argument("--policy", required=True, choices=["agent", "random", "fixed"])
+    ap.add_argument("--fixed-action", type=int, default=4,
+                    help="Индекс повторяемого действия для --policy fixed "
+                         "(4 = Adam lr 1e-3 x 1000 эпох)")
     ap.add_argument("--model-file", default=None)
     ap.add_argument("--seeds", default="42,43,44")
     ap.add_argument("--pde", default="poissonboltzmann2d")
@@ -268,6 +333,9 @@ def main():
     ap.add_argument("--ae-es-patience", type=int, default=4000)
     ap.add_argument("--save-dir", default="runs_rl_online")
     ap.add_argument("--tag", default=None)
+    ap.add_argument("--boost-trigger", default="none",
+                    choices=["none", "landscape", "plateau"])
+    ap.add_argument("--boost-threshold", type=float, default=0.5)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
     if args.smoke:  # только как дефолты — явные флаги не перезаписываем
