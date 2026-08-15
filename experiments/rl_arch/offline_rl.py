@@ -33,6 +33,7 @@ import sys
 import time
 
 import numpy as np
+import torch  # module-level: QNet/soft_update/q_cvar are used by online_eval too
 
 GAMMA = 0.95
 N_ACTIONS = 27
@@ -561,9 +562,6 @@ def main():
     args = ap.parse_args()
     if args.smoke:
         args.epochs, args.fqe_epochs = 2, 2
-
-    global torch
-    import torch  # noqa
 
     print(f"loading episodes...", flush=True)
     episodes = load_episodes(args.data_dir, args.subdir)
