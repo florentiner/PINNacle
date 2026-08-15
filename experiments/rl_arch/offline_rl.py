@@ -33,9 +33,14 @@ import sys
 import time
 
 import numpy as np
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)   # RL.* / src.* imports when run as a script
+
 import torch  # module-level: QNet/soft_update/q_cvar are used by online_eval too
 
-GAMMA = 0.95
+GAMMA = 0.9   # их значение (rl_agent_params в poisson_boltzmann2d_chain.py)
 N_ACTIONS = 27
 REPO = "danil-e/rlpinn-ablation-buffers"
 SUBDIR = "poisson_boltzmann_2d"
@@ -162,6 +167,21 @@ def make_encoder(kind: str):
                 return self.net(x)
         return CNN()
 
+    if kind == "their":
+        # ИХ боевой энкодер (RL/rl_utils/DQN_classes.py, идентичен ветке
+        # rlpinn_pde_tolerance): 3 свёртки -> GAP -> MLP(64). Возвращает
+        # кортеж (flat, h) — оборачиваем, чтобы отдавать h.
+        from RL.rl_utils.DQN_classes import ConvEncoder
+
+        class TheirEncoder(nn.Module):
+            out_dim = 64
+            def __init__(self):
+                super().__init__()
+                self.enc = ConvEncoder()
+            def forward(self, x):
+                return self.enc(x)[1]
+        return TheirEncoder()
+
     if kind == "convnext":
         class Block(nn.Module):
             def __init__(self, c):
@@ -196,6 +216,11 @@ def make_encoder(kind: str):
 def make_head(variant: str, in_dim: int, n_quantiles: int):
     import torch
     import torch.nn as nn
+
+    if variant in ("their_dqn", "their_cql", "cnx_dueling"):
+        # их дуэлинговая голова: Q = V + A - mean(A)
+        from RL.rl_utils.DQN_classes import DuelingHead
+        return DuelingHead(in_dim, N_ACTIONS)
 
     if variant in ("cnn_qrdqn", "cnx_cql_qr"):
         return nn.Linear(in_dim, N_ACTIONS * n_quantiles)
@@ -232,7 +257,12 @@ class QNet:
     def __init__(self, variant, device, n_quantiles=32):
         import torch
         import torch.nn as nn
-        enc_kind = "convnext" if variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr") else "cnn"
+        if variant in ("their_dqn", "their_cql"):
+            enc_kind = "their"
+        elif variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling"):
+            enc_kind = "convnext"
+        else:
+            enc_kind = "cnn"
         self.variant = variant
         self.nq = n_quantiles
         self.enc = make_encoder(enc_kind)
@@ -364,7 +394,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     q2 = net.q_target(s2).gather(1, a2[:, None]).squeeze(1)
                     tgt = r + GAMMA * (1 - d) * q2
                 loss = F.mse_loss(q, tgt)
-                if variant in ("cnn_cql", "cnx_cql"):
+                if variant in ("cnn_cql", "cnx_cql", "their_cql"):
                     qs = net.q_online(s)
                     loss = loss + args.cql_alpha * (
                         torch.logsumexp(qs, dim=1) - qs.gather(1, a[:, None]).squeeze(1)
@@ -542,12 +572,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", required=True,
                     choices=["cnn_dqn", "convnext_dqn", "cnn_cql", "cnn_iql",
-                             "cnn_qrdqn", "cnn_vqc", "cnx_cql", "cnx_cql_qr"])
+                             "cnn_qrdqn", "cnn_vqc", "cnx_cql", "cnx_cql_qr",
+                             "their_dqn", "their_cql", "cnx_dueling"])
     ap.add_argument("--seeds", default="1,2,3,4,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--fqe-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--cql-alpha", type=float, default=1.0)
+    ap.add_argument("--gamma", type=float, default=GAMMA)
     ap.add_argument("--data-dir", default=None)
     ap.add_argument("--subdir", default=SUBDIR,
                     help="Buffer folder in the HF dataset (e.g. poisson3d_complexgeometry)")
@@ -563,7 +595,9 @@ def main():
     if args.smoke:
         args.epochs, args.fqe_epochs = 2, 2
 
-    print(f"loading episodes...", flush=True)
+    global GAMMA
+    GAMMA = args.gamma
+    print(f"loading episodes... (gamma={GAMMA})", flush=True)
     episodes = load_episodes(args.data_dir, args.subdir)
     data = episodes_to_arrays(episodes, fix_next_state=args.fix_next_state)
     train_mask, test_mask = split_by_episode(data)
@@ -577,7 +611,7 @@ def main():
         for pol in policies:
             m, _ = evaluate(net, stats, data, test_mask, policy=pol)
             fq = fqe(net, stats, data, train_mask, test_mask, pol, args, seed)
-            row = dict(variant=args.variant, policy=pol, seed=seed,
+            row = dict(variant=args.variant, policy=pol, seed=seed, gamma=GAMMA,
                        fixed_ns=bool(args.fix_next_state), dataset=args.subdir,
                        n_params=net.n_params(), train_time_s=round(train_time, 1),
                        epochs=args.epochs, smoke=args.smoke, **m, **fq)
