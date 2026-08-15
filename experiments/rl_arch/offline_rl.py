@@ -71,12 +71,26 @@ def episodes_to_arrays(episodes, fix_next_state: bool = False):
     """fix_next_state: the poisson_boltzmann_2d dump logs next_state as a COPY of
     state (100% of transitions; healthy dumps satisfy next_state[t]==state[t+1]
     in 92%). Reconstruct s' = state[t+1] within each episode, last step terminal."""
-    keys = ["loss_total", "loss_oper", "loss_bnd", "delta"]
+    base = ["loss_total", "loss_oper", "loss_bnd"]
     S, A, R, S2, D, EP = [], [], [], [], [], []
     for ei, ep in enumerate(episodes):
+        prev_tot = prev_tot_ns = None
         for t in ep:
-            S.append(np.stack([np.asarray(t["state"][k], dtype=np.float32) for k in keys]))
-            S2.append(np.stack([np.asarray(t["next_state"][k], dtype=np.float32) for k in keys]))
+            # healthy dumps carry 3 channels; pb2d also stores `delta`. Keep the
+            # 4-channel layout everywhere by deriving delta from consecutive maps
+            # (same clip as the online env).
+            cur = [np.asarray(t["state"][k], dtype=np.float32) for k in base]
+            nxt = [np.asarray(t["next_state"][k], dtype=np.float32) for k in base]
+            if "delta" in t["state"]:
+                cur.append(np.asarray(t["state"]["delta"], dtype=np.float32))
+                nxt.append(np.asarray(t["next_state"]["delta"], dtype=np.float32))
+            else:
+                cur.append(np.zeros_like(cur[0]) if prev_tot is None
+                           else np.clip(cur[0] - prev_tot, -1, 1))
+                nxt.append(np.clip(nxt[0] - cur[0], -1, 1))
+                prev_tot = cur[0]
+            S.append(np.stack(cur))
+            S2.append(np.stack(nxt))
             a = t["action"]
             A.append(int(a[0]) * 9 + int(a[1]["lr"]) * 3 + int(a[1]["epochs"]))
             R.append(float(t["reward"]))
