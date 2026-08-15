@@ -197,8 +197,8 @@ def run_seed(seed, args, progress_cb=None):
     state = np.zeros((4, 26, 26), dtype=np.float32)
     prev_raw = None
     trig = (json.load(open(os.path.join(SCRIPT_DIR, "landscape_trigger.json")))
-            if args.boost_trigger == "landscape" else None)
-    boosted, loss_hist = False, []
+            if args.boost_trigger.startswith("landscape") else None)
+    boosted, loss_hist, p_hist = False, [], []
     spent, chain, t0 = 0, [], time.time()
     rmse = brmse = l2re_op = l2re_bnd = float("inf")
 
@@ -245,8 +245,16 @@ def run_seed(seed, args, progress_cb=None):
             fire = False
             if trig is not None and len(chain) > 1:
                 p_stall = landscape_stall_prob(state, trig)
-                fire = p_stall > args.boost_threshold
-                print(f"[seed {seed}] ландшафтный триггер: P(застой)={p_stall:.3f}", flush=True)
+                p_hist.append(p_stall)
+                if args.boost_trigger == "landscape":
+                    fire = p_stall > args.boost_threshold
+                else:  # landscape_peak: момент, который ландшафт считает самым застойным
+                    fire = (len(p_hist) > args.boost_warmup
+                            and p_stall >= max(p_hist[:-1]))
+                print(f"[seed {seed}] ландшафтный триггер: P(застой)={p_stall:.3f} "
+                      f"(max={max(p_hist):.3f})", flush=True)
+            elif args.boost_trigger == "midpoint":
+                fire = spent >= args.budget // 2
             elif args.boost_trigger == "plateau" and len(loss_hist) >= 4:
                 r4 = loss_hist[-4:]
                 fire = (max(r4) - min(r4)) < 1e-3 * abs(r4[-1] + 1e-12)
@@ -337,7 +345,9 @@ def main():
     ap.add_argument("--save-dir", default="runs_rl_online")
     ap.add_argument("--tag", default=None)
     ap.add_argument("--boost-trigger", default="none",
-                    choices=["none", "landscape", "plateau"])
+                    choices=["none", "landscape", "landscape_peak", "plateau", "midpoint"])
+    ap.add_argument("--boost-warmup", type=int, default=8,
+                    help="Сколько шагов копить историю до срабатывания peak-триггера")
     ap.add_argument("--boost-threshold", type=float, default=0.5)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
