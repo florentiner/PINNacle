@@ -42,7 +42,7 @@ os.environ.setdefault("DDEBACKEND", "pytorch")
 OUT_REPO = "danil-e/pinnacle-optuna-db"
 BUDGET = 31_000
 GRID = 26
-RADIUS = 0.1  # relative filter-normalized radius (calibrated: map center 3.60 vs buffer 3.58, spread within buffer IQR)
+RADIUS = 0.04  # calibrated: spread ~1.1-1.5 vs buffer median 1.0; preflight shows live actions at every phase
 
 ACTION_TABLE = []
 for oi, (opt, lrs, eps) in enumerate([
@@ -187,10 +187,6 @@ def run_episode(seed, policy, ckpt_path, args):
         opt_name, lr, epochs = ACTION_TABLE[a]
         epochs = min(epochs, budget - spent)
         stage = {"optimizer": opt_name, "lr": lr, "epochs": epochs}
-        if opt_name == "PSO" and lr == 0.0:
-            chain_log.append([opt_name, lr, 0])   # explicit no-op action
-            spent += epochs
-            continue
         optimizer = build_stage_optimizer(stage, model.net, lbfgs_max_iter=1)
         model.compile(optimizer, loss_weights=loss_weights)
         model.train(iterations=epochs, display_every=10**9)
