@@ -67,7 +67,10 @@ def load_episodes(data_dir: str | None):
     return episodes
 
 
-def episodes_to_arrays(episodes):
+def episodes_to_arrays(episodes, fix_next_state: bool = False):
+    """fix_next_state: the poisson_boltzmann_2d dump logs next_state as a COPY of
+    state (100% of transitions; healthy dumps satisfy next_state[t]==state[t+1]
+    in 92%). Reconstruct s' = state[t+1] within each episode, last step terminal."""
     keys = ["loss_total", "loss_oper", "loss_bnd", "delta"]
     S, A, R, S2, D, EP = [], [], [], [], [], []
     for ei, ep in enumerate(episodes):
@@ -79,6 +82,13 @@ def episodes_to_arrays(episodes):
             R.append(float(t["reward"]))
             D.append(float(t.get("done", 0)))
             EP.append(ei)
+    if fix_next_state:
+        by_ep = {}
+        for i, e in enumerate(EP):
+            by_ep.setdefault(e, []).append(i)
+        for e, idxs in by_ep.items():
+            for a, b in zip(idxs[:-1], idxs[1:]):
+                S2[a] = S[b]
     S = np.stack(S); S2 = np.stack(S2)
     A = np.array(A, dtype=np.int64); R = np.array(R, dtype=np.float32)
     D = np.array(D, dtype=np.float32); EP = np.array(EP, dtype=np.int64)
@@ -524,6 +534,8 @@ def main():
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--cql-alpha", type=float, default=1.0)
     ap.add_argument("--data-dir", default=None)
+    ap.add_argument("--fix-next-state", action="store_true",
+                    help="Reconstruct s'=state[t+1] (poisson_boltzmann_2d dump has s'==s)")
     ap.add_argument("--save-model", action="store_true",
                     help="Save agent checkpoint and upload to HF rl_arch/models/")
     ap.add_argument("--plateau-patience", type=int, default=0,
@@ -539,7 +551,7 @@ def main():
 
     print(f"loading episodes...", flush=True)
     episodes = load_episodes(args.data_dir)
-    data = episodes_to_arrays(episodes)
+    data = episodes_to_arrays(episodes, fix_next_state=args.fix_next_state)
     train_mask, test_mask = split_by_episode(data)
     print(f"episodes={len(episodes)} transitions={len(data['A'])} "
           f"train={int(train_mask.sum())} test={int(test_mask.sum())}", flush=True)
@@ -552,25 +564,27 @@ def main():
             m, _ = evaluate(net, stats, data, test_mask, policy=pol)
             fq = fqe(net, stats, data, train_mask, test_mask, pol, args, seed)
             row = dict(variant=args.variant, policy=pol, seed=seed,
+                       fixed_ns=bool(args.fix_next_state),
                        n_params=net.n_params(), train_time_s=round(train_time, 1),
                        epochs=args.epochs, smoke=args.smoke, **m, **fq)
             print(json.dumps(row), flush=True)
             if not args.smoke:
-                upload_result(row, f"{args.variant}_{pol}_seed{seed}")
+                upload_result(row, f"{args.variant}{'_fixns' if args.fix_next_state else ''}_{pol}_seed{seed}")
         if args.save_model and not args.smoke:
             import torch as _t
             ckpt = {"variant": args.variant, "seed": seed,
                     "state_dict": {k: v.cpu() for k, v in net.model.state_dict().items()},
                     "mean": stats["mean"], "std": stats["std"]}
-            fn = f"/tmp/agent_{args.variant}_seed{seed}.pt"
+            sfx = "_fixns" if args.fix_next_state else ""
+            fn = f"/tmp/agent_{args.variant}{sfx}_seed{seed}.pt"
             _t.save(ckpt, fn)
             tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
             if tok:
                 from huggingface_hub import upload_file
-                upload_file(path_or_fileobj=fn, path_in_repo=f"rl_arch/models/{args.variant}_seed{seed}.pt",
+                upload_file(path_or_fileobj=fn, path_in_repo=f"rl_arch/models/{args.variant}{sfx}_seed{seed}.pt",
                             repo_id=OUT_REPO, repo_type="dataset", token=tok,
                             commit_message=f"rl_arch model {args.variant} seed {seed}")
-                print(f"model uploaded: rl_arch/models/{args.variant}_seed{seed}.pt", flush=True)
+                print(f"model uploaded: rl_arch/models/{args.variant}{sfx}_seed{seed}.pt", flush=True)
         print(f"seed {seed} done in {time.time()-t0:.0f}s", flush=True)
 
 
