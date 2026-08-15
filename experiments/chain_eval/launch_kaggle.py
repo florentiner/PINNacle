@@ -200,7 +200,7 @@ def build_kernel_dir(account: dict, cfg: dict, jobs: list[dict], args) -> str:
         "language": "python",
         "kernel_type": "script",
         "is_private": "true",
-        "enable_gpu": "true",
+        "enable_gpu": "false" if account.get("cpu") else "true",
         "enable_tpu": "false",
         "enable_internet": "true",
         "dataset_sources": [],
@@ -256,7 +256,7 @@ def cmd_launch(cfg: dict, args):
         kdir = build_kernel_dir(account, cfg, jobs, args)
         with open(os.path.join(kdir, "kernel-metadata.json")) as f:
             ref = json.load(f)["id"]
-        shape = cfg.get("machine_shape", "NvidiaTeslaT4")
+        shape = "None" if account.get("cpu") else cfg.get("machine_shape", "NvidiaTeslaT4")
         job_names = ", ".join(j["csv_name"] for j in jobs)
         print(f"[{account['name']}] pushing {ref}  (shape {shape})  jobs: {job_names}")
         r = subprocess.run(

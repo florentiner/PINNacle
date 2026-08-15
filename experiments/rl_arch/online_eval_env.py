@@ -123,7 +123,7 @@ def build_state(raw, prev_raw):
     return torch.stack([tot, op, bn, delta]).numpy().astype(np.float32)
 
 
-def run_seed(seed, args):
+def run_seed(seed, args, progress_cb=None):
     from experiments.chain_eval.pde_registry import build_get_model
     from src.utils.callbacks import TesterCallback, ModelSaverCallback
     from landscape_visualization._aux.visualization_model import VisualizationModel
@@ -187,6 +187,12 @@ def run_seed(seed, args):
         l2re_bnd = float(getattr(tester, "bc_l2re", float("inf")))
         print(f"[seed {seed}] step {len(chain)}: {opt_name} lr={lr} ep={epochs} "
               f"spent={spent}/{args.budget} l2re={math.hypot(l2re_op, l2re_bnd):.4e}", flush=True)
+        if progress_cb is not None:
+            progress_cb(dict(seed=seed, policy=args.policy, pde=args.pde, partial=True,
+                             l2re=math.hypot(l2re_op, l2re_bnd), l2re_op=l2re_op,
+                             l2re_bnd=l2re_bnd, rmse=rmse, brmse=brmse, spent=spent,
+                             budget=args.budget, n_steps=len(chain), chain=chain,
+                             elapsed_s=round(time.time() - t0, 1)))
 
         if not (np.isfinite(rmse) or np.isfinite(brmse)):
             print(f"[seed {seed}] non-finite metrics — stopping (done=-1)", flush=True)
@@ -273,7 +279,9 @@ def main():
     tag = args.tag or (os.path.basename(args.model_file).replace(".pt", "")
                        if args.model_file else "random")
     for seed in [int(s) for s in args.seeds.split(",")]:
-        row = run_seed(seed, args)
+        name = f"{args.pde}_{tag}_seed{seed}"
+        cb = None if args.smoke else (lambda r, n=name: upload(r, n))
+        row = run_seed(seed, args, progress_cb=cb)
         row["smoke"] = args.smoke
         print(json.dumps({k: v for k, v in row.items() if k != "chain"}), flush=True)
         if not args.smoke:
