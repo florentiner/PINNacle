@@ -249,6 +249,7 @@ class QNet:
         return q.mean(-1) if self.variant in ("cnn_qrdqn", "cnx_cql_qr") else q
 
     def q_cvar(self, x, alpha=0.25):
+        import torch  # module-level `torch` only exists after main(); keep importable
         q = self.q_online(x)          # (B, A, nq), quantiles unsorted -> sort
         qs, _ = torch.sort(q, dim=-1)
         k = max(1, int(self.nq * alpha))
