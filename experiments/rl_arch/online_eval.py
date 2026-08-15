@@ -83,7 +83,7 @@ class LandscapeProbe:
         for _ in range(2):
             d = []
             for p in model.net.parameters():
-                v = torch.randn(p.shape, generator=g).to(p.device)
+                v = torch.randn(p.shape, generator=g, device="cpu").to(p.device)
                 v = v / (v.norm() + 1e-12) * (p.detach().norm() + 1e-12)
                 d.append(v)
             self.dirs.append(d)
