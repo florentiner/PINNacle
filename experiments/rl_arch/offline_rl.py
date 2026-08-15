@@ -172,7 +172,7 @@ def make_head(variant: str, in_dim: int, n_quantiles: int):
     import torch
     import torch.nn as nn
 
-    if variant == "cnn_qrdqn":
+    if variant in ("cnn_qrdqn", "cnx_cql_qr"):
         return nn.Linear(in_dim, N_ACTIONS * n_quantiles)
     if variant == "cnn_vqc":
         import pennylane as qml
@@ -207,7 +207,7 @@ class QNet:
     def __init__(self, variant, device, n_quantiles=32):
         import torch
         import torch.nn as nn
-        enc_kind = "convnext" if variant == "convnext_dqn" else "cnn"
+        enc_kind = "convnext" if variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr") else "cnn"
         self.variant = variant
         self.nq = n_quantiles
         self.enc = make_encoder(enc_kind)
@@ -230,7 +230,7 @@ class QNet:
     def _q(self, model, x):
         z = model[0](x)
         out = model[1](z)
-        if self.variant == "cnn_qrdqn":
+        if self.variant in ("cnn_qrdqn", "cnx_cql_qr"):
             return out.view(-1, N_ACTIONS, self.nq)
         return out
 
@@ -246,7 +246,7 @@ class QNet:
     def q_scalar(self, x):
         """(B, N_ACTIONS) scalar Q for metrics/policies (mean over quantiles)."""
         q = self.q_online(x)
-        return q.mean(-1) if self.variant == "cnn_qrdqn" else q
+        return q.mean(-1) if self.variant in ("cnn_qrdqn", "cnx_cql_qr") else q
 
     def q_cvar(self, x, alpha=0.25):
         q = self.q_online(x)          # (B, A, nq), quantiles unsorted -> sort
@@ -289,7 +289,7 @@ def train_variant(variant, data, train_mask, args, seed):
     bs = args.batch_size
     n_epochs = args.epochs
     taus = None
-    if variant == "cnn_qrdqn":
+    if variant in ("cnn_qrdqn", "cnx_cql_qr"):
         taus = (torch.arange(net.nq, device=device, dtype=torch.float32) + 0.5) / net.nq
 
     t0 = time.time()
@@ -313,7 +313,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     tgt = r + GAMMA * (1 - d) * v2
                 q = net.q_online(s).gather(1, a[:, None]).squeeze(1)
                 loss = v_loss + F.mse_loss(q, tgt)
-            elif variant == "cnn_qrdqn":
+            elif variant in ("cnn_qrdqn", "cnx_cql_qr"):
                 q = net.q_online(s)                                   # (B,A,nq)
                 q_data = q.gather(1, a[:, None, None].expand(-1, 1, net.nq)).squeeze(1)
                 with torch.no_grad():
@@ -324,6 +324,11 @@ def train_variant(variant, data, train_mask, args, seed):
                 u = tgt[:, None, :] - q_data[:, :, None]               # (B,nq_pred,nq_tgt)
                 huber = torch.where(u.abs() <= 1.0, 0.5 * u ** 2, u.abs() - 0.5)
                 loss = (torch.abs(taus[None, :, None] - (u.detach() < 0).float()) * huber).mean()
+                if variant == "cnx_cql_qr":
+                    qm = q.mean(-1)
+                    loss = loss + args.cql_alpha * (
+                        torch.logsumexp(qm, dim=1) - qm.gather(1, a[:, None]).squeeze(1)
+                    ).mean()
             else:
                 q = net.q_online(s).gather(1, a[:, None]).squeeze(1)
                 with torch.no_grad():
@@ -331,7 +336,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     q2 = net.q_target(s2).gather(1, a2[:, None]).squeeze(1)
                     tgt = r + GAMMA * (1 - d) * q2
                 loss = F.mse_loss(q, tgt)
-                if variant == "cnn_cql":
+                if variant in ("cnn_cql", "cnx_cql"):
                     qs = net.q_online(s)
                     loss = loss + args.cql_alpha * (
                         torch.logsumexp(qs, dim=1) - qs.gather(1, a[:, None]).squeeze(1)
@@ -375,8 +380,9 @@ def evaluate(net, stats, data, test_mask, policy="mean"):
     with torch.no_grad():
         q_scal = batched(lambda x: net.q_scalar(x), S[idx])
         a2 = batched(lambda x: net.q_scalar(x), S2[idx]).argmax(1)
-        q2t = batched(lambda x: net.q_target(x) if net.variant != "cnn_qrdqn"
-                      else net.q_target(x).mean(-1), S2[idx])
+        q2t = batched(lambda x: net.q_target(x).mean(-1)
+                      if net.variant in ("cnn_qrdqn", "cnx_cql_qr")
+                      else net.q_target(x), S2[idx])
         q2 = q2t.gather(1, a2[:, None]).squeeze(1)
         r = torch.as_tensor(data["R"][idx], device=device)
         d = torch.as_tensor(data["D"][idx], device=device)
@@ -492,7 +498,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", required=True,
                     choices=["cnn_dqn", "convnext_dqn", "cnn_cql", "cnn_iql",
-                             "cnn_qrdqn", "cnn_vqc"])
+                             "cnn_qrdqn", "cnn_vqc", "cnx_cql", "cnx_cql_qr"])
     ap.add_argument("--seeds", default="1,2,3,4,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--fqe-epochs", type=int, default=100)
@@ -518,7 +524,7 @@ def main():
     for seed in [int(s) for s in args.seeds.split(",")]:
         t0 = time.time()
         net, stats, train_time = train_variant(args.variant, data, train_mask, args, seed)
-        policies = ["mean", "cvar"] if args.variant == "cnn_qrdqn" else ["mean"]
+        policies = ["mean", "cvar"] if args.variant in ("cnn_qrdqn", "cnx_cql_qr") else ["mean"]
         for pol in policies:
             m, _ = evaluate(net, stats, data, test_mask, policy=pol)
             fq = fqe(net, stats, data, train_mask, test_mask, pol, args, seed)
