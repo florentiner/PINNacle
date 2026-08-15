@@ -294,6 +294,8 @@ def train_variant(variant, data, train_mask, args, seed):
 
     t0 = time.time()
     rng = np.random.default_rng(seed)
+    best_td, stall = float("inf"), 0
+    test_idx = np.where(~train_mask)[0]
     for epoch in range(n_epochs):
         order = rng.permutation(idx)
         for k in range(0, len(order), bs):
@@ -346,6 +348,22 @@ def train_variant(variant, data, train_mask, args, seed):
             net.soft_update()
         if (epoch + 1) % max(1, n_epochs // 5) == 0:
             print(f"  [{variant} s{seed}] epoch {epoch+1}/{n_epochs} loss={loss.item():.4f}", flush=True)
+        if args.plateau_patience and (epoch + 1) % 25 == 0:
+            with torch.no_grad():
+                b = to_t(test_idx).long()
+                qs = net.q_scalar(S[b]).gather(1, A[b][:, None]).squeeze(1)
+                a2 = net.q_scalar(S2[b]).argmax(1)
+                q2 = (net.q_target(S2[b]).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                      else net.q_target(S2[b])).gather(1, a2[:, None]).squeeze(1)
+                td = float(((qs - (R[b] + GAMMA * (1 - D[b]) * q2)) ** 2).mean().sqrt())
+            if td < best_td - 1e-3:
+                best_td, stall = td, 0
+            else:
+                stall += 1
+            print(f"  [{variant} s{seed}] plateau-check ep{epoch+1}: td={td:.3f} best={best_td:.3f} stall={stall}", flush=True)
+            if stall >= args.plateau_patience:
+                print(f"  [{variant} s{seed}] plateau reached at epoch {epoch+1}", flush=True)
+                break
 
     train_time = time.time() - t0
     return net, dict(mean=mean, std=std), train_time
@@ -505,6 +523,10 @@ def main():
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--cql-alpha", type=float, default=1.0)
     ap.add_argument("--data-dir", default=None)
+    ap.add_argument("--save-model", action="store_true",
+                    help="Save agent checkpoint and upload to HF rl_arch/models/")
+    ap.add_argument("--plateau-patience", type=int, default=0,
+                    help="Stop when holdout TD stops improving for N checks (every 25 epochs); 0=off")
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
@@ -534,6 +556,20 @@ def main():
             print(json.dumps(row), flush=True)
             if not args.smoke:
                 upload_result(row, f"{args.variant}_{pol}_seed{seed}")
+        if args.save_model and not args.smoke:
+            import torch as _t
+            ckpt = {"variant": args.variant, "seed": seed,
+                    "state_dict": {k: v.cpu() for k, v in net.model.state_dict().items()},
+                    "mean": stats["mean"], "std": stats["std"]}
+            fn = f"/tmp/agent_{args.variant}_seed{seed}.pt"
+            _t.save(ckpt, fn)
+            tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
+            if tok:
+                from huggingface_hub import upload_file
+                upload_file(path_or_fileobj=fn, path_in_repo=f"rl_arch/models/{args.variant}_seed{seed}.pt",
+                            repo_id=OUT_REPO, repo_type="dataset", token=tok,
+                            commit_message=f"rl_arch model {args.variant} seed {seed}")
+                print(f"model uploaded: rl_arch/models/{args.variant}_seed{seed}.pt", flush=True)
         print(f"seed {seed} done in {time.time()-t0:.0f}s", flush=True)
 
 
