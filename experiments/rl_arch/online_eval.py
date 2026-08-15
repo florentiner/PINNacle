@@ -127,7 +127,8 @@ def load_agent(ckpt_path, torch):
 
 
 def pick_action(net, state, mean, std, variant, torch):
-    x = torch.as_tensor((state[None] - mean) / std).float()
+    dev = next(net.model.parameters()).device
+    x = torch.as_tensor((state[None] - mean) / std, device=dev).float()
     with torch.no_grad():
         q = net.q_cvar(x) if variant in ("cnn_qrdqn", "cnx_cql_qr") else net.q_scalar(x)
     return int(q.argmax(1).item())
