@@ -569,6 +569,7 @@ def upload_result(row: dict, name: str):
 
 
 def main():
+    global GAMMA
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", required=True,
                     choices=["cnn_dqn", "convnext_dqn", "cnn_cql", "cnn_iql",
@@ -595,7 +596,6 @@ def main():
     if args.smoke:
         args.epochs, args.fqe_epochs = 2, 2
 
-    global GAMMA
     GAMMA = args.gamma
     print(f"loading episodes... (gamma={GAMMA})", flush=True)
     episodes = load_episodes(args.data_dir, args.subdir)
