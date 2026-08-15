@@ -42,7 +42,7 @@ os.environ.setdefault("DDEBACKEND", "pytorch")
 OUT_REPO = "danil-e/pinnacle-optuna-db"
 BUDGET = 31_000
 GRID = 26
-RADIUS = 0.5  # relative filter-normalized radius
+RADIUS = 0.1  # relative filter-normalized radius (calibrated: map center 3.60 vs buffer 3.58, spread within buffer IQR)
 
 ACTION_TABLE = []
 for oi, (opt, lrs, eps) in enumerate([
@@ -59,12 +59,10 @@ assert len(ACTION_TABLE) == 27
 def loss_components(model, torch):
     """(total, oper, bnd) weighted train losses at current weights.
     NOTE: must run grad-ENABLED — PDE residuals need input derivatives."""
+    # NOTE: outputs_losses_train already applies compile-time loss_weights.
     losses = model.outputs_losses_train(
         model.train_state.X_train, model.train_state.y_train)[1]
     losses = torch.stack([l.detach() for l in losses])
-    w = getattr(model, "_le_weights", None)
-    if w is not None:
-        losses = losses * w
     types = getattr(model, "_le_types", ["pde"] * len(losses))
     total = float(losses.sum())
     oper = float(sum(l for l, t in zip(losses, types) if t == "pde"))
