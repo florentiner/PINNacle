@@ -94,9 +94,15 @@ def load_agent(model_file):
         from huggingface_hub import hf_hub_download
         path = hf_hub_download(OUT_REPO, model_file, repo_type="dataset")
     ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    net = QNet(ckpt["variant"], torch.device("cpu"))
-    net.model.load_state_dict(ckpt["state_dict"])
-    net.model.eval()
+    if ckpt["variant"] == "cnx_smdp":       # другой класс сети (advanced_agents)
+        from advanced_agents import SmdpAgent
+        net = SmdpAgent(torch.device("cpu"))
+        net.net.load_state_dict(ckpt["state_dict"])
+        net.net.eval()
+    else:
+        net = QNet(ckpt["variant"], torch.device("cpu"))
+        net.model.load_state_dict(ckpt["state_dict"])
+        net.model.eval()
     return net, ckpt["mean"], ckpt["std"], ckpt["variant"]
 
 
