@@ -26,7 +26,11 @@ ARM_RU = {"none": "без бустинга (контроль)", "landscape": "б
           "midpoint": "бустинг слепо в середине"}
 VAR_RU = {"convnext_dqn": "ConvNeXt + DQN", "cnx_cql": "ConvNeXt + CQL",
           "cnx_dueling": "ConvNeXt + дуэлинговая голова", "their_dqn": "их бэйзлайн (ConvEncoder+Dueling)",
-          "cnx_cql_qr": "ConvNeXt + CQL + квантили", "random": "случайная политика"}
+          "cnx_cql_qr": "ConvNeXt + CQL + квантили", "random": "случайная политика",
+          "cnx_bcq": "ConvNeXt + BCQ", "cnx_bbf": "ConvNeXt + BBF",
+          "cnx_smdp": "SMDP-BBF-CQL (полный стек)"}
+VAR_RE = ("convnext_dqn|cnx_cql_qr|cnx_cql|cnx_dueling|cnx_bcq|cnx_bbf|cnx_smdp|"
+          "their_dqn|random")
 
 
 def load(partial=False):
@@ -41,9 +45,23 @@ def load(partial=False):
         except Exception as e:
             print(f"  пропуск {f.split('/')[-1]}: {type(e).__name__}")
             continue
-        if r.get("partial") and not partial:
+        # прогон, выбравший весь бюджет, засчитывается, даже если остался помечен
+        # частичным: progress_cb пишет строку сразу после последнего шага, и её
+        # l2re уже финальная — не хватает только заключительной заливки, которую
+        # съедает 12-часовой срез сессии Kaggle
+        r["_done"] = (not r.get("partial")) or r.get("spent", 0) >= r.get("budget", 10 ** 9)
+        if not r["_done"] and not partial:
             continue
         r["_name"] = f.split("/")[-1].replace(".json", "")
+        # у старых частичных строк не было ни арма, ни флага бустинга — арм читаем
+        # из имени файла, а факт бустинга из самой цепочки (шаг ["BOOST", eps, 0])
+        if not r.get("boost_trigger") and "_boost" in r["_name"]:
+            m = re.search(r"_boost3?d?_(\w+?)_seed\d+$", r["_name"])
+            if m:
+                r["boost_trigger"] = m.group(1)
+        if r.get("boosted") is None:
+            r["boosted"] = any(isinstance(s, list) and s and s[0] == "BOOST"
+                               for s in r.get("chain", []))
         rows.append(r)
     return rows
 
@@ -61,7 +79,7 @@ def task_paper(rows):
                             ("poissonboltzmann2d", "poissonboltzmann2d")]:
         # только прогоны эксперимента по статье: в их имени есть тег boost/boost3d,
         # иначе сюда попадают архитектурные прогоны (у них boost_trigger="none")
-        sub = [r for r in rows if r["_name"].startswith(pde_key)
+        sub = [r for r in rows if r["_name"].startswith(pde_key) and r["_done"]
                and r.get("boost_trigger") and "_boost" in r["_name"]]
         if not sub:
             continue
@@ -80,10 +98,10 @@ def task_arch(rows):
     print("\n" + "=" * 78)
     print("ЗАДАЧА 2 — АРХИТЕКТУРЫ: итоговый l2re цепочек, порождённых агентом")
     print("=" * 78)
-    sub = [r for r in rows if "_boost" not in r["_name"]]
+    sub = [r for r in rows if "_boost" not in r["_name"] and r["_done"]]
     by_var = {}
     for r in sub:
-        m = re.search(r"(convnext_dqn|cnx_cql_qr|cnx_cql|cnx_dueling|their_dqn|random)", r["_name"])
+        m = re.search(f"({VAR_RE})", r["_name"])
         if not m:
             continue
         by_var.setdefault(m.group(1), []).append(r)
@@ -98,6 +116,35 @@ def task_arch(rows):
             print(f"  {VAR_RU.get(var, var):34s} {n:6d} {m:>11s} {md:>10s} {min(r['l2re'] for r in g):10.4f}")
 
 
+def task_train():
+    """Онлайн-обучение: агент учится по ходу, метрика — последняя ЗАВЕРШЁННАЯ цепочка."""
+    files = [f for f in list_repo_files(REPO, repo_type="dataset")
+             if f.startswith("rl_arch/online_train/")]
+    if not files:
+        return
+    print("\n" + "=" * 78)
+    print("ЗАДАЧА 2б — ОНЛАЙН-ОБУЧЕНИЕ: агент учится в среде, 11 ч на прогон")
+    print("=" * 78)
+    print(f"  {'конфигурация':34s} {'цепочек':>8s} {'последняя':>10s} {'медиана5':>10s} "
+          f"{'лучшая':>9s} {'часов':>6s}")
+    out = []
+    for f in sorted(files):
+        try:
+            r = json.load(open(hf_hub_download(REPO, f, repo_type="dataset")))
+        except Exception:
+            continue
+        ls = [c["l2re"] for c in r.get("chains", [])]
+        if not ls:
+            continue
+        name = VAR_RU.get(r["variant"], r["variant"])
+        if "rlpd" in f:
+            name += " + RLPD"
+        out.append((name, len(ls), r["l2re_last_complete"], float(np.median(ls[-5:])),
+                    r["l2re_best"], r.get("elapsed_h", 0)))
+    for name, n, last, m5, best, h in sorted(out, key=lambda x: x[3]):
+        print(f"  {name:34s} {n:8d} {last:10.4f} {m5:10.4f} {best:9.4f} {h:6.2f}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--partial", action="store_true", help="включить незавершённые прогоны")
@@ -106,6 +153,7 @@ def main():
     print(f"загружено прогонов: {len(rows)}" + (" (включая незавершённые)" if args.partial else ""))
     task_paper(rows)
     task_arch(rows)
+    task_train()
 
 
 if __name__ == "__main__":

@@ -304,6 +304,7 @@ def run_seed(seed, args, progress_cb=None):
                              l2re=math.hypot(l2re_op, l2re_bnd), l2re_op=l2re_op,
                              l2re_bnd=l2re_bnd, rmse=rmse, brmse=brmse, spent=spent,
                              budget=args.budget, n_steps=len(chain), chain=chain,
+                             boost_trigger=args.boost_trigger, boosted=boosted,
                              elapsed_s=round(time.time() - t0, 1)))
 
         if not (np.isfinite(rmse) or np.isfinite(brmse)):
