@@ -191,11 +191,13 @@ def main():
         state = np.zeros((4, 26, 26), dtype=np.float32)
         prev_raw = None
         spent, chain, done = 0, [], 0
+        truncated = False   # True только если ПРЕРВАЛИ цепочку посередине по лимиту
         l2re = float("inf")
         prev_err = None
 
         for step in range(args.max_chain_steps):
             if time.time() >= deadline:
+                truncated = True
                 last_partial = dict(l2re=l2re, steps=len(chain), epochs=spent, trajectory=traj)
                 print(f"[траектория {traj}] лимит времени — цепочка оборвана на шаге {len(chain)}", flush=True)
                 break
@@ -274,7 +276,10 @@ def main():
         else:
             done = done or 0
 
-        if time.time() < deadline and chain:      # цепочка ЗАВЕРШЕНА (не оборвана лимитом)
+        # цепочка засчитывается, если дошла до конца (K_max / допуск / расхождение),
+        # даже если лимит времени истёк во время последнего шага; не засчитывается
+        # только та, которую прервали ПОСЕРЕДИНЕ
+        if chain and not truncated:
             chains.append(dict(l2re=l2re, steps=len(chain), epochs=spent, done=done, chain=chain))
             row = dict(variant=args.variant, pde=args.pde, seed=args.seed,
                        trajectories=len(chains), buffer=len(buf),
