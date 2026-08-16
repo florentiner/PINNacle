@@ -87,12 +87,15 @@ def task_arch(rows):
         if not m:
             continue
         by_var.setdefault(m.group(1), []).append(r)
-    print(f"  {'конфигурация':34s} {'сидов':>6s} {'l2re сред.':>11s} {'медиана':>10s} {'лучший':>10s} {'бюджет':>8s}")
-    for var, g in sorted(by_var.items(), key=lambda kv: np.mean([x["l2re"] for x in kv[1]])):
-        m, md, sd, n = agg([r["l2re"] for r in g])
-        best = min(r["l2re"] for r in g)
-        bud = {r.get("budget") for r in g}
-        print(f"  {VAR_RU.get(var, var):34s} {n:6d} {m:>11s} {md:>10s} {best:10.4f} {str(sorted(bud)):>8s}")
+    # бюджеты нельзя смешивать: прогоны на 10000 и 31000 эпох несравнимы
+    for budget in sorted({r.get("budget") for g in by_var.values() for r in g}, reverse=True):
+        print(f"\n  бюджет {budget} эпох:")
+        print(f"  {'конфигурация':34s} {'сидов':>6s} {'l2re сред.':>11s} {'медиана':>10s} {'лучший':>10s}")
+        sel = {v: [r for r in g if r.get("budget") == budget] for v, g in by_var.items()}
+        sel = {v: g for v, g in sel.items() if g}
+        for var, g in sorted(sel.items(), key=lambda kv: np.mean([x["l2re"] for x in kv[1]])):
+            m, md, sd, n = agg([r["l2re"] for r in g])
+            print(f"  {VAR_RU.get(var, var):34s} {n:6d} {m:>11s} {md:>10s} {min(r['l2re'] for r in g):10.4f}")
 
 
 def main():
