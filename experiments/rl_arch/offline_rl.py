@@ -631,11 +631,26 @@ def main():
             _t.save(ckpt, fn)
             tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
             if tok:
+                # выгрузка НЕ критична: локальный чекпоинт уже сохранён и его
+                # достаточно для онлайн-оценки в этом же кернеле. При параллельной
+                # записи из десятков кернелов HF отдаёт 429/конфликт коммита —
+                # раньше это роняло весь кернел.
                 from huggingface_hub import upload_file
-                upload_file(path_or_fileobj=fn, path_in_repo=f"rl_arch/models/{args.variant}{sfx}_seed{seed}.pt",
-                            repo_id=OUT_REPO, repo_type="dataset", token=tok,
-                            commit_message=f"rl_arch model {args.variant} seed {seed}")
-                print(f"model uploaded: rl_arch/models/{args.variant}{sfx}_seed{seed}.pt", flush=True)
+                for attempt in range(4):
+                    try:
+                        upload_file(path_or_fileobj=fn,
+                                    path_in_repo=f"rl_arch/models/{args.variant}{sfx}_seed{seed}.pt",
+                                    repo_id=OUT_REPO, repo_type="dataset", token=tok,
+                                    commit_message=f"rl_arch model {args.variant} seed {seed}")
+                        print(f"model uploaded: rl_arch/models/{args.variant}{sfx}_seed{seed}.pt", flush=True)
+                        break
+                    except Exception as e:
+                        wait = 10 * (attempt + 1) + (seed % 7)
+                        print(f"WARNING: model upload attempt {attempt+1}/4 failed: {e}", flush=True)
+                        if attempt < 3:
+                            time.sleep(wait)
+                else:
+                    print(f"model kept locally only: {fn}", flush=True)
         print(f"seed {seed} done in {time.time()-t0:.0f}s", flush=True)
 
 
