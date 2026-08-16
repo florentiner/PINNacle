@@ -34,7 +34,13 @@ def load(partial=False):
     for f in list_repo_files(REPO, repo_type="dataset"):
         if not f.startswith("rl_arch/online_env/"):
             continue
-        r = json.load(open(hf_hub_download(REPO, f, repo_type="dataset", force_download=True)))
+        # без force_download: кеш ключуется по коммиту, изменённый файл скачается сам,
+        # а неизменённый не будет дёргать API (иначе HF отдаёт 429)
+        try:
+            r = json.load(open(hf_hub_download(REPO, f, repo_type="dataset")))
+        except Exception as e:
+            print(f"  пропуск {f.split('/')[-1]}: {type(e).__name__}")
+            continue
         if r.get("partial") and not partial:
             continue
         r["_name"] = f.split("/")[-1].replace(".json", "")
@@ -53,7 +59,10 @@ def task_paper(rows):
     print("=" * 78)
     for pde_key, pde_ru in [("poisson3d_complexgeometry", "poisson3d_complexgeometry"),
                             ("poissonboltzmann2d", "poissonboltzmann2d")]:
-        sub = [r for r in rows if r["_name"].startswith(pde_key) and r.get("boost_trigger")]
+        # только прогоны эксперимента по статье: в их имени есть тег boost/boost3d,
+        # иначе сюда попадают архитектурные прогоны (у них boost_trigger="none")
+        sub = [r for r in rows if r["_name"].startswith(pde_key)
+               and r.get("boost_trigger") and "_boost" in r["_name"]]
         if not sub:
             continue
         print(f"\n{pde_ru}:")
@@ -71,7 +80,7 @@ def task_arch(rows):
     print("\n" + "=" * 78)
     print("ЗАДАЧА 2 — АРХИТЕКТУРЫ: итоговый l2re цепочек, порождённых агентом")
     print("=" * 78)
-    sub = [r for r in rows if not r.get("boost_trigger") or r.get("boost_trigger") == "none"]
+    sub = [r for r in rows if "_boost" not in r["_name"]]
     by_var = {}
     for r in sub:
         m = re.search(r"(convnext_dqn|cnx_cql_qr|cnx_cql|cnx_dueling|their_dqn|random)", r["_name"])
