@@ -91,6 +91,27 @@ def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0):
     return float(loss.item())
 
 
+def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0):
+    """RLPD: симметричная выборка — половина батча офлайн, половина онлайн."""
+    import torch.nn.functional as F
+    dev = next(net.model.parameters()).device
+    parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
+    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
+    with torch.no_grad():
+        a2 = net.q_scalar(s2).argmax(1)
+        q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+              else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+        tgt = r + GAMMA * (1 - d) * q2
+    loss = F.mse_loss(q, tgt)
+    if "cql" in variant:
+        qs = net.q_scalar(s)
+        loss = loss + cql_alpha * (torch.logsumexp(qs, 1) - qs.gather(1, a[:, None]).squeeze(1)).mean()
+    opt.zero_grad(); loss.backward(); opt.step()
+    net.soft_update()
+    return float(loss.item())
+
+
 def upload(row, name):
     tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     if not tok:
@@ -125,6 +146,13 @@ def main():
     ap.add_argument("--update-iters", type=int, default=5)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--warm-start", default=None, help="чекпоинт офлайн-агента (опционально)")
+    ap.add_argument("--rlpd", action="store_true",
+                    help="RLPD (arXiv 2302.02948): симметричная выборка 50/50 из офлайнового "
+                         "и онлайнового буферов + высокое число обновлений на шаг среды")
+    ap.add_argument("--rlpd-subdir", default="poisson3d_complexgeometry",
+                    help="какой офлайн-буфер подмешивать")
+    ap.add_argument("--rlpd-utd", type=int, default=8,
+                    help="обновлений на шаг среды (update-to-data ratio)")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -165,6 +193,24 @@ def main():
     vm = VisualizationModel(device=str(dev), path_to_plot_model=None,
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
     buf = LocalBuffer()
+    off_buf = None
+    if args.rlpd:
+        # офлайновая половина батча: тот же буфер, на котором учатся офлайн-агенты
+        from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
+        od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
+                                fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"))
+        otr, _ = split_by_episode(od)
+        oidx = np.where(otr)[0]
+        om = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True)
+        os_ = od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
+        off_buf = LocalBuffer(capacity=len(oidx) + 10)
+        for i in oidx:
+            off_buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
+                         ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
+        if mean is None:
+            mean, std = om, os_
+        print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
+              f"UTD={args.rlpd_utd}", flush=True)
     rng = np.random.default_rng(args.seed)
     tag = args.tag or f"{args.variant}_{args.pde}_seed{args.seed}"
     save_dir = os.path.join(args.save_dir, tag)
@@ -264,7 +310,19 @@ def main():
                      ((next_state[None] - mean) / std)[0], float(done == 1))
             state = next_state
 
-            if len(buf) >= args.min_buffer:
+            if args.rlpd and off_buf is not None:
+                # RLPD: половина батча из офлайна, половина из онлайна; много обновлений
+                iters = args.rlpd_utd
+                half = max(1, args.batch_size // 2)
+                ql = 0.0
+                for _ in range(iters):
+                    if len(buf) >= 8:
+                        ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant)
+                    else:
+                        ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant)
+                print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
+                      f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)}+{len(off_buf)} q-loss={ql:.4f}", flush=True)
+            elif len(buf) >= args.min_buffer:
                 ql = agent_update(net, buf, q_opt, args.batch_size, args.update_iters, args.variant)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
                       f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)} q-loss={ql:.4f}", flush=True)
