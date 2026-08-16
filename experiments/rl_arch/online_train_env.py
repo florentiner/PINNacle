@@ -130,8 +130,12 @@ def main():
     ap.add_argument("--tag", default=None)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
-    if args.smoke:
-        args.hours, args.ae_epochs, args.n_save_models, args.max_chain_steps = 0.05, 40, 3, 2
+    if args.smoke:  # только как дефолты — явные флаги не перезаписываем
+        given = set(x.split("=")[0] for x in sys.argv[1:] if x.startswith("--"))
+        if "--hours" not in given: args.hours = 0.05
+        if "--ae-epochs" not in given: args.ae_epochs = 40
+        if "--n-save-models" not in given: args.n_save_models = 3
+        if "--max-chain-steps" not in given: args.max_chain_steps = 2
 
     from experiments.chain_eval.pde_registry import build_get_model
     from src.utils.callbacks import TesterCallback, ModelSaverCallback
