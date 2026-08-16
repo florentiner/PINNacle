@@ -31,6 +31,19 @@ KernelsApiClient.save_kernel = _save_with_shape
 
 # `import kaggle` authenticates once via KAGGLE_API_TOKEN (and consumes the
 # env var) — reuse that instance instead of authenticating a second time.
+import io
+import contextlib
+
 import kaggle
 
-kaggle.api.kernels_push_cli(folder, None)
+# The CLI prints "Kernel push error: ..." (quota exhausted, bad slug, ...) and
+# still returns normally — a silent failure that reads as a successful launch.
+# Mirror the output and turn any such line into a non-zero exit code.
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    kaggle.api.kernels_push_cli(folder, None)
+out = _buf.getvalue()
+sys.stdout.write(out)
+sys.stdout.flush()
+if "push error" in out.lower() or "successfully pushed" not in out.lower():
+    sys.exit(2)

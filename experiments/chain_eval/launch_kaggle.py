@@ -50,7 +50,12 @@ def load_accounts(path: str) -> dict:
 
 def kaggle_env(token: str) -> dict:
     env = os.environ.copy()
-    env["KAGGLE_API_TOKEN"] = token
+    # classic credentials ("username:key") vs KGAT access token
+    if token and token.startswith("classic:"):
+        _, user, key = token.split(":", 2)
+        env["KAGGLE_USERNAME"], env["KAGGLE_KEY"] = user, key
+    else:
+        env["KAGGLE_API_TOKEN"] = token
     # Make sure a leftover ~/.kaggle/kaggle.json can't override the account token.
     env["KAGGLE_CONFIG_DIR"] = os.path.join(BUILD_DIR, ".kaggle_cfg")
     return env
@@ -263,6 +268,11 @@ def cmd_launch(cfg: dict, args):
             [sys.executable, os.path.join(SCRIPT_DIR, "_push_with_shape.py"), kdir, shape],
             env=kaggle_env(token),
         )
+        if r.returncode == 2:
+            # Kaggle отклонил пуш (обычно исчерпана недельная квота GPU) — откат на
+            # обычный push бессмыслен: он уйдёт на P100, чей sm_60 не поддержан
+            print(f"[{account['name']}] ПУШ ОТКЛОНЁН Kaggle (см. сообщение выше) — пропускаю")
+            continue
         if r.returncode != 0:
             print(f"[{account['name']}] shaped push failed — falling back to plain kaggle CLI push")
             r = subprocess.run(["kaggle", "kernels", "push", "-p", kdir], env=kaggle_env(token))
