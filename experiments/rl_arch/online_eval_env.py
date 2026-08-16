@@ -159,7 +159,9 @@ def save_ckpt(name, payload):
     if not tok:
         return
     from huggingface_hub import upload_file
-    for attempt in range(3):
+    # HF режет на 128 коммитов в час НА РЕПОЗИТОРИЙ, а кернелов десятки, поэтому
+    # ждём долго: потерянный чекпоинт стоит целой сессии, потерянные минуты — нет
+    for attempt in range(6):
         try:
             upload_file(path_or_fileobj=local, path_in_repo=f"{CKPT_DIR}/{name}.pt",
                         repo_id=OUT_REPO, repo_type="dataset", token=tok,
@@ -167,7 +169,7 @@ def save_ckpt(name, payload):
             return
         except Exception as e:
             print(f"ckpt upload retry {attempt}: {e}", flush=True)
-            time.sleep(5 * (attempt + 1))
+            time.sleep(min(600, 20 * 2 ** attempt))
 
 
 def load_ckpt(name):
@@ -244,6 +246,7 @@ def run_seed(seed, args, progress_cb=None):
     boosted, loss_hist, p_hist = False, [], []
     boost_layers, boost_eps = None, None
     spent, chain, t0 = 0, [], time.time()
+    last_prog = 0.0
     rmse = brmse = l2re_op = l2re_bnd = float("inf")
 
     ckpt_name = getattr(args, "_ckpt_name", None)
@@ -299,7 +302,13 @@ def run_seed(seed, args, progress_cb=None):
         l2re_bnd = float(getattr(tester, "bc_l2re", float("inf")))
         print(f"[seed {seed}] step {len(chain)}: {opt_name} lr={lr} ep={epochs} "
               f"spent={spent}/{args.budget} l2re={math.hypot(l2re_op, l2re_bnd):.4e}", flush=True)
-        if progress_cb is not None:
+        # строку прогресса шлём не чаще, чем раз в progress_every секунд: она нужна
+        # только чтобы не потерять результат при срезе сессии, а десятки кернелов
+        # пишут в один репозиторий с лимитом 128 коммитов в час
+        want_prog = (spent >= args.budget
+                     or time.time() - last_prog >= args.progress_every)
+        if progress_cb is not None and want_prog:
+            last_prog = time.time()
             progress_cb(dict(seed=seed, policy=args.policy, pde=args.pde, partial=True,
                              l2re=math.hypot(l2re_op, l2re_bnd), l2re_op=l2re_op,
                              l2re_bnd=l2re_bnd, rmse=rmse, brmse=brmse, spent=spent,
@@ -446,8 +455,11 @@ def main():
                          "(0 = без лимита). Сессия Kaggle живёт 12 ч")
     ap.add_argument("--resume", action="store_true",
                     help="продолжить прогон с чекпоинта (локального или с HF)")
-    ap.add_argument("--ckpt-every", type=int, default=10,
+    ap.add_argument("--ckpt-every", type=int, default=25,
                     help="как часто страховочно сохранять чекпоинт, в шагах цепочки")
+    ap.add_argument("--progress-every", type=float, default=1800.0,
+                    help="минимальный интервал между строками прогресса, секунд "
+                         "(лимит HF — 128 коммитов в час на репозиторий)")
     ap.add_argument("--no-state", action="store_true",
                     help="не строить карты ландшафта (AE + поверхность лоссов). "
                          "Допустимо только для policy=fixed/random с триггерами "
