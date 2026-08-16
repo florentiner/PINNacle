@@ -259,7 +259,8 @@ class QNet:
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
             enc_kind = "their"
-        elif variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling"):
+        elif variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling",
+                         "cnx_bcq", "cnx_bbf"):
             enc_kind = "convnext"
         else:
             enc_kind = "cnn"
@@ -320,7 +321,73 @@ class QNet:
 # Training
 # --------------------------------------------------------------------------
 
+def train_smdp(data, train_mask, args, seed):
+    """Полный стек SMDP-BBF-CQL (см. advanced_agents.py)."""
+    import torch.nn.functional as F
+    from advanced_agents import SmdpAgent, fit_behaviour, ACTION_DT
+
+    torch.manual_seed(seed); np.random.seed(seed)
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    agent = SmdpAgent(device)
+    opt = torch.optim.AdamW(agent.params(), lr=1e-4, weight_decay=0.1)
+
+    idx = np.where(train_mask)[0]
+    mean = data["S"][idx].mean(axis=(0, 2, 3), keepdims=True)
+    std = data["S"][idx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
+    S = torch.as_tensor((data["S"] - mean) / std, device=device).float()
+    S2 = torch.as_tensor((data["S2"] - mean) / std, device=device).float()
+    A = torch.as_tensor(data["A"], device=device)
+    R = torch.as_tensor(data["R"], device=device)
+    D = torch.as_tensor(data["D"], device=device)
+    DT = torch.as_tensor(ACTION_DT[data["A"]], device=device)      # длительность действия
+
+    fit_behaviour(agent, S[idx], data["A"][idx], device)
+
+    t0 = time.time()
+    rng = np.random.default_rng(seed)
+    bs = args.batch_size
+    total = args.epochs * max(1, len(idx) // bs)
+    for step in range(total):
+        b = torch.as_tensor(rng.integers(0, len(idx), size=bs), device=device).long()
+        b = torch.as_tensor(idx, device=device)[b]
+        gamma = 0.97 + min(1.0, step / 2000) * (0.997 - 0.97)      # отжиг gamma
+        with torch.no_grad():
+            q_next_online = agent.q_scalar(S2[b])
+            mask = agent.bcq_mask(S2[b])                            # BCQ-поддержка
+            a_star = q_next_online.masked_fill(~mask, -1e9).argmax(-1)
+            tl, _ = agent.target.all_logits(S2[b])
+            tq = agent.hlg.to_scalar(tl)                            # (K,B,A)
+            k1, k2 = rng.choice(agent.n_heads, size=2, replace=False)
+            q_next = torch.minimum(tq[k1], tq[k2]).gather(-1, a_star[:, None])[:, 0]
+            y = (R[b] + (gamma ** DT[b]) * (1 - D[b]) * q_next).clamp(-20.0, 2.0)
+        logits, h = agent.net.all_logits(S[b])
+        ii = A[b][None, :, None, None].expand(agent.n_heads, -1, 1, agent.net.n_bins)
+        taken = logits.gather(2, ii).squeeze(2)
+        td = torch.stack([agent.hlg.loss(taken[k], y) for k in range(agent.n_heads)]).mean()
+        q_all = agent.hlg.to_scalar(logits).mean(0)
+        cql = (torch.logsumexp(q_all, -1) - q_all.gather(-1, A[b][:, None])[:, 0]).mean()
+        alpha_cql = 0.5
+        phi = agent.net.act_emb(agent.net.action_feats)[A[b]]
+        h_hat = agent.net.spr_tr(torch.cat([h, phi], -1))
+        with torch.no_grad():
+            h_tgt = agent.target.spr_proj(agent.target.embed(S2[b]))
+        spr = -F.cosine_similarity(agent.net.spr_proj(h_hat), h_tgt, dim=-1).mean()
+        loss = td + alpha_cql * cql + 1.0 * spr
+        opt.zero_grad(); loss.backward()
+        torch.nn.utils.clip_grad_norm_(agent.params(), 10.0)
+        opt.step(); agent.soft_update()
+        if (step + 1) % 2000 == 0:                                  # BBF-сброс
+            agent.shrink_and_perturb()
+            opt = torch.optim.AdamW(agent.params(), lr=1e-4, weight_decay=0.1)
+        if (step + 1) % max(1, total // 4) == 0:
+            print(f"  [cnx_smdp s{seed}] шаг {step+1}/{total} td={td.item():.4f} "
+                  f"cql={cql.item():.4f} spr={spr.item():.4f}", flush=True)
+    return agent, dict(mean=mean, std=std), time.time() - t0
+
+
 def train_variant(variant, data, train_mask, args, seed):
+    if variant == "cnx_smdp":
+        return train_smdp(data, train_mask, args, seed)
     import torch
     import torch.nn.functional as F
 
@@ -347,6 +414,17 @@ def train_variant(variant, data, train_mask, args, seed):
     taus = None
     if variant in ("cnn_qrdqn", "cnx_cql_qr"):
         taus = (torch.arange(net.nq, device=device, dtype=torch.float32) + 0.5) / net.nq
+
+    bcq_behaviour = None
+    if variant == "cnx_bcq":
+        from advanced_agents import fit_behaviour
+        import torch.nn as nn
+        bcq_behaviour = nn.Sequential(nn.Linear(4 * 26 * 26, 256), nn.LayerNorm(256),
+                                      nn.GELU(), nn.Linear(256, N_ACTIONS)).to(device)
+        class _Holder: pass
+        _h = _Holder(); _h.behaviour = bcq_behaviour
+        fit_behaviour(_h, S[np.where(train_mask)[0]], data["A"][train_mask], device)
+        print(f"  [cnx_bcq s{seed}] модель поведения обучена", flush=True)
 
     t0 = time.time()
     rng = np.random.default_rng(seed)
@@ -394,6 +472,12 @@ def train_variant(variant, data, train_mask, args, seed):
                     q2 = net.q_target(s2).gather(1, a2[:, None]).squeeze(1)
                     tgt = r + GAMMA * (1 - d) * q2
                 loss = F.mse_loss(q, tgt)
+                if variant == "cnx_bcq":      # discrete BCQ: маска поддержки
+                    with torch.no_grad():
+                        pb = bcq_behaviour(S[b].flatten(1)).softmax(-1)
+                        keep = pb >= 0.3 * pb.max(-1, keepdim=True).values
+                    qs_all = net.q_online(S[b])
+                    loss = loss + 0.5 * (qs_all.masked_fill(keep, 0.0).clamp_min(0) ** 2).mean()
                 if variant in ("cnn_cql", "cnx_cql", "their_cql"):
                     qs = net.q_online(s)
                     loss = loss + args.cql_alpha * (
@@ -402,6 +486,17 @@ def train_variant(variant, data, train_mask, args, seed):
 
             opt.zero_grad(); loss.backward(); opt.step()
             net.soft_update()
+            if variant == "cnx_bbf" and (epoch * 1000 + k) % 4000 == 3999:
+                # BBF: shrink-and-perturb — ствол сохраняет 50%, головы заново
+                import copy as _copy
+                fresh = QNet(variant, device)
+                with torch.no_grad():
+                    for (nm, p), pf in zip(net.model.named_parameters(),
+                                           fresh.model.parameters()):
+                        a_keep = 0.0 if nm.startswith("1") else 0.5
+                        p.mul_(a_keep).add_((1 - a_keep) * pf)
+                net.target.load_state_dict(net.model.state_dict())
+                opt = torch.optim.Adam(net.params(), lr=1e-3)
         if (epoch + 1) % max(1, n_epochs // 5) == 0:
             print(f"  [{variant} s{seed}] epoch {epoch+1}/{n_epochs} loss={loss.item():.4f}", flush=True)
         if args.plateau_patience and (epoch + 1) % 25 == 0:
@@ -574,7 +669,8 @@ def main():
     ap.add_argument("--variant", required=True,
                     choices=["cnn_dqn", "convnext_dqn", "cnn_cql", "cnn_iql",
                              "cnn_qrdqn", "cnn_vqc", "cnx_cql", "cnx_cql_qr",
-                             "their_dqn", "their_cql", "cnx_dueling"])
+                             "their_dqn", "their_cql", "cnx_dueling",
+                             "cnx_bcq", "cnx_bbf", "cnx_smdp"])
     ap.add_argument("--seeds", default="1,2,3,4,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--fqe-epochs", type=int, default=100)
