@@ -146,6 +146,43 @@ class BoostedNet(torch.nn.Module):
         return self.base(x) + self.eps * self.boost(x)
 
 
+CKPT_DIR = "rl_arch/online_env_ckpt"
+
+
+def save_ckpt(name, payload):
+    """Состояние прогона (веса PINN + цепочка + карты) — чтобы следующий кернел
+    продолжил с того же места: сессия Kaggle живёт 12 ч, а бюджет 31000 эпох при
+    мелких действиях агента требует больше."""
+    local = f"ckpt_{name}.pt"
+    torch.save(payload, local)
+    tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
+    if not tok:
+        return
+    from huggingface_hub import upload_file
+    for attempt in range(3):
+        try:
+            upload_file(path_or_fileobj=local, path_in_repo=f"{CKPT_DIR}/{name}.pt",
+                        repo_id=OUT_REPO, repo_type="dataset", token=tok,
+                        commit_message=f"ckpt {name}")
+            return
+        except Exception as e:
+            print(f"ckpt upload retry {attempt}: {e}", flush=True)
+            time.sleep(5 * (attempt + 1))
+
+
+def load_ckpt(name):
+    local = f"ckpt_{name}.pt"
+    if os.path.exists(local):
+        return torch.load(local, map_location="cpu", weights_only=False)
+    try:
+        from huggingface_hub import hf_hub_download
+        p = hf_hub_download(OUT_REPO, f"{CKPT_DIR}/{name}.pt", repo_type="dataset")
+        return torch.load(p, map_location="cpu", weights_only=False)
+    except Exception as e:
+        print(f"чекпоинта нет ({type(e).__name__}) — старт с нуля", flush=True)
+        return None
+
+
 def build_state(raw, prev_raw):
     """Replicates EnvRLOptimizer.step delta logic + channel order."""
     tot = raw["loss_total"].detach().float().cpu()
@@ -205,8 +242,38 @@ def run_seed(seed, args, progress_cb=None):
     trig = (json.load(open(os.path.join(SCRIPT_DIR, "landscape_trigger.json")))
             if args.boost_trigger.startswith("landscape") else None)
     boosted, loss_hist, p_hist = False, [], []
+    boost_layers, boost_eps = None, None
     spent, chain, t0 = 0, [], time.time()
     rmse = brmse = l2re_op = l2re_bnd = float("inf")
+
+    ckpt_name = getattr(args, "_ckpt_name", None)
+    ck = load_ckpt(ckpt_name) if (args.resume and ckpt_name) else None
+    if ck is not None:
+        if ck.get("boosted"):
+            boost = dde.nn.FNN(ck["boost_layers"], "tanh", "Glorot normal").float()
+            pde_ref = getattr(model, "pde", None)
+            model = dde.Model(model.data, BoostedNet(model.net, boost, ck["boost_eps"]))
+            model.pde = pde_ref
+            boosted, boost_layers, boost_eps = True, ck["boost_layers"], ck["boost_eps"]
+        model.net.load_state_dict(ck["net"])
+        spent, chain, state = ck["spent"], ck["chain"], ck["state"]
+        prev_raw = ck["prev_raw"]
+        loss_hist, p_hist = ck["loss_hist"], ck["p_hist"]
+        rmse, brmse, l2re_op, l2re_bnd = ck["metrics"]
+        print(f"[seed {seed}] докатка: spent={spent}/{args.budget}, шагов уже {len(chain)}",
+              flush=True)
+
+    def dump_ckpt():
+        if not ckpt_name:
+            return
+        save_ckpt(ckpt_name, dict(
+            net={k: v.detach().cpu() for k, v in model.net.state_dict().items()},
+            spent=spent, chain=chain, state=state,
+            prev_raw=({k: v.detach().cpu() for k, v in prev_raw.items()}
+                      if prev_raw is not None else None),
+            loss_hist=loss_hist, p_hist=p_hist, boosted=boosted,
+            boost_layers=boost_layers, boost_eps=boost_eps,
+            metrics=(rmse, brmse, l2re_op, l2re_bnd)))
 
     while spent < args.budget:
         if args.policy == "agent":
@@ -273,34 +340,52 @@ def run_seed(seed, args, progress_cb=None):
                 pde_ref = getattr(model, "pde", None)
                 model = dde.Model(model.data, BoostedNet(model.net, boost, eps))
                 model.pde = pde_ref
-                boosted = True
+                boosted, boost_layers, boost_eps = True, layers, eps
                 chain.append(["BOOST", eps, 0])
                 print(f"[seed {seed}] БУСТИНГ подключён (eps={eps:.3e}, триггер "
                       f"{args.boost_trigger})", flush=True)
 
         # ---- state: AE over the saved trajectory, then latent loss surface ----
-        t_ae = time.time()
-        ae = vm.train(args.ae_lr, args.ae_cosine_patience, args.ae_epochs, 100,
-                      args.ae_batch, True, finetune_AE_model=False,
-                      callbacks=[EarlyStopping(patience=args.ae_es_patience)],
-                      solver_models=saver.saved_models)
-        t_ae = time.time() - t_ae
-        t_srf = time.time()
-        pls = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae,
-                              dde_pde_model=get_model_rec, x_range=GRID_RANGE,
-                              batch_size=args.ae_batch, loss_types=LOSS_TYPES,
-                              loss_name="loss_total", path_to_plot_model=None,
-                              path_to_trajectories=None, img_dir="")
-        raw = pls.save_equation_loss_surface(log_key=True)
-        t_srf = time.time() - t_srf
-        print(f"[seed {seed}] state built: AE {t_ae:.1f}s (epochs={args.ae_epochs}), "
-              f"surface {t_srf:.1f}s", flush=True)
-        state = build_state(raw, prev_raw)
-        prev_raw = raw
-        del pls, ae
+        # армам none/plateau/midpoint карты не нужны: политика fixed, а триггер
+        # смотрит на историю лосса или на счётчик эпох. Обучение PINN от этого не
+        # зависит (проверено: l2re совпадает до последнего знака), а построение
+        # карт — это ~90% времени прогона
+        if not args.no_state:
+            t_ae = time.time()
+            ae = vm.train(args.ae_lr, args.ae_cosine_patience, args.ae_epochs, 100,
+                          args.ae_batch, True, finetune_AE_model=False,
+                          callbacks=[EarlyStopping(patience=args.ae_es_patience)],
+                          solver_models=saver.saved_models)
+            t_ae = time.time() - t_ae
+            t_srf = time.time()
+            pls = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae,
+                                  dde_pde_model=get_model_rec, x_range=GRID_RANGE,
+                                  batch_size=args.ae_batch, loss_types=LOSS_TYPES,
+                                  loss_name="loss_total", path_to_plot_model=None,
+                                  path_to_trajectories=None, img_dir="")
+            raw = pls.save_equation_loss_surface(log_key=True)
+            t_srf = time.time() - t_srf
+            print(f"[seed {seed}] state built: AE {t_ae:.1f}s (epochs={args.ae_epochs}), "
+                  f"surface {t_srf:.1f}s", flush=True)
+            state = build_state(raw, prev_raw)
+            prev_raw = raw
+            del pls, ae
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+        # чекпоинт ставим ПОСЛЕ построения состояния: веса PINN и карты должны
+        # соответствовать друг другу, иначе докатка стартует с рассогласования
+        if ckpt_name and args.ckpt_every and len(chain) % args.ckpt_every == 0:
+            dump_ckpt()
+        if args.hours and (time.time() - t0) / 3600.0 >= args.hours:
+            dump_ckpt()
+            print(f"[seed {seed}] лимит времени ({args.hours} ч): чекпоинт на "
+                  f"spent={spent}/{args.budget}, продолжит следующий кернел", flush=True)
+            return dict(seed=seed, policy=args.policy, pde=args.pde, unfinished=True,
+                        l2re=math.hypot(l2re_op, l2re_bnd), spent=spent,
+                        budget=args.budget, n_steps=len(chain),
+                        elapsed_s=round(time.time() - t0, 1))
 
     l2re = math.hypot(l2re_op, l2re_bnd)
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
@@ -355,8 +440,23 @@ def main():
     ap.add_argument("--boost-warmup", type=int, default=8,
                     help="Сколько шагов копить историю до срабатывания peak-триггера")
     ap.add_argument("--boost-threshold", type=float, default=0.5)
+    ap.add_argument("--hours", type=float, default=0.0,
+                    help="мягкий лимит по времени: сохранить чекпоинт и выйти "
+                         "(0 = без лимита). Сессия Kaggle живёт 12 ч")
+    ap.add_argument("--resume", action="store_true",
+                    help="продолжить прогон с чекпоинта (локального или с HF)")
+    ap.add_argument("--ckpt-every", type=int, default=10,
+                    help="как часто страховочно сохранять чекпоинт, в шагах цепочки")
+    ap.add_argument("--no-state", action="store_true",
+                    help="не строить карты ландшафта (AE + поверхность лоссов). "
+                         "Допустимо только для policy=fixed/random с триггерами "
+                         "none/plateau/midpoint — там карты не используются")
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
+    if args.no_state and (args.policy == "agent"
+                          or args.boost_trigger.startswith("landscape")):
+        sys.exit("--no-state несовместим с policy=agent и ландшафтными триггерами: "
+                 "им нужны карты")
     if args.smoke:  # только как дефолты — явные флаги не перезаписываем
         given = set(a.split("=")[0] for a in sys.argv[1:] if a.startswith("--"))
         if "--budget" not in given: args.budget = 300
@@ -367,10 +467,16 @@ def main():
                        if args.model_file else "random")
     for seed in [int(s) for s in args.seeds.split(",")]:
         name = f"{args.pde}_{tag}_seed{seed}"
+        args._ckpt_name = name
         cb = None if args.smoke else (lambda r, n=name: upload(r, n))
         row = run_seed(seed, args, progress_cb=cb)
         row["smoke"] = args.smoke
         print(json.dumps({k: v for k, v in row.items() if k != "chain"}), flush=True)
+        if row.get("unfinished"):
+            # итог не заливаем: строка выглядела бы завершённой, а бюджет не выбран
+            print(f"[seed {seed}] прогон не закончен — нужен ещё один кернел с --resume",
+                  flush=True)
+            continue
         if not args.smoke:
             upload(row, f"{args.pde}_{tag}_seed{seed}")
 
