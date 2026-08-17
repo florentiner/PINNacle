@@ -412,7 +412,10 @@ def upload(row, name):
         return
     import io
     from huggingface_hub import upload_file
-    for attempt in range(3):
+    # итоговую строку ждём долго: лимит HF (128 коммитов в час на репозиторий)
+    # держится около часа, а три ретрая по 5 секунд теряют готовый результат
+    tries = 3 if row.get("partial") else 9
+    for attempt in range(tries):
         try:
             upload_file(path_or_fileobj=io.BytesIO(json.dumps(row, indent=1).encode()),
                         path_in_repo=f"rl_arch/online_env/{name}.json",
@@ -422,7 +425,7 @@ def upload(row, name):
             return
         except Exception as e:
             print(f"upload retry {attempt}: {e}", flush=True)
-            time.sleep(5)
+            time.sleep(5 if row.get("partial") else min(600, 20 * 2 ** attempt))
 
 
 def main():
