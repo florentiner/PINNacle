@@ -112,6 +112,17 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0):
     return float(loss.item())
 
 
+def behaviour_update(behaviour, opt, buf, batch_size, iters, device):
+    """Модель поведения для маски BCQ: что вообще встречалось в данных."""
+    import torch.nn.functional as F
+    loss = 0.0
+    for _ in range(iters):
+        s, a, _, _, _ = buf.sample(batch_size, device)
+        loss = F.cross_entropy(behaviour(s.flatten(1)), a)
+        opt.zero_grad(); loss.backward(); opt.step()
+    return float(loss.detach())
+
+
 def upload(row, name):
     tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     if not tok:
@@ -153,6 +164,11 @@ def main():
                     help="какой офлайн-буфер подмешивать")
     ap.add_argument("--rlpd-utd", type=int, default=8,
                     help="обновлений на шаг среды (update-to-data ratio)")
+    ap.add_argument("--bcq", action="store_true",
+                    help="discrete BCQ: модель поведения по собранным переходам + "
+                         "маска поддержки при выборе действия")
+    ap.add_argument("--bcq-threshold", type=float, default=0.3,
+                    help="порог маски: оставляем действия с p >= threshold * max p")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -189,6 +205,16 @@ def main():
         mean, std = ck["mean"], ck["std"]
         print(f"тёплый старт из {args.warm_start}", flush=True)
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
+
+    # discrete BCQ: модель поведения по собранным переходам + маска поддержки на
+    # выборе действия. Без неё вариант cnx_bcq в онлайне неотличим от обычного
+    # DQN — вся суть метода именно в маске
+    behaviour = beh_opt = None
+    if args.bcq:
+        import torch.nn as nn
+        behaviour = nn.Sequential(nn.Linear(4 * 26 * 26, 256), nn.LayerNorm(256),
+                                  nn.GELU(), nn.Linear(256, 27)).to(dev)
+        beh_opt = torch.optim.Adam(behaviour.parameters(), lr=1e-3)
 
     vm = VisualizationModel(device=str(dev), path_to_plot_model=None,
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
@@ -258,7 +284,14 @@ def main():
                 x = torch.as_tensor(((state[None] - mean) / std) if mean is not None else state[None],
                                     device=dev).float()
                 with torch.no_grad():
-                    a = int(net.q_scalar(x).argmax(1).item())
+                    q = net.q_scalar(x)
+                    if behaviour is not None:
+                        # BCQ: выбираем только среди действий, которые модель
+                        # поведения считает правдоподобными для этих данных
+                        p = behaviour(x.flatten(1)).softmax(-1)
+                        keep = p >= args.bcq_threshold * p.max(-1, keepdim=True).values
+                        q = q.masked_fill(~keep, -1e9)
+                    a = int(q.argmax(1).item())
                 how = "по модели"
             opt_name, lr, epochs = ACTION_TABLE[a]
 
@@ -309,6 +342,9 @@ def main():
             buf.push(((state[None] - mean) / std)[0], a, reward,
                      ((next_state[None] - mean) / std)[0], float(done == 1))
             state = next_state
+
+            if behaviour is not None and len(buf) >= 8:
+                behaviour_update(behaviour, beh_opt, buf, args.batch_size, 2, dev)
 
             if args.rlpd and off_buf is not None:
                 # RLPD: половина батча из офлайна, половина из онлайна; много обновлений
