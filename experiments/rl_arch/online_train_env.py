@@ -164,6 +164,12 @@ def main():
                     help="какой офлайн-буфер подмешивать")
     ap.add_argument("--rlpd-utd", type=int, default=8,
                     help="обновлений на шаг среды (update-to-data ratio)")
+    ap.add_argument("--preload", default=None,
+                    help="схема авторов: предзаполнить ОБЩИЙ буфер прошлым опытом "
+                         "(rl_trainer.collect_all_comet_transitions) и дальше "
+                         "сэмплировать равномерно, а не половиной батча как RLPD")
+    ap.add_argument("--preload-max", type=int, default=500,
+                    help="сколько прошлых переходов подгружать (у авторов max_exps_last=500)")
     ap.add_argument("--bcq", action="store_true",
                     help="discrete BCQ: модель поведения по собранным переходам + "
                          "маска поддержки при выборе действия")
@@ -237,6 +243,24 @@ def main():
             mean, std = om, os_
         print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
               f"UTD={args.rlpd_utd}", flush=True)
+    if args.preload:
+        # схема авторов: прошлые переходы кладутся в ТОТ ЖЕ буфер, из которого потом
+        # идёт равномерная выборка — отличие от RLPD, где офлайн держится отдельно
+        # и всегда занимает ровно половину батча
+        from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
+        od = episodes_to_arrays(load_episodes(None, args.preload),
+                                fix_next_state=(args.preload == "poisson_boltzmann_2d"))
+        otr, _ = split_by_episode(od)
+        oidx = np.where(otr)[0][-args.preload_max:]
+        om = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True)
+        os_ = od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
+        for i in oidx:
+            buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
+                     ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
+        if mean is None:
+            mean, std = om, os_
+        print(f"предзагрузка по схеме авторов: {len(buf)} переходов из {args.preload}", flush=True)
+
     rng = np.random.default_rng(args.seed)
     tag = args.tag or f"{args.variant}_{args.pde}_seed{args.seed}"
     save_dir = os.path.join(args.save_dir, tag)
