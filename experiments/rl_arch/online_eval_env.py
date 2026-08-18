@@ -340,7 +340,7 @@ def run_seed(seed, args, progress_cb=None):
                 fire = spent >= args.budget // 2
             elif args.boost_trigger == "plateau" and len(loss_hist) >= 4:
                 r4 = loss_hist[-4:]
-                fire = (max(r4) - min(r4)) < 1e-3 * abs(r4[-1] + 1e-12)
+                fire = (max(r4) - min(r4)) < args.plateau_rel * abs(r4[-1] + 1e-12)
             if fire:
                 eps = float(np.sqrt(max(float(np.asarray(model.train_state.loss_train,
                                                          dtype=float)[0]), 1e-30)))
@@ -452,7 +452,14 @@ def main():
                     choices=["none", "landscape", "landscape_peak", "plateau", "midpoint"])
     ap.add_argument("--boost-warmup", type=int, default=8,
                     help="Сколько шагов копить историю до срабатывания peak-триггера")
-    ap.add_argument("--boost-threshold", type=float, default=0.5)
+    ap.add_argument("--boost-threshold", type=float, default=0.5,
+                    help="порог ландшафтного триггера. ВНИМАНИЕ: обученная модель "
+                         "выдаёт P в диапазоне 0.10-0.45, порог 0.5 недостижим "
+                         "(превышается на 0.19% состояний буфера) — калибруйте "
+                         "по фактическому распределению, напр. 0.40 = верхняя дециль")
+    ap.add_argument("--plateau-rel", type=float, default=1e-3,
+                    help="относительный размах 4 подряд лоссов, ниже которого "
+                         "считаем плато")
     ap.add_argument("--hours", type=float, default=0.0,
                     help="мягкий лимит по времени: сохранить чекпоинт и выйти "
                          "(0 = без лимита). Сессия Kaggle живёт 12 ч")
