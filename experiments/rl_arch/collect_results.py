@@ -23,7 +23,11 @@ from huggingface_hub import hf_hub_download, list_repo_files
 REPO = "danil-e/pinnacle-optuna-db"
 ARM_RU = {"none": "без бустинга (контроль)", "landscape": "бустинг по ландшафту (P>0.5)",
           "plateau": "бустинг по плато лосса", "landscape_peak": "бустинг в пике ландшафта",
-          "midpoint": "бустинг слепо в середине"}
+          "midpoint": "бустинг слепо в середине",
+          # пороги, откалиброванные по фактическому распределению в прогонах:
+          # 0.5 и 1e-3 недостижимы, при них армы вырождались в контроль
+          "landscape022": "бустинг по ландшафту (P>0.22)",
+          "plateau015": "бустинг по плато (размах<15%)"}
 VAR_RU = {"convnext_dqn": "ConvNeXt + DQN", "cnx_cql": "ConvNeXt + CQL",
           "cnx_dueling": "ConvNeXt + дуэлинговая голова", "their_dqn": "их бэйзлайн (ConvEncoder+Dueling)",
           "cnx_cql_qr": "ConvNeXt + CQL + квантили", "random": "случайная политика",
@@ -85,7 +89,8 @@ def task_paper(rows):
             continue
         print(f"\n{pde_ru}:")
         print(f"  {'арм':32s} {'сидов':>6s} {'l2re сред.':>11s} {'медиана':>10s} {'станд.откл':>11s}  бустинг срабатывал")
-        for arm in ("none", "landscape", "plateau", "landscape_peak", "midpoint"):
+        for arm in ("none", "landscape", "landscape022", "plateau", "plateau015",
+                    "landscape_peak", "midpoint"):
             g = [r for r in sub if r.get("boost_trigger") == arm]
             if not g:
                 continue
