@@ -201,3 +201,79 @@ def fit_behaviour(agent, S, A, device, epochs=300, batch=256):
         loss = F.cross_entropy(agent.behaviour(x), y)
         opt.zero_grad(); loss.backward(); opt.step()
     return float(loss.item())
+
+
+# ---------------------------------------------------------------------------
+# RLPD в полном виде (arXiv 2302.02948)
+# ---------------------------------------------------------------------------
+# Симметричная выборка 50/50 и высокий update-to-data уже есть в
+# online_train_env. Здесь — две оставшиеся компоненты статьи:
+#   * LayerNorm в критике: без неё Q расходится на действиях вне поддержки
+#     данных, и подмешивание офлайна вредит вместо пользы (раздел 4.1 статьи);
+#   * ансамбль из N критиков со случайным подмножеством размера M для таргета:
+#     пессимизм без ручной настройки коэффициента (у авторов N=10, M=2).
+class RlpdCritic:
+    """Интерфейс QNet, но внутри N независимых критиков с LayerNorm."""
+
+    def __init__(self, device, n_critics=10, subset=2, encoder_kind="convnext"):
+        from offline_rl import make_encoder
+        self.device, self.n, self.m = device, n_critics, subset
+        self.variant = "cnx_dqn_rlpd_full"
+
+        def one():
+            enc = make_encoder(encoder_kind)
+            return nn.Sequential(enc, nn.LayerNorm(enc.out_dim),
+                                 nn.Linear(enc.out_dim, 256), nn.LayerNorm(256), nn.GELU(),
+                                 nn.Linear(256, N_ACTIONS))
+
+        self.nets = nn.ModuleList([one() for _ in range(n_critics)]).to(device)
+        self.target = copy.deepcopy(self.nets).requires_grad_(False)
+        self.model = self.nets            # совместимость с сохранением/загрузкой
+
+    def params(self):
+        return self.nets.parameters()
+
+    def n_params(self):
+        return sum(p.numel() for p in self.nets.parameters())
+
+    def q_all(self, x):
+        return torch.stack([net(x) for net in self.nets])        # (N,B,A)
+
+    def q_scalar(self, x):
+        """Для выбора действия — среднее по ансамблю."""
+        return self.q_all(x).mean(0)
+
+    def q_online(self, x):
+        return self.q_scalar(x)
+
+    def q_target_subset(self, x):
+        """Таргет: минимум по СЛУЧАЙНОМУ подмножеству целевых критиков."""
+        idx = torch.randperm(self.n, device=x.device)[:self.m]
+        with torch.no_grad():
+            q = torch.stack([self.target[int(i)](x) for i in idx])   # (M,B,A)
+        return q.min(0).values
+
+    def q_target(self, x):
+        return self.q_target_subset(x)
+
+    def soft_update(self, tau=0.005):
+        with torch.no_grad():
+            for p, pt in zip(self.nets.parameters(), self.target.parameters()):
+                pt.mul_(1 - tau).add_(tau * p)
+
+
+def rlpd_update(critic, off_buf, on_buf, opt, half, gamma):
+    """Шаг RLPD: батч 50/50, таргет по случайному подмножеству, все критики
+    учатся на одном и том же таргете."""
+    dev = critic.device
+    parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
+    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    with torch.no_grad():
+        a2 = critic.q_scalar(s2).argmax(1)                      # double-DQN: argmax онлайн
+        q2 = critic.q_target_subset(s2).gather(1, a2[:, None]).squeeze(1)
+        tgt = r + gamma * (1 - d) * q2
+    qa = critic.q_all(s).gather(2, a[None, :, None].expand(critic.n, -1, 1)).squeeze(-1)
+    loss = F.mse_loss(qa, tgt[None].expand_as(qa))
+    opt.zero_grad(); loss.backward(); opt.step()
+    critic.soft_update()
+    return float(loss.detach())

@@ -164,6 +164,12 @@ def main():
                     help="какой офлайн-буфер подмешивать")
     ap.add_argument("--rlpd-utd", type=int, default=8,
                     help="обновлений на шаг среды (update-to-data ratio)")
+    ap.add_argument("--rlpd-full", action="store_true",
+                    help="RLPD целиком: к симметричной выборке добавить LayerNorm в "
+                         "критике и ансамбль из N критиков со случайным подмножеством "
+                         "размера M для таргета (в статье N=10, M=2)")
+    ap.add_argument("--rlpd-ensemble", type=int, default=10)
+    ap.add_argument("--rlpd-subset", type=int, default=2)
     ap.add_argument("--preload", default=None,
                     help="схема авторов: предзаполнить ОБЩИЙ буфер прошлым опытом "
                          "(rl_trainer.collect_all_comet_transitions) и дальше "
@@ -180,6 +186,8 @@ def main():
     ap.add_argument("--tag", default=None)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
+    if args.rlpd_full:
+        args.rlpd = True        # полному RLPD нужен тот же офлайновый буфер
     if args.smoke:  # только как дефолты — явные флаги не перезаписываем
         given = set(x.split("=")[0] for x in sys.argv[1:] if x.startswith("--"))
         if "--hours" not in given: args.hours = 0.05
@@ -203,7 +211,14 @@ def main():
     get_model = build_get_model(args.pde, args.hidden_layers)
     get_model_rec = build_get_model(args.pde, args.hidden_layers)
 
-    net = QNet(args.variant, dev)
+    if args.rlpd_full:
+        from advanced_agents import RlpdCritic
+        net = RlpdCritic(dev, n_critics=args.rlpd_ensemble, subset=args.rlpd_subset)
+        print(f"RLPD целиком: {args.rlpd_ensemble} критиков с LayerNorm, "
+              f"таргет по минимуму из {args.rlpd_subset} случайных, "
+              f"{net.n_params()/1e6:.2f} млн параметров", flush=True)
+    else:
+        net = QNet(args.variant, dev)
     mean = std = None
     if args.warm_start and os.path.exists(args.warm_start):
         ck = torch.load(args.warm_start, map_location="cpu", weights_only=False)
@@ -376,7 +391,11 @@ def main():
                 half = max(1, args.batch_size // 2)
                 ql = 0.0
                 for _ in range(iters):
-                    if len(buf) >= 8:
+                    if args.rlpd_full:
+                        from advanced_agents import rlpd_update
+                        src = buf if len(buf) >= 8 else off_buf
+                        ql = rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
+                    elif len(buf) >= 8:
                         ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant)
                     else:
                         ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant)
