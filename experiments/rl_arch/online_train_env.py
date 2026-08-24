@@ -170,6 +170,15 @@ def main():
                          "размера M для таргета (в статье N=10, M=2)")
     ap.add_argument("--rlpd-ensemble", type=int, default=10)
     ap.add_argument("--rlpd-subset", type=int, default=2)
+    ap.add_argument("--qwm", action="store_true",
+                    help="QWM (arXiv 2608.17163): мировая модель поверх Q-обучения — "
+                         "одношаговый поиск по всем 27 действиям при выборе действия. "
+                         "Модель предобучается на офлайновом буфере (--rlpd-subdir) и "
+                         "дообучается онлайн; критик учится только на реальных переходах")
+    ap.add_argument("--qwm-pretrain", type=int, default=4000,
+                    help="шагов предобучения мировой модели на офлайновом буфере")
+    ap.add_argument("--qwm-alpha", type=float, default=0.5,
+                    help="вес критика в комбинированной оценке (Eq. 9: 0.5)")
     ap.add_argument("--preload", default=None,
                     help="схема авторов: предзаполнить ОБЩИЙ буфер прошлым опытом "
                          "(rl_trainer.collect_all_comet_transitions) и дальше "
@@ -241,7 +250,7 @@ def main():
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
     buf = LocalBuffer()
     off_buf = None
-    if args.rlpd:
+    if args.rlpd or args.qwm:
         # офлайновая половина батча: тот же буфер, на котором учатся офлайн-агенты
         from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
         od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
@@ -275,6 +284,17 @@ def main():
         if mean is None:
             mean, std = om, os_
         print(f"предзагрузка по схеме авторов: {len(buf)} переходов из {args.preload}", flush=True)
+
+    wm = wm_opt = None
+    if args.qwm:
+        from advanced_agents import QwmWorldModel, wm_update, qwm_select
+        wm = QwmWorldModel().to(dev)
+        wm_opt = torch.optim.Adam(wm.parameters(), lr=1e-3)
+        wl = 0.0
+        for i in range(args.qwm_pretrain):
+            wl = wm_update(wm, wm_opt, [off_buf], 128, dev)
+        print(f"QWM: мировая модель предобучена ({args.qwm_pretrain} шагов, "
+              f"итоговый лосс {wl:.4f}), поиск по Eq.9 с D=1", flush=True)
 
     rng = np.random.default_rng(args.seed)
     tag = args.tag or f"{args.variant}_{args.pde}_seed{args.seed}"
@@ -322,7 +342,12 @@ def main():
             else:
                 x = torch.as_tensor(((state[None] - mean) / std) if mean is not None else state[None],
                                     device=dev).float()
-                with torch.no_grad():
+                if wm is not None:
+                    # QWM: одношаговый поиск вместо argmax Q (Eq. 9, D=1)
+                    a = qwm_select(net, wm, x, gamma=GAMMA, alpha=args.qwm_alpha)
+                    how = "поиск QWM"
+                else:
+                  with torch.no_grad():
                     q = net.q_scalar(x)
                     if behaviour is not None:
                         # BCQ: выбираем только среди действий, которые модель
@@ -331,7 +356,7 @@ def main():
                         keep = p >= args.bcq_threshold * p.max(-1, keepdim=True).values
                         q = q.masked_fill(~keep, -1e9)
                     a = int(q.argmax(1).item())
-                how = "по модели"
+                  how = "по модели"
             opt_name, lr, epochs = ACTION_TABLE[a]
 
             optimizer = build_optimizer(opt_name, lr, model.net)
@@ -384,6 +409,13 @@ def main():
 
             if behaviour is not None and len(buf) >= 8:
                 behaviour_update(behaviour, beh_opt, buf, args.batch_size, 2, dev)
+
+            if wm is not None:
+                # дообучение мировой модели на свежих переходах (критик как учился
+                # на реальных данных, так и учится — модель мира его не подменяет)
+                wbufs = [off_buf] + ([buf] if len(buf) >= 8 else [])
+                for _ in range(4):
+                    wm_update(wm, wm_opt, wbufs, 64, dev)
 
             if args.rlpd and off_buf is not None:
                 # RLPD: половина батча из офлайна, половина из онлайна; много обновлений

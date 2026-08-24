@@ -277,3 +277,55 @@ def rlpd_update(critic, off_buf, on_buf, opt, half, gamma):
     opt.zero_grad(); loss.backward(); opt.step()
     critic.soft_update()
     return float(loss.detach())
+
+
+# ---------------------------------------------------------------------------
+# QWM — Q-Learning with World Models (arXiv 2608.17163)
+# ---------------------------------------------------------------------------
+# Мировая модель используется ТОЛЬКО при выборе действия (test-time search),
+# политика и критик учатся на реальных переходах — ошибка модели не
+# накапливается в обучении. Для низкоразмерных состояний статья берёт
+# резидуальный трёхслойный MLP (hidden 256): s' = s + Delta(s, a); мы добавляем
+# вторую голову под награду (у них r_psi отдельно, механика та же).
+class QwmWorldModel(nn.Module):
+    def __init__(self, state_dim=4 * 26 * 26, n_actions=N_ACTIONS, hidden=256):
+        super().__init__()
+        self.inp = nn.Linear(state_dim + n_actions, hidden)
+        self.mid = nn.Linear(hidden, hidden)
+        self.delta = nn.Linear(hidden, state_dim)
+        self.rew = nn.Linear(hidden, 1)
+
+    def forward(self, s_flat, a_onehot):
+        z = F.gelu(self.inp(torch.cat([s_flat, a_onehot], -1)))
+        z = F.gelu(self.mid(z))
+        return self.delta(z), self.rew(z).squeeze(-1)
+
+
+def wm_update(wm, opt, bufs, batch, device):
+    """Шаг обучения мировой модели: MSE по резидуалу состояния и по награде.
+    bufs — список буферов; батч делится между ними поровну."""
+    parts = [b.sample(max(1, batch // len(bufs)), device) for b in bufs]
+    s, a, r, s2, _ = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    s_flat, s2_flat = s.flatten(1), s2.flatten(1)
+    a_oh = F.one_hot(a, N_ACTIONS).float()
+    d_hat, r_hat = wm(s_flat, a_oh)
+    loss = F.mse_loss(d_hat, s2_flat - s_flat) + F.mse_loss(r_hat, r)
+    opt.zero_grad(); loss.backward(); opt.step()
+    return float(loss.detach())
+
+
+def qwm_select(net, wm, x, gamma=0.9, alpha=0.5):
+    """Выбор действия по Eq. 9 статьи с D=1, K=1: все 27 действий разворачиваются
+    исчерпывающе (действий мало — сэмплирование кандидатов из политики не нужно).
+    score(a) = alpha*Q(s,a) + (1-alpha)*[r_hat(s,a) + gamma*max_a' Q_target(s'_hat)]
+    Глубже одного шага не идём: модель обучена на переходах другого уравнения,
+    и её ошибка на воображаемых траекториях накапливается с глубиной."""
+    with torch.no_grad():
+        q_root = net.q_scalar(x)[0]                                  # (27,)
+        eye = torch.eye(N_ACTIONS, device=x.device)
+        s_flat = x.flatten(1).expand(N_ACTIONS, -1)                  # (27, 2704)
+        d_hat, r_hat = wm(s_flat, eye)
+        s2 = (s_flat + d_hat).view(N_ACTIONS, *x.shape[1:])
+        v2 = net.q_target(s2).max(1).values                          # (27,)
+        score = alpha * q_root + (1 - alpha) * (r_hat + gamma * v2)
+    return int(score.argmax().item())
