@@ -222,7 +222,7 @@ def make_head(variant: str, in_dim: int, n_quantiles: int):
         from RL.rl_utils.DQN_classes import DuelingHead
         return DuelingHead(in_dim, N_ACTIONS)
 
-    if variant in ("cnn_qrdqn", "cnx_cql_qr"):
+    if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
         return nn.Linear(in_dim, N_ACTIONS * n_quantiles)
     if variant == "cnn_vqc":
         import pennylane as qml
@@ -260,7 +260,7 @@ class QNet:
         if variant in ("their_dqn", "their_cql"):
             enc_kind = "their"
         elif variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling",
-                         "cnx_bcq", "cnx_bbf"):
+                         "cnx_bcq", "cnx_bbf", "cnx_qrdqn"):
             enc_kind = "convnext"
         else:
             enc_kind = "cnn"
@@ -286,7 +286,7 @@ class QNet:
     def _q(self, model, x):
         z = model[0](x)
         out = model[1](z)
-        if self.variant in ("cnn_qrdqn", "cnx_cql_qr"):
+        if self.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
             return out.view(-1, N_ACTIONS, self.nq)
         return out
 
@@ -302,7 +302,7 @@ class QNet:
     def q_scalar(self, x):
         """(B, N_ACTIONS) scalar Q for metrics/policies (mean over quantiles)."""
         q = self.q_online(x)
-        return q.mean(-1) if self.variant in ("cnn_qrdqn", "cnx_cql_qr") else q
+        return q.mean(-1) if self.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn") else q
 
     def q_cvar(self, x, alpha=0.25):
         import torch  # module-level `torch` only exists after main(); keep importable
@@ -412,7 +412,7 @@ def train_variant(variant, data, train_mask, args, seed):
     bs = args.batch_size
     n_epochs = args.epochs
     taus = None
-    if variant in ("cnn_qrdqn", "cnx_cql_qr"):
+    if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
         taus = (torch.arange(net.nq, device=device, dtype=torch.float32) + 0.5) / net.nq
 
     bcq_behaviour = None
@@ -449,7 +449,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     tgt = r + GAMMA * (1 - d) * v2
                 q = net.q_online(s).gather(1, a[:, None]).squeeze(1)
                 loss = v_loss + F.mse_loss(q, tgt)
-            elif variant in ("cnn_qrdqn", "cnx_cql_qr"):
+            elif variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
                 q = net.q_online(s)                                   # (B,A,nq)
                 q_data = q.gather(1, a[:, None, None].expand(-1, 1, net.nq)).squeeze(1)
                 with torch.no_grad():
@@ -504,7 +504,7 @@ def train_variant(variant, data, train_mask, args, seed):
                 b = to_t(test_idx).long()
                 qs = net.q_scalar(S[b]).gather(1, A[b][:, None]).squeeze(1)
                 a2 = net.q_scalar(S2[b]).argmax(1)
-                q2 = (net.q_target(S2[b]).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                q2 = (net.q_target(S2[b]).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                       else net.q_target(S2[b])).gather(1, a2[:, None]).squeeze(1)
                 td = float(((qs - (R[b] + GAMMA * (1 - D[b]) * q2)) ** 2).mean().sqrt())
             if td < best_td - 1e-3:
@@ -550,7 +550,7 @@ def evaluate(net, stats, data, test_mask, policy="mean"):
         q_scal = batched(lambda x: net.q_scalar(x), S[idx])
         a2 = batched(lambda x: net.q_scalar(x), S2[idx]).argmax(1)
         q2t = batched(lambda x: net.q_target(x).mean(-1)
-                      if net.variant in ("cnn_qrdqn", "cnx_cql_qr")
+                      if net.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                       else net.q_target(x), S2[idx])
         q2 = q2t.gather(1, a2[:, None]).squeeze(1)
         r = torch.as_tensor(data["R"][idx], device=device)
@@ -703,7 +703,7 @@ def main():
     for seed in [int(s) for s in args.seeds.split(",")]:
         t0 = time.time()
         net, stats, train_time = train_variant(args.variant, data, train_mask, args, seed)
-        policies = ["mean", "cvar"] if args.variant in ("cnn_qrdqn", "cnx_cql_qr") else ["mean"]
+        policies = ["mean", "cvar"] if args.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn") else ["mean"]
         for pol in policies:
             m, _ = evaluate(net, stats, data, test_mask, policy=pol)
             fq = fqe(net, stats, data, train_mask, test_mask, pol, args, seed)

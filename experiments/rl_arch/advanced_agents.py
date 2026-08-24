@@ -329,3 +329,153 @@ def qwm_select(net, wm, x, gamma=0.9, alpha=0.5):
         v2 = net.q_target(s2).max(1).values                          # (27,)
         score = alpha * q_root + (1 - alpha) * (r_hat + gamma * v2)
     return int(score.argmax().item())
+
+
+# ---------------------------------------------------------------------------
+# Bootstrapped DQN (Osband 2016) + randomized prior functions (Osband 2018)
+# ---------------------------------------------------------------------------
+# Согласованная на протяжении цепочки эксплорация: в начале цепочки сэмплируется
+# одна из K голов и ведёт её целиком — вместо eps-дрожания, ломающего хорошие
+# цепочки случайным действием в случайный момент. Разнообразие голов держат
+# замороженные случайные prior-сети (на 200 переходах bootstrap-маски бесполезны).
+class BootQNet:
+    def __init__(self, device, n_heads=5, prior_scale=3.0):
+        from offline_rl import make_encoder
+        self.device, self.K, self.beta = device, n_heads, prior_scale
+        self.variant = "cnx_boot"
+        self.enc = make_encoder("convnext")
+        self.heads = nn.ModuleList([nn.Linear(self.enc.out_dim, N_ACTIONS)
+                                    for _ in range(n_heads)])
+        self.priors = nn.ModuleList([nn.Sequential(nn.Linear(self.enc.out_dim, 64), nn.GELU(),
+                                                   nn.Linear(64, N_ACTIONS))
+                                     for _ in range(n_heads)]).requires_grad_(False)
+        self.model = nn.ModuleList([self.enc, self.heads, self.priors]).to(device)
+        self.target = copy.deepcopy(self.model).requires_grad_(False)
+        self.active = 0
+
+    def params(self):
+        return [p for p in self.model.parameters() if p.requires_grad]
+
+    def _q(self, mod, x, k):
+        z = mod[0](x)
+        return mod[1][k](z) + self.beta * mod[2][k](z)
+
+    def q_head(self, x, k):
+        return self._q(self.model, x, k)
+
+    def q_scalar(self, x):
+        return torch.stack([self._q(self.model, x, k) for k in range(self.K)]).mean(0)
+
+    def q_online(self, x):
+        return self.q_scalar(x)
+
+    def q_target(self, x):
+        return torch.stack([self._q(self.target, x, k) for k in range(self.K)]).mean(0)
+
+    def q_target_head(self, x, k):
+        return self._q(self.target, x, k)
+
+    def soft_update(self, tau=0.005):
+        with torch.no_grad():
+            for p, pt in zip(self.model.parameters(), self.target.parameters()):
+                pt.mul_(1 - tau).add_(tau * p)
+
+
+def boot_rlpd_update(net, off_buf, on_buf, opt, half, gamma):
+    """Симметричный батч; каждая голова учится на своём double-DQN таргете."""
+    dev = net.device
+    parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
+    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    loss = 0.0
+    for k in range(net.K):
+        with torch.no_grad():
+            a2 = net.q_head(s2, k).argmax(1)
+            q2 = net.q_target_head(s2, k).gather(1, a2[:, None]).squeeze(1)
+            tgt = r + gamma * (1 - d) * q2
+        q = net.q_head(s, k).gather(1, a[:, None]).squeeze(1)
+        loss = loss + F.mse_loss(q, tgt)
+    opt.zero_grad(); loss.backward(); opt.step()
+    net.soft_update()
+    return float(loss.detach()) / net.K
+
+
+# ---------------------------------------------------------------------------
+# Risk-seeking по верхнему квантилю (линия RiskMiner/IQN-искажений)
+# ---------------------------------------------------------------------------
+def rlpd_qr_update(net, off_buf, on_buf, opt, half, gamma):
+    """Квантильная регрессия (QR-DQN) на симметричном батче 50/50 — в отличие от
+    скалярного MSE, сохраняет форму распределения, без чего верхний квантиль
+    не отличался бы от среднего."""
+    dev = net.device
+    parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
+    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    nq = net.nq
+    q_all = net.q_online(s)                                        # (B,A,nq)
+    q_sa = q_all.gather(1, a[:, None, None].expand(-1, 1, nq)).squeeze(1)   # (B,nq)
+    with torch.no_grad():
+        a2 = net.q_scalar(s2).argmax(1)
+        q2 = net.q_target(s2).gather(1, a2[:, None, None].expand(-1, 1, nq)).squeeze(1)
+        tgt = r[:, None] + gamma * (1 - d)[:, None] * q2           # (B,nq)
+    taus = (torch.arange(nq, device=dev, dtype=torch.float32) + 0.5) / nq
+    u = tgt[:, None, :] - q_sa[:, :, None]                         # (B,nq,nq)
+    huber = torch.where(u.abs() <= 1.0, 0.5 * u ** 2, u.abs() - 0.5)
+    loss = (torch.abs(taus[None, :, None] - (u < 0).float()) * huber).mean()
+    opt.zero_grad(); loss.backward(); opt.step()
+    net.soft_update()
+    return float(loss.detach())
+
+
+def q_upper(net, x, tau=0.8):
+    """Оптимистичная оценка: среднее квантилей выше tau. Для max-метрики
+    действуем по верхнему хвосту распределения, а не по среднему (и тем более
+    не по CVaR — он для медианы/надёжности)."""
+    q = net.q_online(x)                                            # (B,A,nq)
+    qs, _ = torch.sort(q, dim=-1)
+    k = max(1, int(net.nq * (1.0 - tau)))
+    return qs[..., -k:].mean(-1)
+
+
+# ---------------------------------------------------------------------------
+# Self-imitation (Oh 2018): повторно учить переходы лучших цепочек
+# ---------------------------------------------------------------------------
+class SilBuffer:
+    """Переходы топ-K цепочек с их discounted return-to-go."""
+
+    def __init__(self, top_k=5, gamma=0.9):
+        self.top_k, self.gamma = top_k, gamma
+        self.chains = []                    # (l2re, [(s,a,G), ...])
+
+    def add_chain(self, l2re, transitions):
+        rs = [t[2] for t in transitions]
+        G, out = 0.0, []
+        for (s, a, _), r in zip(reversed(transitions), reversed(rs)):
+            G = r + self.gamma * G
+            out.append((s, a, G))
+        self.chains.append((l2re, out[::-1]))
+        self.chains.sort(key=lambda c: c[0])
+        del self.chains[self.top_k:]
+
+    def sample(self, n, device):
+        flat = [t for _, ch in self.chains for t in ch]
+        if not flat:
+            return None
+        idx = np.random.randint(0, len(flat), size=min(n, len(flat)))
+        s = torch.as_tensor(np.array([flat[i][0] for i in idx]), dtype=torch.float32, device=device)
+        a = torch.as_tensor(np.array([flat[i][1] for i in idx]), dtype=torch.long, device=device)
+        g = torch.as_tensor(np.array([flat[i][2] for i in idx]), dtype=torch.float32, device=device)
+        return s, a, g
+
+
+def sil_update(net, sil_buf, opt, batch, device, weight=1.0):
+    """L_sil = mean(relu(G - Q(s,a))^2): подтягивать Q к возвратам лучших
+    цепочек только там, где Q их недооценивает."""
+    smp = sil_buf.sample(batch, device)
+    if smp is None:
+        return 0.0
+    s, a, g = smp
+    q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
+    loss = weight * F.relu(g - q).pow(2).mean()
+    if float(loss.detach()) == 0.0:
+        return 0.0
+    opt.zero_grad(); loss.backward(); opt.step()
+    return float(loss.detach())

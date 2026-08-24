@@ -91,7 +91,8 @@ def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0):
     return float(loss.item())
 
 
-def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0):
+def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
+                       max_bellman=False):
     """RLPD: симметричная выборка — половина батча офлайн, половина онлайн."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
@@ -102,7 +103,8 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0):
         a2 = net.q_scalar(s2).argmax(1)
         q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
               else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
-        tgt = r + GAMMA * (1 - d) * q2
+        tgt = (torch.maximum(r, GAMMA * (1 - d) * q2) if max_bellman
+               else r + GAMMA * (1 - d) * q2)
     loss = F.mse_loss(q, tgt)
     if "cql" in variant:
         qs = net.q_scalar(s)
@@ -179,6 +181,20 @@ def main():
                     help="шагов предобучения мировой модели на офлайновом буфере")
     ap.add_argument("--qwm-alpha", type=float, default=0.5,
                     help="вес критика в комбинированной оценке (Eq. 9: 0.5)")
+    ap.add_argument("--boot-heads", type=int, default=0,
+                    help="bootstrapped DQN: K голов со случайными prior-сетями, одна "
+                         "голова на цепочку вместо eps-дрожания (Osband 2016/2018)")
+    ap.add_argument("--risk-tau", type=float, default=0.0,
+                    help="risk-seeking: действовать по среднему квантилей выше tau "
+                         "(нужен вариант cnx_qrdqn); 0 = выкл")
+    ap.add_argument("--max-bellman", action="store_true",
+                    help="max-reward Bellman (To the Max, ICML 2024): таргет "
+                         "max(r, gamma*maxQ') вместо суммы")
+    ap.add_argument("--sil", action="store_true",
+                    help="self-imitation: доп. лосс к возвратам топ-5 цепочек")
+    ap.add_argument("--go-explore", action="store_true",
+                    help="Go-Explore: архив лучших срезов цепочек (веса PINN + карта), "
+                         "продолжение с лучшего среза вместо старта с нуля")
     ap.add_argument("--preload", default=None,
                     help="схема авторов: предзаполнить ОБЩИЙ буфер прошлым опытом "
                          "(rl_trainer.collect_all_comet_transitions) и дальше "
@@ -220,7 +236,12 @@ def main():
     get_model = build_get_model(args.pde, args.hidden_layers)
     get_model_rec = build_get_model(args.pde, args.hidden_layers)
 
-    if args.rlpd_full:
+    if args.boot_heads:
+        from advanced_agents import BootQNet
+        net = BootQNet(dev, n_heads=args.boot_heads)
+        print(f"bootstrapped DQN: {args.boot_heads} голов с prior-сетями, "
+              f"eps-дрожание отключено", flush=True)
+    elif args.rlpd_full:
         from advanced_agents import RlpdCritic
         net = RlpdCritic(dev, n_critics=args.rlpd_ensemble, subset=args.rlpd_subset)
         print(f"RLPD целиком: {args.rlpd_ensemble} критиков с LayerNorm, "
@@ -301,6 +322,12 @@ def main():
     save_dir = os.path.join(args.save_dir, tag)
     os.makedirs(save_dir, exist_ok=True)
 
+    sil_buf = None
+    if args.sil:
+        from advanced_agents import SilBuffer
+        sil_buf = SilBuffer(top_k=5, gamma=GAMMA)
+    archive = []          # Go-Explore: [(dict E, err, w, state, raw, spent, steps)]
+
     t_start = time.time()
     deadline = t_start + args.hours * 3600
     steps_done = 0
@@ -325,8 +352,26 @@ def main():
         truncated = False   # True только если ПРЕРВАЛИ цепочку посередине по лимиту
         l2re = float("inf")
         prev_err = None
+        start_step, resumed_from = 0, None
+        chain_trans = []    # (s_норм, a, r) текущей цепочки — для self-imitation
 
-        for step in range(args.max_chain_steps):
+        if args.boot_heads:
+            net.active = int(rng.integers(0, net.K))   # одна голова на всю цепочку
+
+        if args.go_explore and archive and len(chains) >= 2 and rng.random() < 0.6:
+            # ранг-взвешенный выбор: лучшие срезы чаще (Go-Explore 'return')
+            w = np.array([1.0 / (i + 1) for i in range(len(archive))]); w /= w.sum()
+            e = archive[int(rng.choice(len(archive), p=w))]
+            model.net.load_state_dict({k: v.to(dev) for k, v in e["w"].items()})
+            state = e["state"].copy()
+            prev_raw = ({k: v.clone() for k, v in e["raw"].items()}
+                        if e["raw"] is not None else None)
+            spent, start_step, prev_err = e["spent"], e["steps"], e["err"]
+            l2re, resumed_from = e["E"], e["E"]
+            print(f"[траектория {traj}] Go-Explore: продолжаю срез l2re={e['E']:.4f} "
+                  f"(шаг {e['steps']}, {e['spent']} эпох)", flush=True)
+
+        for step in range(start_step, args.max_chain_steps):
             if time.time() >= deadline:
                 truncated = True
                 last_partial = dict(l2re=l2re, steps=len(chain), epochs=spent, trajectory=traj)
@@ -336,7 +381,7 @@ def main():
             # eps-greedy как у авторов
             eps = EPS_END + (EPS_START - EPS_END) * math.exp(-steps_done / EPS_DECAY)
             steps_done += 1
-            if rng.random() < eps:
+            if rng.random() < eps and not args.boot_heads:
                 a = int(rng.integers(0, 27))
                 how = "случайно"
             else:
@@ -346,6 +391,15 @@ def main():
                     # QWM: одношаговый поиск вместо argmax Q (Eq. 9, D=1)
                     a = qwm_select(net, wm, x, gamma=GAMMA, alpha=args.qwm_alpha)
                     how = "поиск QWM"
+                elif args.boot_heads:
+                    with torch.no_grad():
+                        a = int(net.q_head(x, net.active).argmax(1).item())
+                    how = f"голова {net.active}"
+                elif args.risk_tau > 0:
+                    from advanced_agents import q_upper
+                    with torch.no_grad():
+                        a = int(q_upper(net, x, args.risk_tau).argmax(1).item())
+                    how = f"квантиль>{args.risk_tau}"
                 else:
                   with torch.no_grad():
                     q = net.q_scalar(x)
@@ -403,9 +457,24 @@ def main():
             if mean is None:      # нормировка по первому состоянию (агент с нуля)
                 mean = next_state.mean(axis=(1, 2), keepdims=True)[None]
                 std = next_state.std(axis=(1, 2), keepdims=True)[None] + 1e-6
-            buf.push(((state[None] - mean) / std)[0], a, reward,
+            s_norm = ((state[None] - mean) / std)[0]
+            buf.push(s_norm, a, reward,
                      ((next_state[None] - mean) / std)[0], float(done == 1))
+            if args.sil:
+                chain_trans.append((s_norm.copy(), a, float(reward)))
             state = next_state
+
+            if args.go_explore and len(chain) + start_step < args.max_chain_steps:
+                # срез: веса PINN + карта + сырые лоссы — чтобы можно было вернуться
+                entry = dict(E=l2re, err=prev_err, spent=spent,
+                             steps=start_step + len(chain), state=next_state.copy(),
+                             raw={k: v.detach().cpu().clone() for k, v in prev_raw.items()},
+                             w={k: v.detach().cpu().clone()
+                                for k, v in model.net.state_dict().items()})
+                if len(archive) < 8 or l2re < archive[-1]["E"]:
+                    archive.append(entry)
+                    archive.sort(key=lambda x: x["E"])
+                    del archive[8:]
 
             if behaviour is not None and len(buf) >= 8:
                 behaviour_update(behaviour, beh_opt, buf, args.batch_size, 2, dev)
@@ -423,14 +492,24 @@ def main():
                 half = max(1, args.batch_size // 2)
                 ql = 0.0
                 for _ in range(iters):
-                    if args.rlpd_full:
+                    src = buf if len(buf) >= 8 else off_buf
+                    if args.boot_heads:
+                        from advanced_agents import boot_rlpd_update
+                        ql = boot_rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
+                    elif args.risk_tau > 0:
+                        from advanced_agents import rlpd_qr_update
+                        ql = rlpd_qr_update(net, off_buf, src, q_opt, half, GAMMA)
+                    elif args.rlpd_full:
                         from advanced_agents import rlpd_update
-                        src = buf if len(buf) >= 8 else off_buf
                         ql = rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
                     elif len(buf) >= 8:
-                        ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant)
+                        ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant,
+                                                max_bellman=args.max_bellman)
                     else:
                         ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant)
+                if args.sil and sil_buf is not None and sil_buf.chains:
+                    from advanced_agents import sil_update
+                    sil_update(net, sil_buf, q_opt, args.batch_size, dev)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
                       f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)}+{len(off_buf)} q-loss={ql:.4f}", flush=True)
             elif len(buf) >= args.min_buffer:
@@ -449,7 +528,12 @@ def main():
         # даже если лимит времени истёк во время последнего шага; не засчитывается
         # только та, которую прервали ПОСЕРЕДИНЕ
         if chain and not truncated:
-            chains.append(dict(l2re=l2re, steps=len(chain), epochs=spent, done=done, chain=chain))
+            if args.sil and sil_buf is not None and np.isfinite(l2re):
+                sil_buf.add_chain(l2re, chain_trans)
+            rec = dict(l2re=l2re, steps=len(chain), epochs=spent, done=done, chain=chain)
+            if resumed_from is not None:
+                rec["resumed_from"] = resumed_from
+            chains.append(rec)
             row = dict(variant=args.variant, pde=args.pde, seed=args.seed,
                        trajectories=len(chains), buffer=len(buf),
                        l2re_last_complete=chains[-1]["l2re"],
