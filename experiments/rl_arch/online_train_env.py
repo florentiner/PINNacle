@@ -91,13 +91,31 @@ def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0):
     return float(loss.item())
 
 
+def _dihedral_pair(s, s2):
+    """Одинаковое случайное диэдральное преобразование на пару (s, s2) каждого
+    примера: поворот на k*90 + отражение. Согласованность пары сохраняет
+    отношение канала delta между состояниями."""
+    B = s.shape[0]
+    ks = torch.randint(0, 4, (B,))
+    fs = torch.randint(0, 2, (B,))
+    outs, outs2 = [], []
+    for i in range(B):
+        a, b = torch.rot90(s[i], int(ks[i]), (1, 2)), torch.rot90(s2[i], int(ks[i]), (1, 2))
+        if fs[i]:
+            a, b = torch.flip(a, (2,)), torch.flip(b, (2,))
+        outs.append(a); outs2.append(b)
+    return torch.stack(outs), torch.stack(outs2)
+
+
 def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
-                       max_bellman=False):
+                       max_bellman=False, aug=False):
     """RLPD: симметричная выборка — половина батча офлайн, половина онлайн."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
     parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
     s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    if aug:
+        s, s2 = _dihedral_pair(s, s2)
     q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
     with torch.no_grad():
         a2 = net.q_scalar(s2).argmax(1)
@@ -181,6 +199,23 @@ def main():
                     help="шагов предобучения мировой модели на офлайновом буфере")
     ap.add_argument("--qwm-alpha", type=float, default=0.5,
                     help="вес критика в комбинированной оценке (Eq. 9: 0.5)")
+    ap.add_argument("--rlpd-max", type=int, default=0,
+                    help="ограничить офлайновый буфер N переходами (целыми эпизодами, "
+                         "детерминированный сабсэмпл); 0 = весь буфер")
+    ap.add_argument("--aug", action="store_true",
+                    help="DrQ-стиль: диэдральные аугментации карт в обучающих батчах. "
+                         "Для наших карт это точные инварианты — оси латента AE "
+                         "произвольны, ориентация не канонична")
+    ap.add_argument("--wsrl-warmup", type=int, default=0,
+                    help="WSRL (ICLR 2025): тёплый старт из офлайн-агента, первые N "
+                         "шагов — сбор данных предобученной политикой без обновлений, "
+                         "офлайн-буфер онлайн НЕ удерживается")
+    ap.add_argument("--ssl-pretrain", type=int, default=0,
+                    help="SGI-lite: N шагов reward-free предобучения энкодера "
+                         "(маскированная реконструкция) на картах всех буферов")
+    ap.add_argument("--ssl-subdirs",
+                    default="poisson3d_complexgeometry,poisson_boltzmann_2d,ns2d_liddriven",
+                    help="какие буферы дают карты для SSL (награды/действия не нужны)")
     ap.add_argument("--boot-heads", type=int, default=0,
                     help="bootstrapped DQN: K голов со случайными prior-сетями, одна "
                          "голова на цепочку вместо eps-дрожания (Osband 2016/2018)")
@@ -250,12 +285,52 @@ def main():
     else:
         net = QNet(args.variant, dev)
     mean = std = None
+    if args.warm_start and not os.path.exists(args.warm_start):
+        # допускаем имя файла в HF-датасете (rl_arch/models/...)
+        try:
+            from huggingface_hub import hf_hub_download
+            args.warm_start = hf_hub_download(OUT_REPO, f"rl_arch/models/{args.warm_start}",
+                                              repo_type="dataset")
+        except Exception as e:
+            print(f"тёплый старт: чекпоинт не найден ({e}) — с нуля", flush=True)
     if args.warm_start and os.path.exists(args.warm_start):
         ck = torch.load(args.warm_start, map_location="cpu", weights_only=False)
         net.model.load_state_dict(ck["state_dict"])
         mean, std = ck["mean"], ck["std"]
         print(f"тёплый старт из {args.warm_start}", flush=True)
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
+
+    if args.ssl_pretrain:
+        # SGI-lite: reward-free предобучение энкодера маскированной реконструкцией.
+        # Карты есть в изобилии (награды и действия для этого не нужны) — дефицитен
+        # только размеченный буфер, поэтому энкодер учим на всех буферах сразу
+        from offline_rl import load_episodes, episodes_to_arrays
+        parts = []
+        for sub in args.ssl_subdirs.split(","):
+            sub = sub.strip()
+            try:
+                od2 = episodes_to_arrays(load_episodes(None, sub), fix_next_state=False)
+                parts.append(od2["S"])
+                print(f"SSL: {sub}: {len(od2['S'])} карт", flush=True)
+            except Exception as e:
+                print(f"SSL: {sub} пропущен ({type(e).__name__})", flush=True)
+        S_all = np.concatenate(parts, 0)
+        m_ = S_all.mean(axis=(0, 2, 3), keepdims=True)
+        s_ = S_all.std(axis=(0, 2, 3), keepdims=True) + 1e-6
+        dec = torch.nn.Linear(net.enc.out_dim, 4 * 26 * 26).to(dev)
+        ssl_opt = torch.optim.Adam(list(net.enc.parameters()) + list(dec.parameters()), lr=1e-3)
+        sl = 0.0
+        for i in range(args.ssl_pretrain):
+            idx = np.random.randint(0, len(S_all), size=256)
+            x = torch.as_tensor((S_all[idx] - m_) / s_, dtype=torch.float32, device=dev)
+            mask = (torch.rand(x.shape[0], 1, 26, 26, device=dev) > 0.5).float()
+            rec = dec(net.enc(x * mask)).view(-1, 4, 26, 26)
+            loss = (((rec - x) ** 2) * (1 - mask)).sum() / ((1 - mask).sum() * 4 + 1e-6)
+            ssl_opt.zero_grad(); loss.backward(); ssl_opt.step()
+            sl = float(loss.detach())
+        del dec, S_all
+        print(f"SSL: энкодер предобучен ({args.ssl_pretrain} шагов, лосс {sl:.4f}); "
+              f"дальше обычное обучение с этой инициализацией", flush=True)
 
     # discrete BCQ: модель поведения по собранным переходам + маска поддержки на
     # выборе действия. Без неё вариант cnx_bcq в онлайне неотличим от обычного
@@ -278,6 +353,19 @@ def main():
                                 fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"))
         otr, _ = split_by_episode(od)
         oidx = np.where(otr)[0]
+        if args.rlpd_max and len(oidx) > args.rlpd_max:
+            # целыми эпизодами и детерминированно — чтобы n-step/эпизодная структура
+            # не рвалась и прогон был воспроизводим
+            ep_ids = od["EP"][oidx]
+            uniq = np.unique(ep_ids)
+            np.random.default_rng(123).shuffle(uniq)
+            keep, tot = [], 0
+            for e in uniq:
+                keep.append(e); tot += int((ep_ids == e).sum())
+                if tot >= args.rlpd_max: break
+            oidx = oidx[np.isin(ep_ids, keep)]
+            print(f"офлайн-буфер ограничен: {len(oidx)} переходов "
+                  f"({len(keep)} эпизодов) из запрошенных ~{args.rlpd_max}", flush=True)
         om = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True)
         os_ = od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
         off_buf = LocalBuffer(capacity=len(oidx) + 10)
@@ -381,7 +469,8 @@ def main():
             # eps-greedy как у авторов
             eps = EPS_END + (EPS_START - EPS_END) * math.exp(-steps_done / EPS_DECAY)
             steps_done += 1
-            if rng.random() < eps and not args.boot_heads:
+            in_warmup = args.wsrl_warmup and steps_done <= args.wsrl_warmup
+            if rng.random() < eps and not args.boot_heads and not in_warmup:
                 a = int(rng.integers(0, 27))
                 how = "случайно"
             else:
@@ -476,6 +565,15 @@ def main():
                     archive.sort(key=lambda x: x["E"])
                     del archive[8:]
 
+            if in_warmup:
+                # WSRL: фаза прогрева — предобученная политика собирает данные,
+                # обновлений нет (рекалибровка Q начнётся на свежем буфере)
+                print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} "
+                      f"(прогрев WSRL {steps_done}/{args.wsrl_warmup}) l2re={l2re:.4e}", flush=True)
+                if done == 1:
+                    break
+                continue
+
             if behaviour is not None and len(buf) >= 8:
                 behaviour_update(behaviour, beh_opt, buf, args.batch_size, 2, dev)
 
@@ -504,7 +602,7 @@ def main():
                         ql = rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
                     elif len(buf) >= 8:
                         ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant,
-                                                max_bellman=args.max_bellman)
+                                                max_bellman=args.max_bellman, aug=args.aug)
                     else:
                         ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant)
                 if args.sil and sil_buf is not None and sil_buf.chains:
