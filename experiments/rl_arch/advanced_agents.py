@@ -267,11 +267,11 @@ def rlpd_update(critic, off_buf, on_buf, opt, half, gamma):
     учатся на одном и том же таргете."""
     dev = critic.device
     parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
-    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     with torch.no_grad():
         a2 = critic.q_scalar(s2).argmax(1)                      # double-DQN: argmax онлайн
         q2 = critic.q_target_subset(s2).gather(1, a2[:, None]).squeeze(1)
-        tgt = r + gamma * (1 - d) * q2
+        tgt = r + gm * (1 - d) * q2
     qa = critic.q_all(s).gather(2, a[None, :, None].expand(critic.n, -1, 1)).squeeze(-1)
     loss = F.mse_loss(qa, tgt[None].expand_as(qa))
     opt.zero_grad(); loss.backward(); opt.step()
@@ -305,7 +305,7 @@ def wm_update(wm, opt, bufs, batch, device):
     """Шаг обучения мировой модели: MSE по резидуалу состояния и по награде.
     bufs — список буферов; батч делится между ними поровну."""
     parts = [b.sample(max(1, batch // len(bufs)), device) for b in bufs]
-    s, a, r, s2, _ = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    s, a, r, s2, _, _ = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     s_flat, s2_flat = s.flatten(1), s2.flatten(1)
     a_oh = F.one_hot(a, N_ACTIONS).float()
     d_hat, r_hat = wm(s_flat, a_oh)
@@ -385,13 +385,13 @@ def boot_rlpd_update(net, off_buf, on_buf, opt, half, gamma):
     """Симметричный батч; каждая голова учится на своём double-DQN таргете."""
     dev = net.device
     parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
-    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     loss = 0.0
     for k in range(net.K):
         with torch.no_grad():
             a2 = net.q_head(s2, k).argmax(1)
             q2 = net.q_target_head(s2, k).gather(1, a2[:, None]).squeeze(1)
-            tgt = r + gamma * (1 - d) * q2
+            tgt = r + gm * (1 - d) * q2
         q = net.q_head(s, k).gather(1, a[:, None]).squeeze(1)
         loss = loss + F.mse_loss(q, tgt)
     opt.zero_grad(); loss.backward(); opt.step()
@@ -408,14 +408,14 @@ def rlpd_qr_update(net, off_buf, on_buf, opt, half, gamma):
     не отличался бы от среднего."""
     dev = net.device
     parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
-    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     nq = net.nq
     q_all = net.q_online(s)                                        # (B,A,nq)
     q_sa = q_all.gather(1, a[:, None, None].expand(-1, 1, nq)).squeeze(1)   # (B,nq)
     with torch.no_grad():
         a2 = net.q_scalar(s2).argmax(1)
         q2 = net.q_target(s2).gather(1, a2[:, None, None].expand(-1, 1, nq)).squeeze(1)
-        tgt = r[:, None] + gamma * (1 - d)[:, None] * q2           # (B,nq)
+        tgt = r[:, None] + gm[:, None] * (1 - d)[:, None] * q2           # (B,nq)
     taus = (torch.arange(nq, device=dev, dtype=torch.float32) + 0.5) / nq
     u = tgt[:, None, :] - q_sa[:, :, None]                         # (B,nq,nq)
     huber = torch.where(u.abs() <= 1.0, 0.5 * u ** 2, u.abs() - 0.5)

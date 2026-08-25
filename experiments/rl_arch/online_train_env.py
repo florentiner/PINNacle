@@ -48,40 +48,59 @@ GAMMA = 0.9                                      # их rl_agent_params
 
 
 class LocalBuffer:
-    """Локальный буфер переходов. На HF ничего не уходит — только итоги цепочек."""
+    """Локальный буфер переходов. На HF ничего не уходит — только итоги цепочек.
 
-    def __init__(self, capacity=10000):
+    gam хранится по переходу: для n-шаговых возвратов это gamma**n (или меньше,
+    если эпизод кончился раньше), для обычных — gamma. prio нужен для PER."""
+
+    def __init__(self, capacity=10000, per=False, per_alpha=0.6):
         self.cap = capacity
-        self.s, self.a, self.r, self.s2, self.d = [], [], [], [], []
+        self.per, self.alpha = per, per_alpha
+        self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio = ([] for _ in range(7))
+        self.last_idx = None
 
-    def push(self, s, a, r, s2, d):
+    def push(self, s, a, r, s2, d, gam=None):
         if len(self.s) >= self.cap:
-            for arr in (self.s, self.a, self.r, self.s2, self.d):
+            for arr in (self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio):
                 arr.pop(0)
         self.s.append(s); self.a.append(a); self.r.append(r)
         self.s2.append(s2); self.d.append(d)
+        self.gam.append(GAMMA if gam is None else gam)
+        self.prio.append(max(self.prio) if self.prio else 1.0)   # новый переход — макс. приоритет
 
     def __len__(self):
         return len(self.s)
 
     def sample(self, n, device):
-        idx = np.random.randint(0, len(self.s), size=min(n, len(self.s)))
+        k = min(n, len(self.s))
+        if self.per and len(self.s) > 1:
+            w = np.asarray(self.prio, dtype=np.float64) ** self.alpha
+            idx = np.random.choice(len(self.s), size=k, p=w / w.sum())
+        else:
+            idx = np.random.randint(0, len(self.s), size=k)
+        self.last_idx = idx
         t = lambda arr, dt: torch.as_tensor(np.array([arr[i] for i in idx]), dtype=dt, device=device)
         return (t(self.s, torch.float32), t(self.a, torch.long), t(self.r, torch.float32),
-                t(self.s2, torch.float32), t(self.d, torch.float32))
+                t(self.s2, torch.float32), t(self.d, torch.float32), t(self.gam, torch.float32))
+
+    def update_prio(self, td):
+        if not self.per or self.last_idx is None:
+            return
+        for i, e in zip(self.last_idx, td):
+            self.prio[int(i)] = float(abs(e)) + 1e-3
 
 
 def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0):
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
     for _ in range(iters):
-        s, a, r, s2, d = buf.sample(batch_size, dev)
+        s, a, r, s2, d, gm = buf.sample(batch_size, dev)
         q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
         with torch.no_grad():
             a2 = net.q_scalar(s2).argmax(1)
             q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
                   else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
-            tgt = r + GAMMA * (1 - d) * q2
+            tgt = r + gm * (1 - d) * q2
         loss = F.mse_loss(q, tgt)
         if "cql" in variant:
             qs = net.q_scalar(s)
@@ -113,7 +132,7 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
     parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
-    s, a, r, s2, d = [torch.cat([p[i] for p in parts], 0) for i in range(5)]
+    s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     if aug:
         s, s2 = _dihedral_pair(s, s2)
     q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
@@ -121,14 +140,18 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
         a2 = net.q_scalar(s2).argmax(1)
         q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
               else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
-        tgt = (torch.maximum(r, GAMMA * (1 - d) * q2) if max_bellman
-               else r + GAMMA * (1 - d) * q2)
+        tgt = (torch.maximum(r, gm * (1 - d) * q2) if max_bellman
+               else r + gm * (1 - d) * q2)
     loss = F.mse_loss(q, tgt)
     if "cql" in variant:
         qs = net.q_scalar(s)
         loss = loss + cql_alpha * (torch.logsumexp(qs, 1) - qs.gather(1, a[:, None]).squeeze(1)).mean()
     opt.zero_grad(); loss.backward(); opt.step()
     net.soft_update()
+    with torch.no_grad():
+        td = (q - tgt).abs().cpu().numpy()
+        half_n = len(td) // 2
+        off_buf.update_prio(td[:half_n]); on_buf.update_prio(td[half_n:])
     return float(loss.item())
 
 
@@ -137,7 +160,7 @@ def behaviour_update(behaviour, opt, buf, batch_size, iters, device):
     import torch.nn.functional as F
     loss = 0.0
     for _ in range(iters):
-        s, a, _, _, _ = buf.sample(batch_size, device)
+        s, a, _, _, _, _ = buf.sample(batch_size, device)
         loss = F.cross_entropy(behaviour(s.flatten(1)), a)
         opt.zero_grad(); loss.backward(); opt.step()
     return float(loss.detach())
@@ -199,6 +222,15 @@ def main():
                     help="шагов предобучения мировой модели на офлайновом буфере")
     ap.add_argument("--qwm-alpha", type=float, default=0.5,
                     help="вес критика в комбинированной оценке (Eq. 9: 0.5)")
+    ap.add_argument("--cvar-alpha", type=float, default=0.0,
+                    help="классический CVaR: действовать по среднему НИЖНИХ alpha "
+                         "квантилей (нужен вариант cnx_qrdqn); 0 = выкл")
+    ap.add_argument("--n-step", type=int, default=1,
+                    help="n-шаговые возвраты (Rainbow): при gamma=0.9 и цепочках "
+                         "по 12 шагов кредит доходит до начала цепочки быстрее")
+    ap.add_argument("--per", action="store_true",
+                    help="приоритизированная выборка по TD-ошибке (была у авторов "
+                         "в PrioritizedReplayBuffer, в нашем LocalBuffer потерялась)")
     ap.add_argument("--rlpd-max", type=int, default=0,
                     help="ограничить офлайновый буфер N переходами (целыми эпизодами, "
                          "детерминированный сабсэмпл); 0 = весь буфер")
@@ -344,7 +376,7 @@ def main():
 
     vm = VisualizationModel(device=str(dev), path_to_plot_model=None,
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
-    buf = LocalBuffer()
+    buf = LocalBuffer(per=args.per)
     off_buf = None
     if args.rlpd or args.qwm:
         # офлайновая половина батча: тот же буфер, на котором учатся офлайн-агенты
@@ -368,10 +400,26 @@ def main():
                   f"({len(keep)} эпизодов) из запрошенных ~{args.rlpd_max}", flush=True)
         om = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True)
         os_ = od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
-        off_buf = LocalBuffer(capacity=len(oidx) + 10)
-        for i in oidx:
-            off_buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
-                         ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
+        off_buf = LocalBuffer(capacity=len(oidx) + 10, per=args.per)
+        if args.n_step > 1:
+            # n-шаговые возвраты внутри эпизода: сумма дисконтированных наград и
+            # состояние через n шагов; дисконт таргета — gamma**k, где k фактическое
+            pos = {int(i): j for j, i in enumerate(oidx)}
+            EP, Rr, Dd = od["EP"], od["R"], od["D"]
+            for i in oidx:
+                G, k, j = 0.0, 0, int(i)
+                last = j
+                while k < args.n_step and (j in pos) and EP[j] == EP[int(i)]:
+                    G += (GAMMA ** k) * float(Rr[j]); last = j; k += 1
+                    if float(Dd[j]) > 0: break
+                    j += 1
+                off_buf.push(((od["S"][int(i)][None] - om) / os_)[0], int(od["A"][int(i)]), G,
+                             ((od["S2"][last][None] - om) / os_)[0], float(Dd[last]),
+                             gam=GAMMA ** k)
+        else:
+            for i in oidx:
+                off_buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
+                             ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
         if mean is None:
             mean, std = om, os_
         print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
@@ -436,6 +484,7 @@ def main():
 
         state = np.zeros((4, 26, 26), dtype=np.float32)
         prev_raw = None
+        pending = []          # хвост цепочки для n-шаговых возвратов
         spent, chain, done = 0, [], 0
         truncated = False   # True только если ПРЕРВАЛИ цепочку посередине по лимиту
         l2re = float("inf")
@@ -489,6 +538,10 @@ def main():
                     with torch.no_grad():
                         a = int(q_upper(net, x, args.risk_tau).argmax(1).item())
                     how = f"квантиль>{args.risk_tau}"
+                elif args.cvar_alpha > 0:
+                    with torch.no_grad():
+                        a = int(net.q_cvar(x, args.cvar_alpha).argmax(1).item())
+                    how = f"CVaR@{args.cvar_alpha}"
                 else:
                   with torch.no_grad():
                     q = net.q_scalar(x)
@@ -547,8 +600,17 @@ def main():
                 mean = next_state.mean(axis=(1, 2), keepdims=True)[None]
                 std = next_state.std(axis=(1, 2), keepdims=True)[None] + 1e-6
             s_norm = ((state[None] - mean) / std)[0]
-            buf.push(s_norm, a, reward,
-                     ((next_state[None] - mean) / std)[0], float(done == 1))
+            s2_norm = ((next_state[None] - mean) / std)[0]
+            if args.n_step > 1:
+                pending.append((s_norm, a, float(reward)))
+                if len(pending) >= args.n_step:
+                    s0, a0, _ = pending[0]
+                    G = sum((GAMMA ** k) * tr[2] for k, tr in enumerate(pending))
+                    buf.push(s0, a0, G, s2_norm, float(done == 1),
+                             gam=GAMMA ** len(pending))
+                    pending.pop(0)
+            else:
+                buf.push(s_norm, a, reward, s2_norm, float(done == 1))
             if args.sil:
                 chain_trans.append((s_norm.copy(), a, float(reward)))
             state = next_state
@@ -594,7 +656,7 @@ def main():
                     if args.boot_heads:
                         from advanced_agents import boot_rlpd_update
                         ql = boot_rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
-                    elif args.risk_tau > 0:
+                    elif args.risk_tau > 0 or args.cvar_alpha > 0:
                         from advanced_agents import rlpd_qr_update
                         ql = rlpd_qr_update(net, off_buf, src, q_opt, half, GAMMA)
                     elif args.rlpd_full:
@@ -625,6 +687,14 @@ def main():
         # цепочка засчитывается, если дошла до конца (K_max / допуск / расхождение),
         # даже если лимит времени истёк во время последнего шага; не засчитывается
         # только та, которую прервали ПОСЕРЕДИНЕ
+        if args.n_step > 1 and pending:
+            s2_last = ((state[None] - mean) / std)[0]
+            while pending:
+                s0, a0, _ = pending[0]
+                G = sum((GAMMA ** k) * tr[2] for k, tr in enumerate(pending))
+                buf.push(s0, a0, G, s2_last, 1.0, gam=GAMMA ** len(pending))
+                pending.pop(0)
+
         if chain and not truncated:
             if args.sil and sil_buf is not None and np.isfinite(l2re):
                 sil_buf.add_chain(l2re, chain_trans)
