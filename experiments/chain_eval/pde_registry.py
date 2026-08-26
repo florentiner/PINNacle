@@ -61,7 +61,8 @@ def _loss_weights(pde):
     return weights
 
 
-def build_get_model(pde_name: str, hidden_layers: str = "100*5", net_type: str = "fnn"):
+def build_get_model(pde_name: str, hidden_layers: str = "100*5", net_type: str = "fnn",
+                    inverse_plain_fnn: bool = False):
     """Return a get_model() -> (model, loss_weights) callable for the PDE."""
     if pde_name not in PDE_SPECS:
         raise KeyError(
@@ -73,7 +74,7 @@ def build_get_model(pde_name: str, hidden_layers: str = "100*5", net_type: str =
 
     def get_model():
         pde = cls(**kwargs)
-        if inverse:
+        if inverse and not inverse_plain_fnn:
             net = pde.recommend_net
         else:
             layers = (

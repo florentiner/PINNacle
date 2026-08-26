@@ -245,6 +245,10 @@ def main():
                     help="шагов предобучения мировой модели на офлайновом буфере")
     ap.add_argument("--qwm-alpha", type=float, default=0.5,
                     help="вес критика в комбинированной оценке (Eq. 9: 0.5)")
+    ap.add_argument("--plain-fnn", action="store_true",
+                    help="обратные задачи: обычный FNN вместо PFNN — конвейер карт "
+                         "авторов (extract_layers_from_dde_fnn) ветвящиеся сети не "
+                         "разбирает; физике обратной задачи FNN с 2 выходами достаточен")
     ap.add_argument("--self-prior", type=int, default=0,
                     help="RLPD без внешнего офлайн-буфера: первые N собранных переходов "
                          "замораживаются как опорная половина батча, дальше обычная "
@@ -331,8 +335,8 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
-    get_model = build_get_model(args.pde, args.hidden_layers)
-    get_model_rec = build_get_model(args.pde, args.hidden_layers)
+    get_model = build_get_model(args.pde, args.hidden_layers, inverse_plain_fnn=args.plain_fnn)
+    get_model_rec = build_get_model(args.pde, args.hidden_layers, inverse_plain_fnn=args.plain_fnn)
 
     if args.boot_heads:
         from advanced_agents import BootQNet
