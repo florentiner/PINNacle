@@ -166,6 +166,29 @@ def behaviour_update(behaviour, opt, buf, batch_size, iters, device):
     return float(loss.detach())
 
 
+def save_agent(net, mean, std, variant, tag, n_chains, best):
+    """Чекпоинт агента: локально всегда, на HF — если есть токен. Формат тот же,
+    что у офлайновых агентов, чтобы online_eval_env мог его загрузить."""
+    payload = dict(variant=variant, state_dict={k: v.detach().cpu()
+                                                for k, v in net.model.state_dict().items()},
+                   mean=mean, std=std, n_chains=n_chains, l2re_best=best, tag=tag)
+    local = f"agent_{tag}.pt"
+    torch.save(payload, local)
+    tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
+    if not tok:
+        return
+    from huggingface_hub import upload_file
+    for attempt in range(4):
+        try:
+            upload_file(path_or_fileobj=local, path_in_repo=f"rl_arch/agents_online/{tag}.pt",
+                        repo_id=OUT_REPO, repo_type="dataset", token=tok,
+                        commit_message=f"online agent {tag} ({n_chains} цепочек)")
+            return
+        except Exception as e:
+            print(f"agent upload retry {attempt}: {str(e)[:80]}", flush=True)
+            time.sleep(min(300, 20 * 2 ** attempt))
+
+
 def upload(row, name):
     tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     if not tok:
@@ -222,6 +245,14 @@ def main():
                     help="шагов предобучения мировой модели на офлайновом буфере")
     ap.add_argument("--qwm-alpha", type=float, default=0.5,
                     help="вес критика в комбинированной оценке (Eq. 9: 0.5)")
+    ap.add_argument("--self-prior", type=int, default=0,
+                    help="RLPD без внешнего офлайн-буфера: первые N собранных переходов "
+                         "замораживаются как опорная половина батча, дальше обычная "
+                         "симметричная выборка 50/50 против растущего онлайн-буфера")
+    ap.add_argument("--save-agent", action="store_true",
+                    help="сохранять веса агента (локально и на HF) по ходу и в конце")
+    ap.add_argument("--save-every", type=int, default=5,
+                    help="как часто сохранять агента, в завершённых цепочках")
     ap.add_argument("--cvar-alpha", type=float, default=0.0,
                     help="классический CVaR: действовать по среднему НИЖНИХ alpha "
                          "квантилей (нужен вариант cnx_qrdqn); 0 = выкл")
@@ -378,7 +409,9 @@ def main():
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
     buf = LocalBuffer(per=args.per)
     off_buf = None
-    if args.rlpd or args.qwm:
+    if (args.rlpd or args.qwm) and not args.self_prior:
+        # при self-prior внешний буфер не нужен вовсе — опорную половину даст
+        # собственный замороженный прайор; качать 300МБ незачем
         # офлайновая половина батча: тот же буфер, на котором учатся офлайн-агенты
         from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
         od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
@@ -457,6 +490,13 @@ def main():
     tag = args.tag or f"{args.variant}_{args.pde}_seed{args.seed}"
     save_dir = os.path.join(args.save_dir, tag)
     os.makedirs(save_dir, exist_ok=True)
+
+    prior_buf = None
+    if args.self_prior:
+        prior_buf = LocalBuffer(capacity=args.self_prior + 10)
+        off_buf = prior_buf          # опорная половина батча — свои же ранние переходы
+        print(f"RLPD на собственных данных: первые {args.self_prior} переходов станут "
+              f"замороженным прайором, внешний буфер не используется", flush=True)
 
     sil_buf = None
     if args.sil:
@@ -601,6 +641,8 @@ def main():
                 std = next_state.std(axis=(1, 2), keepdims=True)[None] + 1e-6
             s_norm = ((state[None] - mean) / std)[0]
             s2_norm = ((next_state[None] - mean) / std)[0]
+            if prior_buf is not None and len(prior_buf) < args.self_prior:
+                prior_buf.push(s_norm, a, reward, s2_norm, float(done == 1))
             if args.n_step > 1:
                 pending.append((s_norm, a, float(reward)))
                 if len(pending) >= args.n_step:
@@ -645,6 +687,15 @@ def main():
                 wbufs = [off_buf] + ([buf] if len(buf) >= 8 else [])
                 for _ in range(4):
                     wm_update(wm, wm_opt, wbufs, 64, dev)
+
+            if prior_buf is not None and len(prior_buf) < args.self_prior:
+                # прайор ещё набирается — обновлений нет, это фаза сбора
+                print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} "
+                      f"(набор прайора {len(prior_buf)}/{args.self_prior}) l2re={l2re:.4e}",
+                      flush=True)
+                if done == 1:
+                    break
+                continue
 
             if args.rlpd and off_buf is not None:
                 # RLPD: половина батча из офлайна, половина из онлайна; много обновлений
@@ -713,6 +764,14 @@ def main():
             print(json.dumps({k: v for k, v in row.items() if k not in ("chains", "last_chain")}), flush=True)
             if not args.smoke:
                 upload(row, tag)
+            if args.save_agent and (len(chains) % args.save_every == 0):
+                save_agent(net, mean, std, args.variant, tag, len(chains),
+                           min(c["l2re"] for c in chains))
+
+    if args.save_agent and chains:
+        save_agent(net, mean, std, args.variant, tag, len(chains),
+                   min(c["l2re"] for c in chains))
+        print(f"агент сохранён: agent_{tag}.pt и rl_arch/agents_online/{tag}.pt", flush=True)
 
     print(f"\nИТОГ: завершённых цепочек {len(chains)}, "
           f"l2re последней завершённой = {chains[-1]['l2re']:.4e}" if chains else "\nИТОГ: ни одной завершённой цепочки",

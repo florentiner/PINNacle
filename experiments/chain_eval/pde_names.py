@@ -22,6 +22,9 @@ PDE_SPECS = {
     # NS 2d-C / 2d-CG / 2d-LT
     "ns2d_classic": ("src.pde.ns", "NS2D_Classic", {}),
     "ns2d_backstep": ("src.pde.ns", "NS2D_BackStep", {}),
+    # каверна с подвижной крышкой: класс в репозитории есть (ref/lid_driven_a4.dat),
+    # в реестре его не было, хотя именно на ней собран буфер ns2d_liddriven
+    "ns2d_liddriven": ("src.pde.ns", "NS2D_LidDriven", {}),
     "ns2d_longtime": ("src.pde.ns", "NS2D_LongTime", {}),
     # Wave 1d-C / 2d-CG / 2d-MS
     "wave1d": ("src.pde.wave", "Wave1D", {}),
