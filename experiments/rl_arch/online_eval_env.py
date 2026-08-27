@@ -215,8 +215,8 @@ def run_seed(seed, args, progress_cb=None):
         torch.cuda.manual_seed_all(seed)
 
     # two independent factories: one trains, one is overwritten 676x per state
-    get_model = build_get_model(args.pde, args.hidden_layers)
-    get_model_rec = build_get_model(args.pde, args.hidden_layers)
+    get_model = build_get_model(args.pde, args.hidden_layers, inverse_plain_fnn=args.plain_fnn)
+    get_model_rec = build_get_model(args.pde, args.hidden_layers, inverse_plain_fnn=args.plain_fnn)
 
     model, loss_weights = get_model()
 
@@ -470,6 +470,9 @@ def main():
     ap.add_argument("--progress-every", type=float, default=1800.0,
                     help="минимальный интервал между строками прогресса, секунд "
                          "(лимит HF — 128 коммитов в час на репозиторий)")
+    ap.add_argument("--plain-fnn", action="store_true",
+                    help="обратные задачи: обычный FNN вместо PFNN (конвейер карт "
+                         "не разбирает ветвящиеся сети)")
     ap.add_argument("--no-state", action="store_true",
                     help="не строить карты ландшафта (AE + поверхность лоссов). "
                          "Допустимо только для policy=fixed/random с триггерами "
