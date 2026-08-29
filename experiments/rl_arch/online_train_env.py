@@ -388,9 +388,17 @@ def main():
             print(f"тёплый старт: чекпоинт не найден ({e}) — с нуля", flush=True)
     if args.warm_start and os.path.exists(args.warm_start):
         ck = torch.load(args.warm_start, map_location="cpu", weights_only=False)
-        net.model.load_state_dict(ck["state_dict"])
+        # голова может не совпасть по форме (ансамбль голов, другое число квантилей) —
+        # переносим то, что совпадает: энкодер полезен всегда, голова доучится
+        cur = net.model.state_dict()
+        ok = {k: v for k, v in ck["state_dict"].items()
+              if k in cur and cur[k].shape == v.shape}
+        skipped = len(ck["state_dict"]) - len(ok)
+        net.model.load_state_dict(ok, strict=False)
+        net.target.load_state_dict(net.model.state_dict())
         mean, std = ck["mean"], ck["std"]
-        print(f"тёплый старт из {args.warm_start}", flush=True)
+        print(f"тёплый старт из {args.warm_start}: перенесено {len(ok)} тензоров"
+              + (f", пропущено {skipped} (несовпадение формы)" if skipped else ""), flush=True)
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
 
     if args.ssl_pretrain:
