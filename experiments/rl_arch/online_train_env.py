@@ -170,13 +170,27 @@ def shrink_and_perturb(net, alpha, device):
     """SR-SPR/BBF: голова заново, энкодер = alpha*старые + (1-alpha)*свежие.
     Буфер и счётчик шагов сохраняются — сбрасывается только аппроксиматор."""
     import copy
-    fresh = type(net)(net.variant, device) if hasattr(net, "variant") else None
-    if fresh is None:
-        return 0
+    import torch.nn as nn
+
+    def reinit(m):
+        # переинициализация на месте: не зависит от сигнатуры конструктора сети
+        # (у QNet это (variant, device), у BootQNet — (device, n_heads))
+        if isinstance(m, nn.Conv2d):
+            nn.init.kaiming_uniform_(m.weight, nonlinearity="relu")
+            if m.bias is not None: nn.init.zeros_(m.bias)
+        elif isinstance(m, nn.Linear):
+            nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None: nn.init.zeros_(m.bias)
+        elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
+            if m.weight is not None: nn.init.ones_(m.weight)
+            if m.bias is not None: nn.init.zeros_(m.bias)
+
+    fresh = copy.deepcopy(net.model)
+    fresh.apply(reinit)
     n = 0
     with torch.no_grad():
         for (name, p_old), (_, p_new) in zip(net.model.named_parameters(),
-                                             fresh.model.named_parameters()):
+                                             fresh.named_parameters()):
             if name.startswith("1."):          # голова (ModuleList: 0=энкодер, 1=голова)
                 p_old.copy_(p_new)
             else:                               # энкодер: сжатие с возмущением
