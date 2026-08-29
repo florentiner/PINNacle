@@ -166,6 +166,26 @@ def behaviour_update(behaviour, opt, buf, batch_size, iters, device):
     return float(loss.detach())
 
 
+def shrink_and_perturb(net, alpha, device):
+    """SR-SPR/BBF: голова заново, энкодер = alpha*старые + (1-alpha)*свежие.
+    Буфер и счётчик шагов сохраняются — сбрасывается только аппроксиматор."""
+    import copy
+    fresh = type(net)(net.variant, device) if hasattr(net, "variant") else None
+    if fresh is None:
+        return 0
+    n = 0
+    with torch.no_grad():
+        for (name, p_old), (_, p_new) in zip(net.model.named_parameters(),
+                                             fresh.model.named_parameters()):
+            if name.startswith("1."):          # голова (ModuleList: 0=энкодер, 1=голова)
+                p_old.copy_(p_new)
+            else:                               # энкодер: сжатие с возмущением
+                p_old.mul_(alpha).add_(p_new, alpha=1.0 - alpha)
+            n += 1
+    net.target.load_state_dict(net.model.state_dict())
+    return n
+
+
 def save_agent(net, mean, std, variant, tag, n_chains, best):
     """Чекпоинт агента: локально всегда, на HF — если есть токен. Формат тот же,
     что у офлайновых агентов, чтобы online_eval_env мог его загрузить."""
@@ -249,6 +269,12 @@ def main():
                     help="обратные задачи: обычный FNN вместо PFNN — конвейер карт "
                          "авторов (extract_layers_from_dde_fnn) ветвящиеся сети не "
                          "разбирает; физике обратной задачи FNN с 2 выходами достаточен")
+    ap.add_argument("--reset-every", type=int, default=0,
+                    help="сброс сети каждые N обновлений (SR-SPR/BBF): голова "
+                         "инициализируется заново, энкодер сжимается и возмущается. "
+                         "Лечит primacy bias — застревание на первых неудачных переходах")
+    ap.add_argument("--reset-alpha", type=float, default=0.5,
+                    help="доля старых весов энкодера при сбросе (shrink-and-perturb)")
     ap.add_argument("--self-prior", type=int, default=0,
                     help="RLPD без внешнего офлайн-буфера: первые N собранных переходов "
                          "замораживаются как опорная половина батча, дальше обычная "
@@ -511,6 +537,7 @@ def main():
     t_start = time.time()
     deadline = t_start + args.hours * 3600
     steps_done = 0
+    n_updates_total, last_reset = 0, 0
     chains = []              # завершённые цепочки: (l2re, шагов, эпох)
     last_partial = None      # оборванная цепочка — отдельно, в итог не идёт
 
@@ -700,6 +727,17 @@ def main():
                 if done == 1:
                     break
                 continue
+
+            if args.reset_every:
+                n_updates_total += (args.rlpd_utd if (args.rlpd and off_buf is not None)
+                                    else args.update_iters)
+                if n_updates_total - last_reset >= args.reset_every:
+                    k = shrink_and_perturb(net, args.reset_alpha, dev)
+                    q_opt = torch.optim.Adam(net.params(), lr=args.lr)   # состояние Adam тоже сбрасываем
+                    last_reset = n_updates_total
+                    print(f"[сброс] SR-SPR: голова заново, энкодер сжат до "
+                          f"{args.reset_alpha}, тензоров {k}, обновлений {n_updates_total}",
+                          flush=True)
 
             if args.rlpd and off_buf is not None:
                 # RLPD: половина батча из офлайна, половина из онлайна; много обновлений
