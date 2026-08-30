@@ -90,18 +90,25 @@ class LocalBuffer:
             self.prio[int(i)] = float(abs(e)) + 1e-3
 
 
-def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0):
+def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0,
+                 munch=False, m_tau=0.03, m_alpha=0.9, l2_init=0.0, init_w=None):
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
     for _ in range(iters):
         s, a, r, s2, d, gm = buf.sample(batch_size, dev)
         q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
-        with torch.no_grad():
-            a2 = net.q_scalar(s2).argmax(1)
-            q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
-                  else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
-            tgt = r + gm * (1 - d) * q2
+        if munch:
+            tgt = munchausen_target(net, s, a, r, s2, d, gm, m_tau, m_alpha)
+        else:
+            with torch.no_grad():
+                a2 = net.q_scalar(s2).argmax(1)
+                q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                      else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+                tgt = r + gm * (1 - d) * q2
         loss = F.mse_loss(q, tgt)
+        if l2_init and init_w is not None:
+            loss = loss + l2_init * sum(((p - p0) ** 2).sum()
+                                        for p, p0 in zip(net.model.parameters(), init_w))
         if "cql" in variant:
             qs = net.q_scalar(s)
             loss = loss + cql_alpha * (torch.logsumexp(qs, 1) - qs.gather(1, a[:, None]).squeeze(1)).mean()
@@ -127,7 +134,8 @@ def _dihedral_pair(s, s2):
 
 
 def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
-                       max_bellman=False, aug=False):
+                       max_bellman=False, aug=False, munch=False, m_tau=0.03,
+                       m_alpha=0.9, l2_init=0.0, init_w=None):
     """RLPD: симметричная выборка — половина батча офлайн, половина онлайн."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
@@ -136,13 +144,19 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
     if aug:
         s, s2 = _dihedral_pair(s, s2)
     q = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
-    with torch.no_grad():
-        a2 = net.q_scalar(s2).argmax(1)
-        q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
-              else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
-        tgt = (torch.maximum(r, gm * (1 - d) * q2) if max_bellman
-               else r + gm * (1 - d) * q2)
+    if munch:
+        tgt = munchausen_target(net, s, a, r, s2, d, gm, m_tau, m_alpha)
+    else:
+        with torch.no_grad():
+            a2 = net.q_scalar(s2).argmax(1)
+            q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                  else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+            tgt = (torch.maximum(r, gm * (1 - d) * q2) if max_bellman
+                   else r + gm * (1 - d) * q2)
     loss = F.mse_loss(q, tgt)
+    if l2_init and init_w is not None:
+        loss = loss + l2_init * sum(((p - p0) ** 2).sum()
+                                    for p, p0 in zip(net.model.parameters(), init_w))
     if "cql" in variant:
         qs = net.q_scalar(s)
         loss = loss + cql_alpha * (torch.logsumexp(qs, 1) - qs.gather(1, a[:, None]).squeeze(1)).mean()
@@ -198,6 +212,97 @@ def shrink_and_perturb(net, alpha, device):
             n += 1
     net.target.load_state_dict(net.model.state_dict())
     return n
+
+
+SCALAR_CH = 5
+
+
+def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
+    """Контекст постоянными каналами: форма (4+5, 26, 26). Каналы-константы —
+    приём из работ по добавлению координатных и временных признаков в свёрточные
+    сети; сохраняет совместимость со всей машинерией буферов и нормировки."""
+    h, w = state.shape[1], state.shape[2]
+    if last_action is None or last_action < 0:
+        opt_i = lr_i = ep_i = -1.0
+    else:
+        opt_i = (last_action // 9) / 2.0
+        lr_i = ((last_action % 9) // 3) / 2.0
+        ep_i = (last_action % 3) / 2.0
+    vals = [
+        step / max(1, k_max),                                   # доля пройденных шагов
+        min(1.0, spent / max(1, budget)),                       # доля бюджета
+        opt_i, ep_i,
+        float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1)),   # уровень ошибки
+    ]
+    planes = np.stack([np.full((h, w), v, dtype=np.float32) for v in vals])
+    return np.concatenate([state, planes], axis=0)
+
+
+def munchausen_target(net, s, a, r, s2, d, gm, tau=0.03, alpha=0.9, clip=-1.0):
+    """Munchausen RL: к награде добавляется масштабированный log-policy текущего
+    состояния. Одна строка по сути, но даёт неявную KL-регуляризацию к прошлой
+    политике — против шумных целей. Мягкий максимум по целевой сети вместо жёсткого."""
+    import torch.nn.functional as F
+    with torch.no_grad():
+        qt = net.q_target(s)
+        if qt.dim() == 3:
+            qt = qt.mean(-1)
+        logp = F.log_softmax(qt / tau, dim=1)
+        m = alpha * logp.gather(1, a[:, None]).squeeze(1).clamp(min=clip)
+
+        qt2 = net.q_target(s2)
+        if qt2.dim() == 3:
+            qt2 = qt2.mean(-1)
+        p2 = F.softmax(qt2 / tau, dim=1)
+        logp2 = F.log_softmax(qt2 / tau, dim=1)
+        soft_v = (p2 * (qt2 - tau * logp2)).sum(1)
+        return r + m + gm * (1 - d) * soft_v
+
+
+def redo_recycle(net, buf, batch_size, dev, thresh=0.1):
+    """ReDo (Sokar и др., ICML 2023): переинициализируются только «спящие» нейроны —
+    те, чья средняя активация мала относительно среднего по слою. В отличие от
+    полного сброса не разрушает выученное."""
+    import torch.nn as nn
+    acts = {}
+    hooks = []
+    def mk(name):
+        def h(_m, _i, o):
+            t = o.detach()
+            t = t.abs().mean(dim=tuple(range(t.dim() - 1))) if t.dim() > 2 else t.abs().mean(0)
+            acts[name] = acts.get(name, 0) + t
+        return h
+    for name, m in net.model.named_modules():
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
+            hooks.append(m.register_forward_hook(mk(name)))
+    with torch.no_grad():
+        s, _, _, _, _, _ = buf.sample(min(batch_size, len(buf)), dev)
+        net.q_scalar(s)
+    for h in hooks:
+        h.remove()
+
+    n_reset = 0
+    mods = dict(net.model.named_modules())
+    with torch.no_grad():
+        for name, a in acts.items():
+            m = mods.get(name)
+            if m is None or not hasattr(m, "weight") or a.numel() < 2:
+                continue
+            score = a / (a.mean() + 1e-9)
+            dead = (score < thresh).nonzero(as_tuple=True)[0]
+            if not len(dead) or len(dead) == a.numel():
+                continue
+            w = m.weight
+            for i in dead.tolist():
+                if i >= w.shape[0]:
+                    continue
+                nn.init.kaiming_uniform_(w[i:i + 1] if w.dim() > 1 else w[i:i + 1].view(1, -1))
+                if m.bias is not None:
+                    m.bias[i] = 0.0
+                n_reset += 1
+    if n_reset:
+        net.target.load_state_dict(net.model.state_dict())
+    return n_reset
 
 
 def save_agent(net, mean, std, variant, tag, n_chains, best):
@@ -283,6 +388,23 @@ def main():
                     help="обратные задачи: обычный FNN вместо PFNN — конвейер карт "
                          "авторов (extract_layers_from_dde_fnn) ветвящиеся сети не "
                          "разбирает; физике обратной задачи FNN с 2 выходами достаточен")
+    ap.add_argument("--scalar-ctx", action="store_true",
+                    help="добавить к картам постоянные каналы с контекстом: доля пройденных "
+                         "шагов, доля израсходованного бюджета, прошлый оптимизатор и его "
+                         "длительность, логарифм текущей ошибки. Без них политика решает "
+                         "частично наблюдаемую задачу как полностью наблюдаемую")
+    ap.add_argument("--munchausen", action="store_true",
+                    help="Munchausen RL (Vieillard, NeurIPS 2020): неявная KL-регуляризация "
+                         "к прошлой политике через log-policy в награде")
+    ap.add_argument("--m-tau", type=float, default=0.03)
+    ap.add_argument("--m-alpha", type=float, default=0.9)
+    ap.add_argument("--redo-every", type=int, default=0,
+                    help="ReDo (Sokar, ICML 2023): переработка спящих нейронов каждые N "
+                         "обновлений — избирательная альтернатива полному сбросу")
+    ap.add_argument("--redo-thresh", type=float, default=0.1)
+    ap.add_argument("--l2-init", type=float, default=0.0,
+                    help="регенеративная регуляризация (Kumar, ICLR 2024): штраф за отход "
+                         "весов от инициализации вместо отхода от нуля")
     ap.add_argument("--reset-every", type=int, default=0,
                     help="сброс сети каждые N обновлений (SR-SPR/BBF): голова "
                          "инициализируется заново, энкодер сжимается и возмущается. "
@@ -390,7 +512,7 @@ def main():
               f"таргет по минимуму из {args.rlpd_subset} случайных, "
               f"{net.n_params()/1e6:.2f} млн параметров", flush=True)
     else:
-        net = QNet(args.variant, dev)
+        net = QNet(args.variant, dev, in_ch=4 + (SCALAR_CH if args.scalar_ctx else 0))
     mean = std = None
     if args.warm_start and not os.path.exists(args.warm_start):
         # допускаем имя файла в HF-датасете (rl_arch/models/...)
@@ -559,7 +681,9 @@ def main():
     t_start = time.time()
     deadline = t_start + args.hours * 3600
     steps_done = 0
-    n_updates_total, last_reset = 0, 0
+    n_updates_total, last_reset, last_redo = 0, 0, 0
+    init_w = ([q.detach().clone() for q in net.model.parameters()]
+              if args.l2_init else None)
     chains = []              # завершённые цепочки: (l2re, шагов, эпох)
     last_partial = None      # оборванная цепочка — отдельно, в итог не идёт
 
@@ -576,6 +700,8 @@ def main():
         model.net.apply(reinit)
 
         state = np.zeros((4, 26, 26), dtype=np.float32)
+        if args.scalar_ctx:
+            state = add_scalar_ctx(state, 0, args.max_chain_steps, 0, 1, None, 1.0)
         prev_raw = None
         pending = []          # хвост цепочки для n-шаговых возвратов
         spent, chain, done = 0, [], 0
@@ -683,6 +809,10 @@ def main():
                                   path_to_trajectories=None, img_dir="")
             raw = pls.save_equation_loss_surface(log_key=True)
             next_state = build_state(raw, prev_raw)
+            if args.scalar_ctx:
+                next_state = add_scalar_ctx(next_state, len(chain), args.max_chain_steps,
+                                            spent, args.budget if hasattr(args, "budget") else 31000,
+                                            a, err)
             prev_raw = raw
             del pls, ae
             gc.collect()
@@ -750,6 +880,15 @@ def main():
                     break
                 continue
 
+            if args.redo_every:
+                n_updates_total += (args.rlpd_utd if (args.rlpd and off_buf is not None)
+                                    else args.update_iters)
+                if n_updates_total - last_redo >= args.redo_every and len(buf) >= 8:
+                    k = redo_recycle(net, buf, args.batch_size, dev, args.redo_thresh)
+                    last_redo = n_updates_total
+                    print(f"[ReDo] переработано спящих нейронов: {k}, "
+                          f"обновлений {n_updates_total}", flush=True)
+
             if args.reset_every:
                 n_updates_total += (args.rlpd_utd if (args.rlpd and off_buf is not None)
                                     else args.update_iters)
@@ -779,16 +918,24 @@ def main():
                         ql = rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
                     elif len(buf) >= 8:
                         ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant,
-                                                max_bellman=args.max_bellman, aug=args.aug)
+                                                max_bellman=args.max_bellman, aug=args.aug,
+                                                munch=args.munchausen, m_tau=args.m_tau,
+                                                m_alpha=args.m_alpha, l2_init=args.l2_init,
+                                                init_w=init_w)
                     else:
-                        ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant)
+                        ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant,
+                                          munch=args.munchausen, m_tau=args.m_tau,
+                                          m_alpha=args.m_alpha, l2_init=args.l2_init,
+                                          init_w=init_w)
                 if args.sil and sil_buf is not None and sil_buf.chains:
                     from advanced_agents import sil_update
                     sil_update(net, sil_buf, q_opt, args.batch_size, dev)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
                       f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)}+{len(off_buf)} q-loss={ql:.4f}", flush=True)
             elif len(buf) >= args.min_buffer:
-                ql = agent_update(net, buf, q_opt, args.batch_size, args.update_iters, args.variant)
+                ql = agent_update(net, buf, q_opt, args.batch_size, args.update_iters, args.variant,
+                                  munch=args.munchausen, m_tau=args.m_tau,
+                                  m_alpha=args.m_alpha, l2_init=args.l2_init, init_w=init_w)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
                       f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)} q-loss={ql:.4f}", flush=True)
             else:

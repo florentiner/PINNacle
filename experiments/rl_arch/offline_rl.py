@@ -148,7 +148,7 @@ def split_by_episode(data, test_frac=0.2, split_seed=0):
 # Models
 # --------------------------------------------------------------------------
 
-def make_encoder(kind: str):
+def make_encoder(kind: str, in_ch: int = 4):
     import torch
     import torch.nn as nn
 
@@ -158,7 +158,7 @@ def make_encoder(kind: str):
             def __init__(self):
                 super().__init__()
                 self.net = nn.Sequential(
-                    nn.Conv2d(4, 32, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),   # 13
+                    nn.Conv2d(in_ch, 32, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),   # 13
                     nn.Conv2d(32, 48, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),  # 6
                     nn.Conv2d(48, 64, 3, padding=1), nn.ReLU(),
                     nn.Flatten(), nn.Linear(64 * 6 * 6, 256), nn.ReLU(),
@@ -199,7 +199,7 @@ def make_encoder(kind: str):
             out_dim = 256
             def __init__(self):
                 super().__init__()
-                self.stem = nn.Conv2d(4, 48, 2, stride=2)          # 13
+                self.stem = nn.Conv2d(in_ch, 48, 2, stride=2)          # 13
                 self.s1 = nn.Sequential(Block(48), Block(48))
                 self.down = nn.Conv2d(48, 96, 2, stride=2)         # 6
                 self.s2 = nn.Sequential(Block(96), Block(96))
@@ -254,7 +254,7 @@ def make_head(variant: str, in_dim: int, n_quantiles: int):
 class QNet:
     """Encoder + head with a target copy; variant-specific loss."""
 
-    def __init__(self, variant, device, n_quantiles=32):
+    def __init__(self, variant, device, n_quantiles=32, in_ch=4):
         import torch
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
@@ -266,7 +266,7 @@ class QNet:
             enc_kind = "cnn"
         self.variant = variant
         self.nq = n_quantiles
-        self.enc = make_encoder(enc_kind)
+        self.enc = make_encoder(enc_kind, in_ch)
         self.head = make_head(variant, self.enc.out_dim, n_quantiles)
         self.v_head = nn.Linear(self.enc.out_dim, 1) if variant == "cnn_iql" else None
         mods = [self.enc, self.head] + ([self.v_head] if self.v_head is not None else [])
