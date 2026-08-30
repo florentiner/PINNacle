@@ -217,6 +217,18 @@ def shrink_and_perturb(net, alpha, device):
 SCALAR_CH = 5
 
 
+def pad_norm(mean, std, n_ch):
+    """Статистики нормировки приходят из 4-канального буфера или чекпоинта тёплого
+    старта. Контекстные каналы уже лежат в [-1,1], поэтому им нужны нулевое среднее
+    и единичный разброс — дополняем, а не пересчитываем."""
+    if mean is None or mean.shape[1] >= n_ch:
+        return mean, std
+    k = n_ch - mean.shape[1]
+    mean = np.concatenate([mean, np.zeros((1, k, 1, 1), np.float32)], axis=1)
+    std = np.concatenate([std, np.ones((1, k, 1, 1), np.float32)], axis=1)
+    return mean, std
+
+
 def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
     """Контекст постоянными каналами: форма (4+5, 26, 26). Каналы-константы —
     приём из работ по добавлению координатных и временных признаков в свёрточные
@@ -535,6 +547,8 @@ def main():
         mean, std = ck["mean"], ck["std"]
         print(f"тёплый старт из {args.warm_start}: перенесено {len(ok)} тензоров"
               + (f", пропущено {skipped} (несовпадение формы)" if skipped else ""), flush=True)
+    if args.scalar_ctx:
+        mean, std = pad_norm(mean, std, 4 + SCALAR_CH)
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
 
     if args.ssl_pretrain:
@@ -629,6 +643,8 @@ def main():
                              ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
         if mean is None:
             mean, std = om, os_
+        if args.scalar_ctx:
+            mean, std = pad_norm(mean, std, 4 + SCALAR_CH)
         print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
               f"UTD={args.rlpd_utd}", flush=True)
     if args.preload:
@@ -647,6 +663,8 @@ def main():
                      ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
         if mean is None:
             mean, std = om, os_
+        if args.scalar_ctx:
+            mean, std = pad_norm(mean, std, 4 + SCALAR_CH)
         print(f"предзагрузка по схеме авторов: {len(buf)} переходов из {args.preload}", flush=True)
 
     wm = wm_opt = None
