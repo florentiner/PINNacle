@@ -217,6 +217,42 @@ def shrink_and_perturb(net, alpha, device):
 SCALAR_CH = 5
 
 
+EPOCHS_TABLE = [100, 1000, 2500, 100, 500, 1000, 100, 200, 300]
+
+
+def offline_ctx(od, k_max=10, budget=31000):
+    """Контекст для офлайновых переходов. Из пяти скаляров четыре восстановимы:
+    номер шага — по позиции внутри эпизода, прошлое действие — по предыдущему
+    переходу, доля бюджета — по сумме эпох уже выбранных действий (число эпох
+    закодировано в самом действии). Уровень ошибки восстановить нельзя: награда
+    даёт разности, а не абсолютные значения — этот канал остаётся нулевым."""
+    EP, A = od["EP"], od["A"]
+    n = len(A)
+    out = np.zeros((n, SCALAR_CH), dtype=np.float32)
+    for ei in np.unique(EP):
+        idx = np.where(EP == ei)[0]
+        spent = 0
+        for j, i in enumerate(idx):
+            prev = A[idx[j - 1]] if j > 0 else -1
+            if prev < 0:
+                opt_i = ep_i = -1.0
+            else:
+                opt_i = (prev // 9) / 2.0
+                ep_i = (prev % 3) / 2.0
+            out[i] = [j / max(1, k_max), min(1.0, spent / max(1, budget)),
+                      opt_i, ep_i, 0.0]
+            a = int(A[i])
+            spent += EPOCHS_TABLE[(a // 9) * 3 + (a % 3)]
+    return out
+
+
+def attach_ctx(S, ctx):
+    """Разворачивает скаляры в постоянные каналы и приклеивает к картам."""
+    n, _, h, w = S.shape
+    planes = np.broadcast_to(ctx[:, :, None, None], (n, SCALAR_CH, h, w))
+    return np.concatenate([S, planes.astype(np.float32)], axis=1)
+
+
 def pad_norm(mean, std, n_ch):
     """Статистики нормировки приходят из 4-канального буфера или чекпоинта тёплого
     старта. Контекстные каналы уже лежат в [-1,1], поэтому им нужны нулевое среднее
@@ -400,6 +436,8 @@ def main():
                     help="обратные задачи: обычный FNN вместо PFNN — конвейер карт "
                          "авторов (extract_layers_from_dde_fnn) ветвящиеся сети не "
                          "разбирает; физике обратной задачи FNN с 2 выходами достаточен")
+    ap.add_argument("--budget", type=int, default=31000,
+                    help="бюджет эпох на цепочку — нужен скалярному контексту")
     ap.add_argument("--scalar-ctx", action="store_true",
                     help="добавить к картам постоянные каналы с контекстом: доля пройденных "
                          "шагов, доля израсходованного бюджета, прошлый оптимизатор и его "
@@ -604,6 +642,10 @@ def main():
         from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
         od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
                                 fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"))
+        if args.scalar_ctx:
+            c = offline_ctx(od, args.max_chain_steps, args.budget)
+            od["S"], od["S2"] = attach_ctx(od["S"], c), attach_ctx(od["S2"], c)
+            print(f"офлайновым переходам приписан контекст: {od['S'].shape}", flush=True)
         otr, _ = split_by_episode(od)
         oidx = np.where(otr)[0]
         if args.rlpd_max and len(oidx) > args.rlpd_max:
