@@ -85,6 +85,24 @@ def build_optimizer(opt_name, lr, net):
     raise ValueError(opt_name)
 
 
+SCALAR_CH = 5
+
+
+def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
+    """Дубликат из online_train_env: контекст постоянными каналами. Копия, чтобы
+    оценка не импортировала обучающий скрипт целиком."""
+    h, w = state.shape[1], state.shape[2]
+    if last_action is None or last_action < 0:
+        opt_i = ep_i = -1.0
+    else:
+        opt_i = (last_action // 9) / 2.0
+        ep_i = (last_action % 3) / 2.0
+    vals = [step / max(1, k_max), min(1.0, spent / max(1, budget)), opt_i, ep_i,
+            float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1))]
+    planes = np.stack([np.full((h, w), v, dtype=np.float32) for v in vals])
+    return np.concatenate([state, planes], axis=0)
+
+
 def load_agent(model_file):
     from offline_rl import QNet
 
@@ -100,7 +118,14 @@ def load_agent(model_file):
         net.net.load_state_dict(ckpt["state_dict"])
         net.net.eval()
     else:
-        net = QNet(ckpt["variant"], torch.device("cpu"))
+        # число входных каналов выводим из самого чекпоинта: агенты, обученные
+        # со скалярным контекстом, ждут 4+5 каналов вместо четырёх
+        in_ch = 4
+        for k, v in ckpt["state_dict"].items():
+            if hasattr(v, "dim") and v.dim() == 4 and v.shape[2] <= 7:
+                in_ch = v.shape[1]
+                break
+        net = QNet(ckpt["variant"], torch.device("cpu"), in_ch=in_ch)
         net.model.load_state_dict(ckpt["state_dict"])
         net.model.eval()
     return net, ckpt["mean"], ckpt["std"], ckpt["variant"]
@@ -240,6 +265,11 @@ def run_seed(seed, args, progress_cb=None):
 
     # initial state: zero maps (rl_trainer.zero_state)
     state = np.zeros((4, 26, 26), dtype=np.float32)
+    want_ctx = bool(agent is not None and
+                    next(agent.model.parameters()).shape[1] > 4)
+    last_a = None
+    if want_ctx:
+        state = add_scalar_ctx(state, 0, 12, 0, args.budget, None, 1.0)
     prev_raw = None
     trig = (json.load(open(os.path.join(SCRIPT_DIR, "landscape_trigger.json")))
             if args.boost_trigger.startswith("landscape") else None)
@@ -295,6 +325,7 @@ def run_seed(seed, args, progress_cb=None):
                     callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
         spent += epochs
         chain.append([opt_name, lr, epochs])
+        last_a = a
 
         rmse = float(getattr(tester, "rmse", float("inf")))
         brmse = float(getattr(tester, "brmse", float("inf")))
@@ -378,6 +409,9 @@ def run_seed(seed, args, progress_cb=None):
             print(f"[seed {seed}] state built: AE {t_ae:.1f}s (epochs={args.ae_epochs}), "
                   f"surface {t_srf:.1f}s", flush=True)
             state = build_state(raw, prev_raw)
+            if want_ctx:
+                state = add_scalar_ctx(state, len(chain), 12, spent, args.budget,
+                                       last_a, math.hypot(l2re_op, l2re_bnd))
             prev_raw = raw
             del pls, ae
         gc.collect()
