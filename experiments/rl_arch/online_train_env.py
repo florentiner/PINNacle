@@ -882,6 +882,12 @@ def main():
             if mean is None:      # нормировка по первому состоянию (агент с нуля)
                 mean = next_state.mean(axis=(1, 2), keepdims=True)[None]
                 std = next_state.std(axis=(1, 2), keepdims=True)[None] + 1e-6
+                if args.scalar_ctx:
+                    # контекстные каналы постоянны, их пространственный разброс равен
+                    # нулю — деление на 1e-6 раздуло бы вход в миллион раз. Они уже
+                    # лежат в [-1,1], поэтому нормировка им не нужна вовсе.
+                    mean[:, 4:] = 0.0
+                    std[:, 4:] = 1.0
             s_norm = ((state[None] - mean) / std)[0]
             s2_norm = ((next_state[None] - mean) / std)[0]
             if prior_buf is not None and len(prior_buf) < args.self_prior:
