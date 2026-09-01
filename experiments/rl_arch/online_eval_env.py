@@ -97,7 +97,8 @@ def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
     else:
         opt_i = (last_action // 9) / 2.0
         ep_i = (last_action % 3) / 2.0
-    vals = [step / max(1, k_max), min(1.0, spent / max(1, budget)), opt_i, ep_i,
+    vals = [min(1.0, step / max(1, k_max)), min(1.0, spent / max(1, budget)),
+            opt_i, ep_i,
             float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1))]
     planes = np.stack([np.full((h, w), v, dtype=np.float32) for v in vals])
     return np.concatenate([state, planes], axis=0)
@@ -269,7 +270,7 @@ def run_seed(seed, args, progress_cb=None):
                     next(agent.model.parameters()).shape[1] > 4)
     last_a = None
     if want_ctx:
-        state = add_scalar_ctx(state, 0, 12, 0, args.budget, None, 1.0)
+        state = add_scalar_ctx(state, 0, 10, 0, 31000, None, 1.0)  # нормировки обучения
     prev_raw = None
     trig = (json.load(open(os.path.join(SCRIPT_DIR, "landscape_trigger.json")))
             if args.boost_trigger.startswith("landscape") else None)
@@ -410,7 +411,7 @@ def run_seed(seed, args, progress_cb=None):
                   f"surface {t_srf:.1f}s", flush=True)
             state = build_state(raw, prev_raw)
             if want_ctx:
-                state = add_scalar_ctx(state, len(chain), 12, spent, args.budget,
+                state = add_scalar_ctx(state, len(chain), 10, spent, 31000,
                                        last_a, math.hypot(l2re_op, l2re_bnd))
             prev_raw = raw
             del pls, ae

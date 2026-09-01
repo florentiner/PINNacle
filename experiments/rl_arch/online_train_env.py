@@ -312,21 +312,27 @@ def munchausen_target(net, s, a, r, s2, d, gm, tau=0.03, alpha=0.9, clip=-1.0):
 
 
 def redo_recycle(net, buf, batch_size, dev, thresh=0.1):
-    """ReDo (Sokar и др., ICML 2023): переинициализируются только «спящие» нейроны —
-    те, чья средняя активация мала относительно среднего по слою. В отличие от
-    полного сброса не разрушает выученное."""
+    """ReDo (Sokar и др., ICML 2023). Спящий нейрон: нормированная активация ниже
+    порога от средней по слою. Переработка по статье: входящие веса заново,
+    ИСХОДЯЩИЕ — в ноль, чтобы переработка не возмущала выход сети.
+    Исправлено после аудита: (1) для свёрток активация усреднялась по (B,C,H),
+    оставляя ось ширины — спящесть считалась по столбцам карты, а не по каналам;
+    (2) обнуления исходящих не было вовсе."""
     import torch.nn as nn
-    acts = {}
-    hooks = []
+    acts, hooks = {}, []
+
     def mk(name):
         def h(_m, _i, o):
-            t = o.detach()
-            t = t.abs().mean(dim=tuple(range(t.dim() - 1))) if t.dim() > 2 else t.abs().mean(0)
+            t = o.detach().abs()
+            # (B,C,H,W) -> по каналам; (B,F) -> по нейронам
+            t = t.mean(dim=(0, 2, 3)) if t.dim() == 4 else t.mean(0)
             acts[name] = acts.get(name, 0) + t
         return h
-    for name, m in net.model.named_modules():
-        if isinstance(m, (nn.Linear, nn.Conv2d)):
-            hooks.append(m.register_forward_hook(mk(name)))
+
+    order = [(n, m) for n, m in net.model.named_modules()
+             if isinstance(m, (nn.Linear, nn.Conv2d))]
+    for name, m in order:
+        hooks.append(m.register_forward_hook(mk(name)))
     with torch.no_grad():
         s, _, _, _, _, _ = buf.sample(min(batch_size, len(buf)), dev)
         net.q_scalar(s)
@@ -334,23 +340,30 @@ def redo_recycle(net, buf, batch_size, dev, thresh=0.1):
         h.remove()
 
     n_reset = 0
-    mods = dict(net.model.named_modules())
     with torch.no_grad():
-        for name, a in acts.items():
-            m = mods.get(name)
-            if m is None or not hasattr(m, "weight") or a.numel() < 2:
+        for k, (name, m) in enumerate(order):
+            a = acts.get(name)
+            if a is None or a.numel() < 2 or a.numel() != m.weight.shape[0]:
                 continue
             score = a / (a.mean() + 1e-9)
             dead = (score < thresh).nonzero(as_tuple=True)[0]
             if not len(dead) or len(dead) == a.numel():
                 continue
             w = m.weight
+            # следующий слой с совпадающей входной размерностью — для обнуления
+            # исходящих; depthwise-свёртки и残 остатки пропускаются честно
+            nxt = None
+            for _, m2 in order[k + 1:k + 2]:
+                if m2.weight.dim() >= 2 and m2.weight.shape[1] == w.shape[0]:
+                    nxt = m2
+                break
             for i in dead.tolist():
-                if i >= w.shape[0]:
-                    continue
-                nn.init.kaiming_uniform_(w[i:i + 1] if w.dim() > 1 else w[i:i + 1].view(1, -1))
+                nn.init.kaiming_uniform_(w[i:i + 1] if w.dim() > 1
+                                         else w[i:i + 1].view(1, -1))
                 if m.bias is not None:
                     m.bias[i] = 0.0
+                if nxt is not None:
+                    nxt.weight[:, i] = 0.0
                 n_reset += 1
     if n_reset:
         net.target.load_state_dict(net.model.state_dict())
@@ -950,9 +963,10 @@ def main():
                     break
                 continue
 
-            if args.redo_every:
+            if args.redo_every or args.reset_every:
                 n_updates_total += (args.rlpd_utd if (args.rlpd and off_buf is not None)
                                     else args.update_iters)
+            if args.redo_every:
                 if n_updates_total - last_redo >= args.redo_every and len(buf) >= 8:
                     k = redo_recycle(net, buf, args.batch_size, dev, args.redo_thresh)
                     last_redo = n_updates_total
@@ -960,8 +974,6 @@ def main():
                           f"обновлений {n_updates_total}", flush=True)
 
             if args.reset_every:
-                n_updates_total += (args.rlpd_utd if (args.rlpd and off_buf is not None)
-                                    else args.update_iters)
                 if n_updates_total - last_reset >= args.reset_every:
                     k = shrink_and_perturb(net, args.reset_alpha, dev)
                     q_opt = torch.optim.Adam(net.params(), lr=args.lr)   # состояние Adam тоже сбрасываем
