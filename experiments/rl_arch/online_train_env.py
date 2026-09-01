@@ -480,10 +480,16 @@ def redo_recycle(net, buf, batch_size, dev, thresh=0.1):
     return n_reset
 
 
-def save_agent(net, mean, std, variant, tag, n_chains, best):
+def _hlg_meta(hlg):
+    """Метаданные HL-Gauss для чекпоинта: без них оценка усреднит логиты бинов
+    как квантили и выберет действие по бессмысленной величине."""
+    return None if hlg is None else (float(hlg.edges[0]), float(hlg.edges[-1]), int(hlg.n_bins))
+
+
+def save_agent(net, mean, std, variant, tag, n_chains, best, hl_gauss=None):
     """Чекпоинт агента: локально всегда, на HF — если есть токен. Формат тот же,
     что у офлайновых агентов, чтобы online_eval_env мог его загрузить."""
-    payload = dict(variant=variant, state_dict={k: v.detach().cpu()
+    payload = dict(variant=variant, hl_gauss=hl_gauss, state_dict={k: v.detach().cpu()
                                                 for k, v in net.model.state_dict().items()},
                    mean=mean, std=std, n_chains=n_chains, l2re_best=best, tag=tag)
     local = f"agent_{tag}.pt"
@@ -522,6 +528,8 @@ def upload(row, name):
 
 
 def main():
+    global GAMMA        # BBF отжигает дисконт; без объявления GAMMA стала бы
+                        # локальной для всей main() и падала бы на первом чтении
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", default="convnext_dqn")
     ap.add_argument("--pde", default="poissonboltzmann2d")
@@ -1012,7 +1020,9 @@ def main():
                     how = f"CVaR@{args.cvar_alpha}"
                 else:
                   with torch.no_grad():
-                    q = net.q_scalar(x)
+                    # под HL-Gauss выходы головы — логиты по бинам; скаляр Q это
+                    # взвешенная сумма центров, а не среднее (как у квантилей)
+                    q = hlg.to_scalar(net.q_online(x)) if hlg is not None else net.q_scalar(x)
                     if behaviour is not None:
                         # BCQ: выбираем только среди действий, которые модель
                         # поведения считает правдоподобными для этих данных
@@ -1268,7 +1278,8 @@ def main():
                     best_probe = float(rec["l2re"])
                     if args.save_agent:
                         save_agent(net, mean, std, args.variant,
-                                   args.tag + "_bestprobe", len(chains), best_probe)
+                                   args.tag + "_bestprobe", len(chains), best_probe,
+                                   hl_gauss=_hlg_meta(hlg))
                     print(f"[проба] новая лучшая жадная цепочка {best_probe:.4f} — "
                           f"чекпоинт сохранён", flush=True)
             row = dict(variant=args.variant, pde=args.pde, seed=args.seed,
@@ -1284,11 +1295,11 @@ def main():
                 upload(row, tag)
             if args.save_agent and (len(chains) % args.save_every == 0):
                 save_agent(net, mean, std, args.variant, tag, len(chains),
-                           min(c["l2re"] for c in chains))
+                           min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg))
 
     if args.save_agent and chains:
         save_agent(net, mean, std, args.variant, tag, len(chains),
-                   min(c["l2re"] for c in chains))
+                   min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg))
         print(f"агент сохранён: agent_{tag}.pt и rl_arch/agents_online/{tag}.pt", flush=True)
 
     print(f"\nИТОГ: завершённых цепочек {len(chains)}, "

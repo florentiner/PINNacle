@@ -126,9 +126,20 @@ def load_agent(model_file):
             if hasattr(v, "dim") and v.dim() == 4 and v.shape[2] <= 7:
                 in_ch = v.shape[1]
                 break
-        net = QNet(ckpt["variant"], torch.device("cpu"), in_ch=in_ch)
+        # число квантилей/бинов тоже выводим из чекпоинта: у HL-Gauss их 51,
+        # у квантильных вариантов 32 — иначе голова не совпадёт по форме
+        nq = 32
+        hw = ckpt["state_dict"].get("1.weight")
+        if hw is not None and hw.dim() == 2 and hw.shape[0] % 27 == 0:
+            nq = max(1, hw.shape[0] // 27)
+        net = QNet(ckpt["variant"], torch.device("cpu"), n_quantiles=nq, in_ch=in_ch)
         net.model.load_state_dict(ckpt["state_dict"])
         net.model.eval()
+    hg = ckpt.get("hl_gauss")
+    if hg:
+        from advanced_agents import HLGauss
+        net._hlg = HLGauss(v_min=hg[0], v_max=hg[1], n_bins=int(hg[2]))
+        print(f"агент обучен с HL-Gauss: скаляр Q по центрам {int(hg[2])} бинов", flush=True)
     return net, ckpt["mean"], ckpt["std"], ckpt["variant"]
 
 
@@ -138,8 +149,12 @@ def pick_action(agent, state, mean, std, variant):
     dev = next(agent.model.parameters()).device
     x = torch.as_tensor((state[None] - mean) / std, device=dev).float()
     with torch.no_grad():
-        q = (agent.q_cvar(x) if variant in ("cnn_qrdqn", "cnx_cql_qr")
-             else agent.q_scalar(x))
+        hlg = getattr(agent, "_hlg", None)
+        if hlg is not None:
+            q = hlg.to_scalar(agent.q_online(x))
+        else:
+            q = (agent.q_cvar(x) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                 else agent.q_scalar(x))
     return int(q.argmax(1).item())
 
 
