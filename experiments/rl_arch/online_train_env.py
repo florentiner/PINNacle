@@ -286,6 +286,116 @@ def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
     return np.concatenate([state, planes], axis=0)
 
 
+def make_spr(dim, device, n_actions=27, hidden=256):
+    """SPR (Schwarzer, ICLR 2021): латентная модель перехода + проектор и предиктор.
+    Предсказывает представление следующего состояния по действию, цель — целевая
+    копия энкодера. Наград не требует, поэтому учится и на сорванных цепочках.
+    Собирается функцией, а не классом модульного уровня: torch импортируется
+    внутри main()."""
+    import torch.nn as nn
+
+    class SprHead(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.act_emb = nn.Embedding(n_actions, dim)
+            self.trans = nn.Sequential(nn.Linear(dim * 2, hidden), nn.ReLU(),
+                                       nn.Linear(hidden, dim))
+            self.proj = nn.Sequential(nn.Linear(dim, hidden), nn.ReLU(),
+                                      nn.Linear(hidden, dim))
+            self.pred = nn.Sequential(nn.Linear(dim, hidden), nn.ReLU(),
+                                      nn.Linear(hidden, dim))
+
+        def forward(self, z, a):
+            return self.trans(torch.cat([z, self.act_emb(a)], dim=-1))
+
+    return SprHead().to(device)
+
+
+def spr_loss(net, spr, s, a, s2):
+    """Косинусная потеря между предсказанным и целевым латентом (BYOL-стиль:
+    градиент идёт только через онлайн-ветвь)."""
+    import torch.nn.functional as F
+    z = net.model[0](s)
+    z_hat = spr.pred(spr.proj(spr(z, a)))
+    with torch.no_grad():
+        z_tgt = spr.proj(net.target[0](s2))
+    return -F.cosine_similarity(z_hat, z_tgt, dim=-1).mean()
+
+
+def hlg_update(net, buf, opt, batch_size, iters, hlg, gamma_default=0.9,
+               munch=False, m_tau=0.03, m_alpha=0.9):
+    """HL-Gauss (Farebrother, ICML 2024): цель Q превращается в сглаженное
+    категориальное распределение по бинам, обучение — кросс-энтропией вместо MSE.
+    Работает поверх квантильной головы: её nq выходов трактуются как бины."""
+    for _ in range(iters):
+        s, a, r, s2, d, gm = buf.sample(batch_size, dev_of(net))
+        logits = net.q_online(s)                                  # (B,A,bins)
+        taken = logits.gather(1, a[:, None, None].expand(-1, 1, logits.shape[-1])).squeeze(1)
+        with torch.no_grad():
+            q2 = hlg.to_scalar(net.q_target(s2))                  # (B,A)
+            a2 = hlg.to_scalar(net.q_online(s2)).argmax(1)
+            y = r + gm * (1 - d) * q2.gather(1, a2[:, None]).squeeze(1)
+        loss = hlg.loss(taken, y).mean()
+        opt.zero_grad(); loss.backward(); opt.step()
+        net.soft_update()
+    return float(loss.item())
+
+
+def dev_of(net):
+    return next(net.model.parameters()).device
+
+
+def distill_loss(net, S, A, temp=1.0):
+    """Дистилляция экспертных действий в Q-голову: кросс-энтропия softmax(Q/T)
+    к действиям лучших цепочек. Выравнивает argmax политики с тем, что нашла
+    разведка, — прямая атака на измеренный разрыв разведка→политика."""
+    import torch.nn.functional as F
+    return F.cross_entropy(net.q_scalar(S) / temp, A)
+
+
+def anneal(step, total, lo, hi):
+    """Линейный отжиг lo->hi по доле пройденного обучения (BBF)."""
+    f = min(1.0, max(0.0, step / max(1, total)))
+    return lo + (hi - lo) * f
+
+
+def deep_search(net, wm, x, gamma=0.9, alpha=0.5, depth=2, beam=5):
+    """Лучевой поиск глубины D по выученной модели мира. В статье QWM берёт D=1;
+    здесь дерево разворачивается глубже, но узко — полное 27^D неподъёмно, а ошибка
+    модели с глубиной копится, поэтому листья оцениваются целевой Q, а не
+    продолжением развёртки."""
+    from advanced_agents import N_ACTIONS
+    with torch.no_grad():
+        q_root = net.q_scalar(x)[0]                                  # (27,)
+        eye = torch.eye(N_ACTIONS, device=x.device)
+        s_flat = x.flatten(1).expand(N_ACTIONS, -1)
+        d_hat, r_hat = wm(s_flat, eye)
+        cur = (s_flat + d_hat).view(N_ACTIONS, *x.shape[1:])
+        # ret[i] — накопленная награда ветви, root[i] — её корневое действие
+        ret = r_hat.clone()
+        root = torch.arange(N_ACTIONS, device=x.device)
+        disc = gamma
+        for _ in range(max(0, depth - 1)):
+            v = net.q_target(cur).max(1).values
+            k = min(beam, cur.shape[0])
+            top = torch.topk(ret + disc * v, k=k).indices
+            f = cur[top].flatten(1).repeat_interleave(N_ACTIONS, 0)
+            e = eye.repeat(k, 1)
+            d2, r2 = wm(f, e)
+            cur = (f + d2).view(-1, *x.shape[1:])
+            ret = ret[top].repeat_interleave(N_ACTIONS) + disc * r2
+            root = root[top].repeat_interleave(N_ACTIONS)
+            disc *= gamma
+        score = ret + disc * net.q_target(cur).max(1).values
+        # свёртка листьев к корневым действиям: максимум по ветвям каждого корня
+        best = torch.full((N_ACTIONS,), -1e9, device=x.device)
+        best = best.scatter_reduce(0, root, score, reduce="amax", include_self=True)
+        seen = torch.zeros(N_ACTIONS, dtype=torch.bool, device=x.device)
+        seen[root] = True
+        best = torch.where(seen, best, q_root)      # неразвёрнутые корни судим по Q
+        return int((alpha * q_root + (1 - alpha) * best).argmax().item())
+
+
 def munchausen_target(net, s, a, r, s2, d, gm, tau=0.03, alpha=0.9, clip=-1.0):
     """Munchausen RL: к награде добавляется масштабированный log-policy текущего
     состояния. Одна строка по сути, но даёт неявную KL-регуляризацию к прошлой
@@ -460,6 +570,45 @@ def main():
                          "шагов, доля израсходованного бюджета, прошлый оптимизатор и его "
                          "длительность, логарифм текущей ошибки. Без них политика решает "
                          "частично наблюдаемую задачу как полностью наблюдаемую")
+    ap.add_argument("--smdp", action="store_true",
+                    help="полу-марковская трактовка (Sutton, Precup, Singh 1999): дисконт "
+                         "по ДЛИТЕЛЬНОСТИ действия gamma^(эпох/100), а не по числу шагов. "
+                         "Наши действия длятся 100–2500 эпох — плоский дисконт объявляет их "
+                         "равными по времени")
+    ap.add_argument("--smdp-scale", type=float, default=100.0,
+                    help="сколько эпох считать одной единицей времени SMDP")
+    ap.add_argument("--search-depth", type=int, default=0,
+                    help="поиск на этапе действия глубины D по модели мира (нужен --qwm): "
+                         "разворачивает дерево 27^D с отсечением по лучшим ветвям")
+    ap.add_argument("--search-beam", type=int, default=5,
+                    help="ширина луча: сколько лучших действий разворачивать на каждом уровне")
+    ap.add_argument("--pbrs", type=float, default=0.0,
+                    help="потенциальное преобразование награды (Ng, Harada, Russell 1999): "
+                         "F = gamma*Phi(s2) - Phi(s), Phi = -log10(ошибка). Сохраняет "
+                         "множество оптимальных политик, но выравнивает плотный сигнал "
+                         "с конечной метрикой")
+    ap.add_argument("--greedy-probe", type=int, default=0,
+                    help="каждая N-я траектория идёт жадно (eps=0) и служит пробой качества "
+                         "политики; агент сохраняется по ЛУЧШЕЙ пробе, а не по последнему "
+                         "чекпоинту — метрика отбора совпадает с метрикой деплоя")
+    ap.add_argument("--distill", type=int, default=0,
+                    help="дистилляция лучших цепочек: после каждой цепочки K обновлений "
+                         "кросс-энтропией к действиям верхних цепочек прогона. Переносит "
+                         "найденное разведкой в жадную политику")
+    ap.add_argument("--distill-top", type=int, default=3,
+                    help="сколько лучших цепочек считать экспертными")
+    ap.add_argument("--distill-w", type=float, default=0.5,
+                    help="вес дистилляционной потери")
+    ap.add_argument("--hl-gauss", action="store_true",
+                    help="HL-Gauss (Farebrother, ICML 2024): цель как категориальное "
+                         "распределение по бинам вместо скалярной регрессии")
+    ap.add_argument("--spr", type=int, default=0,
+                    help="SPR (Schwarzer, ICLR 2021): предсказание будущего латента на K шагов "
+                         "вперёд, косинусная потеря к EMA-цели. Не требует наград")
+    ap.add_argument("--spr-w", type=float, default=1.0)
+    ap.add_argument("--bbf", action="store_true",
+                    help="полный BBF: SPR + отжиг горизонта n-step с 10 до 3 и дисконта "
+                         "с 0.97 к 0.997 по ходу обучения")
     ap.add_argument("--munchausen", action="store_true",
                     help="Munchausen RL (Vieillard, NeurIPS 2020): неявная KL-регуляризация "
                          "к прошлой политике через log-policy в награде")
@@ -759,6 +908,23 @@ def main():
     deadline = t_start + args.hours * 3600
     steps_done = 0
     n_updates_total, last_reset, last_redo = 0, 0, 0
+    # SPR: латентная модель поверх энкодера; обучается тем же оптимизатором
+    spr = None
+    hlg = None
+    if args.hl_gauss:
+        from advanced_agents import HLGauss
+        # границы бинов по разумному диапазону возвратов нашей среды
+        hlg = HLGauss(v_min=-2.0, v_max=6.0, n_bins=51).to(dev)
+        print("HL-Gauss: 51 бин на [-2, 6], обучение кросс-энтропией", flush=True)
+    if args.spr or args.bbf:
+        k_spr = args.spr or 1
+        spr = make_spr(net.enc.out_dim, dev)
+        spr_opt = torch.optim.Adam(spr.parameters(), lr=args.lr)
+        print(f"SPR: предсказание латента на {k_spr} шаг(ов), вес {args.spr_w}", flush=True)
+    # дистилляция: копим (состояния, действия) по цепочкам с их итоговой ошибкой
+    chain_pool = []          # [(l2re, [s_norm...], [a...])]
+    cur_states, cur_acts = [], []
+    best_probe = float("inf")
     init_w = ([q.detach().clone() for q in net.model.parameters()]
               if args.l2_init else None)
     chains = []              # завершённые цепочки: (l2re, шагов, эпох)
@@ -814,6 +980,8 @@ def main():
             # eps-greedy как у авторов
             eps = EPS_END + (EPS_START - EPS_END) * math.exp(-steps_done / EPS_DECAY)
             steps_done += 1
+            if args.greedy_probe and (traj % args.greedy_probe == 0):
+                eps = 0.0        # проба качества политики: метрика отбора = метрика деплоя
             in_warmup = args.wsrl_warmup and steps_done <= args.wsrl_warmup
             if rng.random() < eps and not args.boot_heads and not in_warmup:
                 a = int(rng.integers(0, 27))
@@ -821,7 +989,11 @@ def main():
             else:
                 x = torch.as_tensor(((state[None] - mean) / std) if mean is not None else state[None],
                                     device=dev).float()
-                if wm is not None:
+                if wm is not None and args.search_depth > 1:
+                    a = deep_search(net, wm, x, gamma=GAMMA, alpha=args.qwm_alpha,
+                                    depth=args.search_depth, beam=args.search_beam)
+                    how = f"поиск D={args.search_depth}"
+                elif wm is not None:
                     # QWM: одношаговый поиск вместо argmax Q (Eq. 9, D=1)
                     a = qwm_select(net, wm, x, gamma=GAMMA, alpha=args.qwm_alpha)
                     how = "поиск QWM"
@@ -918,9 +1090,41 @@ def main():
                              gam=GAMMA ** len(pending))
                     pending.pop(0)
             else:
-                buf.push(s_norm, a, reward, s2_norm, float(done == 1))
+                r_eff = reward
+                if args.pbrs:
+                    # F = gamma*Phi(s') - Phi(s), Phi = -log10(ошибка): политико-инвариантно
+                    phi = lambda e: -math.log10(max(float(e), 1e-8))
+                    r_eff = reward + args.pbrs * (GAMMA * phi(err) - phi(prev_err))
+                g_eff = (GAMMA ** (epochs / args.smdp_scale)) if args.smdp else GAMMA
+                buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff)
             if args.sil:
                 chain_trans.append((s_norm.copy(), a, float(reward)))
+            if args.distill:
+                cur_states.append(s_norm.copy()); cur_acts.append(a)
+
+            if args.bbf:
+                # BBF: дисконт отжигается 0.97 -> 0.997, горизонт n-step 10 -> 3
+                GAMMA = anneal(steps_done, 200, 0.97, 0.997)
+            if spr is not None and len(buf) >= 8:
+                # SPR: награда не нужна, поэтому учится и на сорванных цепочках
+                ss, aa, _, ss2, _, _ = buf.sample(min(args.batch_size, len(buf)), dev)
+                ls = args.spr_w * spr_loss(net, spr, ss, aa, ss2)
+                q_opt.zero_grad(); spr_opt.zero_grad()
+                ls.backward()
+                q_opt.step(); spr_opt.step()
+
+            if args.distill and chain_pool:
+                # кросс-энтропия к действиям верхних цепочек прогона
+                top = sorted(chain_pool, key=lambda t: t[0])[:args.distill_top]
+                XS = np.concatenate([np.stack(t[1]) for t in top], 0)
+                XA = np.concatenate([np.array(t[2]) for t in top], 0)
+                if len(XS) >= 4:
+                    k = min(args.batch_size, len(XS))
+                    idx = np.random.choice(len(XS), k, replace=False)
+                    Sx = torch.as_tensor(XS[idx], device=dev).float()
+                    Ax = torch.as_tensor(XA[idx], device=dev).long()
+                    ld = args.distill_w * distill_loss(net, Sx, Ax)
+                    q_opt.zero_grad(); ld.backward(); q_opt.step()
             state = next_state
 
             if args.go_explore and len(chain) + start_step < args.max_chain_steps:
@@ -1014,6 +1218,12 @@ def main():
                     sil_update(net, sil_buf, q_opt, args.batch_size, dev)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
                       f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)}+{len(off_buf)} q-loss={ql:.4f}", flush=True)
+            elif hlg is not None and len(buf) >= args.min_buffer:
+                ql = hlg_update(net, buf, q_opt, args.batch_size, args.update_iters, hlg,
+                                munch=args.munchausen, m_tau=args.m_tau, m_alpha=args.m_alpha)
+                print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} "
+                      f"({how}, eps={eps:.2f}) l2re={l2re:.4e} reward={reward:+.4f} "
+                      f"буфер={len(buf)} hlg-loss={ql:.4f}", flush=True)
             elif len(buf) >= args.min_buffer:
                 ql = agent_update(net, buf, q_opt, args.batch_size, args.update_iters, args.variant,
                                   munch=args.munchausen, m_tau=args.m_tau,
@@ -1046,6 +1256,21 @@ def main():
             if resumed_from is not None:
                 rec["resumed_from"] = resumed_from
             chains.append(rec)
+            if args.distill and cur_states:
+                # цепочка попадает в пул экспертных вместе со своей итоговой ошибкой
+                chain_pool.append((float(rec["l2re"]), cur_states, cur_acts))
+                chain_pool.sort(key=lambda t: t[0])
+                del chain_pool[max(args.distill_top * 2, 6):]
+            cur_states, cur_acts = [], []
+            if args.greedy_probe and (traj % args.greedy_probe == 0):
+                # отбор чекпоинта по метрике деплоя, а не по расписанию
+                if float(rec["l2re"]) < best_probe:
+                    best_probe = float(rec["l2re"])
+                    if args.save_agent:
+                        save_agent(net, mean, std, args.variant,
+                                   args.tag + "_bestprobe", len(chains), best_probe)
+                    print(f"[проба] новая лучшая жадная цепочка {best_probe:.4f} — "
+                          f"чекпоинт сохранён", flush=True)
             row = dict(variant=args.variant, pde=args.pde, seed=args.seed,
                        trajectories=len(chains), buffer=len(buf),
                        l2re_last_complete=chains[-1]["l2re"],
