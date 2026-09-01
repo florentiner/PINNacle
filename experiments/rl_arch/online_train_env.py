@@ -296,7 +296,11 @@ def munchausen_target(net, s, a, r, s2, d, gm, tau=0.03, alpha=0.9, clip=-1.0):
         if qt.dim() == 3:
             qt = qt.mean(-1)
         logp = F.log_softmax(qt / tau, dim=1)
-        m = alpha * logp.gather(1, a[:, None]).squeeze(1).clamp(min=clip)
+        # клипуется произведение tau*log pi (как в статье), а не голый log pi:
+        # при tau=0.03 log-softmax почти всегда ниже клипа, и штраф вырождался
+        # в плоские -alpha за любое действие кроме фаворита — 96% переходов
+        # на насыщении при медианной награде 0.05. Это и был двигатель коллапса.
+        m = alpha * (tau * logp.gather(1, a[:, None]).squeeze(1)).clamp(min=clip)
 
         qt2 = net.q_target(s2)
         if qt2.dim() == 3:
