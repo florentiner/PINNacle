@@ -922,8 +922,9 @@ def main():
     if args.hl_gauss:
         from advanced_agents import HLGauss
         # границы бинов по разумному диапазону возвратов нашей среды
-        hlg = HLGauss(v_min=-2.0, v_max=6.0, n_bins=51).to(dev)
-        print("HL-Gauss: 51 бин на [-2, 6], обучение кросс-энтропией", flush=True)
+        # число бинов = число выходов головы на действие, иначе формы не сойдутся
+        hlg = HLGauss(v_min=-2.0, v_max=6.0, n_bins=net.nq).to(dev)
+        print(f"HL-Gauss: {net.nq} бин(ов) на [-2, 6], обучение кросс-энтропией", flush=True)
     if args.spr or args.bbf:
         k_spr = args.spr or 1
         spr = make_spr(net.enc.out_dim, dev)
@@ -1054,6 +1055,7 @@ def main():
             # награда авторов: absolute, E = rmse + brmse; r = E_t - E_{t+1}
             err = (rmse if np.isfinite(rmse) else 0.0) + (brmse if np.isfinite(brmse) else 0.0)
             reward = 0.0 if prev_err is None else (prev_err - err)
+            err_before = prev_err          # для PBRS: Phi(s) считается ДО обновления
             prev_err = err
             done = 1 if (args.tolerance > 0 and err < args.tolerance) else 0
 
@@ -1104,7 +1106,8 @@ def main():
                 if args.pbrs:
                     # F = gamma*Phi(s') - Phi(s), Phi = -log10(ошибка): политико-инвариантно
                     phi = lambda e: -math.log10(max(float(e), 1e-8))
-                    r_eff = reward + args.pbrs * (GAMMA * phi(err) - phi(prev_err))
+                    if err_before is not None:
+                        r_eff = reward + args.pbrs * (GAMMA * phi(err) - phi(err_before))
                 g_eff = (GAMMA ** (epochs / args.smdp_scale)) if args.smdp else GAMMA
                 buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff)
             if args.sil:
