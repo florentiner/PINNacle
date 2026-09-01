@@ -102,7 +102,7 @@ def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0,
         else:
             with torch.no_grad():
                 a2 = net.q_scalar(s2).argmax(1)
-                q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                       else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
                 tgt = r + gm * (1 - d) * q2
         loss = F.mse_loss(q, tgt)
@@ -149,7 +149,7 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
     else:
         with torch.no_grad():
             a2 = net.q_scalar(s2).argmax(1)
-            q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+            q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                   else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
             tgt = (torch.maximum(r, gm * (1 - d) * q2) if max_bellman
                    else r + gm * (1 - d) * q2)
@@ -338,6 +338,24 @@ def hlg_update(net, buf, opt, batch_size, iters, hlg, gamma_default=0.9,
         loss = hlg.loss(taken, y).mean()
         opt.zero_grad(); loss.backward(); opt.step()
         net.soft_update()
+    return float(loss.item())
+
+
+def hlg_update_mixed(net, off_buf, on_buf, opt, half, hlg):
+    """HL-Gauss на симметричном батче RLPD: половина офлайн, половина онлайн.
+    Нужен отдельно, потому что ветка RLPD не проходит через hlg_update."""
+    dev = dev_of(net)
+    parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
+    s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
+    logits = net.q_online(s)                                     # (B,A,bins)
+    taken = logits.gather(1, a[:, None, None].expand(-1, 1, logits.shape[-1])).squeeze(1)
+    with torch.no_grad():
+        a2 = hlg.to_scalar(net.q_online(s2)).argmax(1)
+        q2 = hlg.to_scalar(net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+        y = r + gm * (1 - d) * q2
+    loss = hlg.loss(taken, y).mean()
+    opt.zero_grad(); loss.backward(); opt.step()
+    net.soft_update()
     return float(loss.item())
 
 
@@ -1215,6 +1233,9 @@ def main():
                     elif args.rlpd_full:
                         from advanced_agents import rlpd_update
                         ql = rlpd_update(net, off_buf, src, q_opt, half, GAMMA)
+                    elif hlg is not None:
+                        src2 = buf if len(buf) >= 8 else off_buf
+                        ql = hlg_update_mixed(net, off_buf, src2, q_opt, half, hlg)
                     elif len(buf) >= 8:
                         ql = agent_update_mixed(net, off_buf, buf, q_opt, half, args.variant,
                                                 max_bellman=args.max_bellman, aug=args.aug,
