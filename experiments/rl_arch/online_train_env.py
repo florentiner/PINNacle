@@ -1121,12 +1121,15 @@ def main():
                     pending.pop(0)
             else:
                 r_eff = reward
+                g_eff = (GAMMA ** (epochs / args.smdp_scale)) if args.smdp else GAMMA
                 if args.pbrs:
-                    # F = gamma*Phi(s') - Phi(s), Phi = -log10(ошибка): политико-инвариантно
+                    # F = gamma*Phi(s') - Phi(s), Phi = -log10(ошибка). Гарантия
+                    # политико-инвариантности (Ng, Harada, Russell 1999) выведена для
+                    # ТОГО ЖЕ дисконта, что и в обновлении — под SMDP это g_eff,
+                    # а не плоская GAMMA, иначе инвариантность теряется
                     phi = lambda e: -math.log10(max(float(e), 1e-8))
                     if err_before is not None:
-                        r_eff = reward + args.pbrs * (GAMMA * phi(err) - phi(err_before))
-                g_eff = (GAMMA ** (epochs / args.smdp_scale)) if args.smdp else GAMMA
+                        r_eff = reward + args.pbrs * (g_eff * phi(err) - phi(err_before))
                 buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff)
             if args.sil:
                 chain_trans.append((s_norm.copy(), a, float(reward)))
