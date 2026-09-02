@@ -479,3 +479,115 @@ def sil_update(net, sil_buf, opt, batch, device, weight=1.0):
         return 0.0
     opt.zero_grad(); loss.backward(); opt.step()
     return float(loss.detach())
+
+# ---------------------------------------------------------------------------
+# Семейство MuZero: модель, эквивалентная по ценности; префикс ценности;
+# поиск Гумбеля; переигрывание буфера (Reanalyse)
+# ---------------------------------------------------------------------------
+class ValueEquivalentModel(nn.Module):
+    """MuZero (Schrittwieser и др., Nature 2020): латентная динамика, обучаемая
+    СКВОЗЬ ценность и награду, без восстановления состояния. Наш прежний QWM учил
+    Δs размерности 2704 — заведомо более трудную задачу, чем нужно для планирования.
+
+    h: состояние -> латент (переиспользуем энкодер агента, он уже обучен)
+    g: (латент, действие) -> следующий латент, награда (или префикс наград)
+    f: латент -> ценность
+    """
+
+    def __init__(self, latent_dim, n_actions=N_ACTIONS, hidden=256, prefix_k=1):
+        super().__init__()
+        self.n_actions, self.prefix_k = n_actions, prefix_k
+        self.act = nn.Embedding(n_actions, latent_dim)
+        self.dyn = nn.Sequential(nn.Linear(latent_dim * 2, hidden), nn.GELU(),
+                                 nn.Linear(hidden, latent_dim))
+        # префикс ценности (EfficientZero): предсказывается сумма наград за k шагов,
+        # а не пошаговая награда — у нас награда это разность ошибок с большой
+        # дисперсией, агрегирование её стабилизирует
+        self.rew = nn.Sequential(nn.Linear(latent_dim * 2, hidden), nn.GELU(),
+                                 nn.Linear(hidden, 1))
+        self.val = nn.Sequential(nn.Linear(latent_dim, hidden), nn.GELU(),
+                                 nn.Linear(hidden, 1))
+
+    def dynamics(self, z, a):
+        za = torch.cat([z, self.act(a)], -1)
+        return self.dyn(za), self.rew(za).squeeze(-1)
+
+    def value(self, z):
+        return self.val(z).squeeze(-1)
+
+
+def vem_update(net, vem, opt, bufs, batch, device, gamma=0.9, unroll=2):
+    """Обучение модели, эквивалентной по ценности: латент разворачивается на
+    unroll шагов, и на каждом сверяются награда и ценность — восстановления
+    состояния нет вовсе. Градиент в энкодер не идёт (он учится своей задачей)."""
+    parts = [b.sample(max(1, batch // len(bufs)), device) for b in bufs]
+    s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
+    with torch.no_grad():
+        z = net.model[0](s)
+        z2_real = net.model[0](s2)
+        v2_tgt = net.q_target(s2)
+        if v2_tgt.dim() == 3:
+            v2_tgt = v2_tgt.mean(-1)
+        v2_tgt = v2_tgt.max(1).values
+    z_hat, r_hat = vem.dynamics(z, a)
+    loss = F.mse_loss(r_hat, r) + F.mse_loss(vem.value(z_hat), v2_tgt)
+    # согласованность латента с реальным следующим состоянием — мягкая, косинусом
+    loss = loss + 0.5 * (1 - F.cosine_similarity(z_hat, z2_real, dim=-1)).mean()
+    opt.zero_grad(); loss.backward(); opt.step()
+    return float(loss.detach())
+
+
+def gumbel_select(net, vem, x, gamma=0.9, n_sample=8, c_scale=1.0):
+    """Поиск Гумбеля (Danihelka и др., ICLR 2022; в составе EfficientZero V2).
+    Вместо развёртки всех 27 действий берётся m кандидатов по Gumbel top-k
+    и выбирается argmax(g + logit + sigma(q)). Даёт гарантию улучшения политики
+    при МАЛОМ числе симуляций — наш режим, где лучевой поиск гарантий не даёт."""
+    with torch.no_grad():
+        q = net.q_scalar(x)[0]                                   # (A,)
+        # логиты нормируем на собственный разброс: сырые Q у нас лежат в узком
+        # диапазоне (~0.06), и без нормировки шум Гумбеля (масштаб ~1) полностью
+        # забивает сигнал политики
+        logits = (q - q.max()) / (q.std() + 1e-6)
+        # clamp применяется к САМОМУ u, а не к log(u): log(u) отрицателен, и
+        # clamp_min на нём давал 1e-9, после чего log(-1e-9) = NaN
+        u = torch.rand_like(logits).clamp(1e-9, 1.0 - 1e-7)
+        g = -torch.log(-torch.log(u))
+        top = torch.topk(g + logits, k=min(n_sample, logits.numel())).indices
+        z = net.model[0](x).expand(len(top), -1)
+        z_hat, r_hat = vem.dynamics(z, top)
+        q_search = r_hat + gamma * vem.value(z_hat)              # (m,)
+        # в статье sigma применяется к НОРМИРОВАННОМУ q: без этого масштаб
+        # ценности произволен и подавляет гумбелевский шум, превращая поиск
+        # в жадный argmax по модели
+        qn = q_search - q_search.min()
+        qn = qn / qn.max().clamp_min(1e-6)
+        score = g[top] + logits[top] + c_scale * qn
+        return int(top[score.argmax()].item())
+
+
+def reanalyse_update(net, vem, buf, opt, batch, device, gamma=0.9, alpha=0.5):
+    """Reanalyse (Schrittwieser и др., NeurIPS 2021): старые переходы
+    переигрываются поиском с ТЕКУЩЕЙ моделью, порождая свежие цели ценности.
+    При двух сотнях переходов это главный способ умножить ценность буфера:
+    те же данные дают новый сигнал по мере улучшения модели."""
+    s, a, r, s2, d, gm = buf.sample(batch, device)
+    with torch.no_grad():
+        z = net.model[0](s)                                      # (B,L)
+        B = z.shape[0]
+        # развернуть все действия из каждого состояния по модели
+        zr = z.repeat_interleave(N_ACTIONS, 0)
+        ar = torch.arange(N_ACTIONS, device=device).repeat(B)
+        z_hat, r_hat = vem.dynamics(zr, ar)
+        q_model = (r_hat + gamma * vem.value(z_hat)).view(B, N_ACTIONS)
+        q_now = net.q_scalar(s)
+        # улучшенная цель: смесь текущей оценки и результата поиска
+        tgt = alpha * q_now + (1 - alpha) * q_model
+        v_tgt = tgt.max(1).values
+    q_taken = net.q_scalar(s).gather(1, a[:, None]).squeeze(1)
+    loss = F.mse_loss(q_taken, torch.maximum(v_tgt, q_taken.detach()))
+    # плюс дистилляция улучшенной политики поиска в Q-голову
+    loss = loss + 0.5 * F.kl_div(net.q_scalar(s).log_softmax(-1),
+                                 tgt.softmax(-1), reduction="batchmean")
+    opt.zero_grad(); loss.backward(); opt.step()
+    net.soft_update()
+    return float(loss.detach())

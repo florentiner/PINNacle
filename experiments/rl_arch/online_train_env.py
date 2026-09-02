@@ -596,6 +596,21 @@ def main():
                          "шагов, доля израсходованного бюджета, прошлый оптимизатор и его "
                          "длительность, логарифм текущей ошибки. Без них политика решает "
                          "частично наблюдаемую задачу как полностью наблюдаемую")
+    ap.add_argument("--vem", action="store_true",
+                    help="модель, эквивалентная по ценности (MuZero, Nature 2020): латентная "
+                         "динамика, обучаемая сквозь ценность и награду, без восстановления "
+                         "состояния. Заменяет QWM, который учил дельту состояния 2704-мерной")
+    ap.add_argument("--vem-unroll", type=int, default=2)
+    ap.add_argument("--prefix-k", type=int, default=1,
+                    help="префикс ценности (EfficientZero): предсказывать сумму наград "
+                         "за k шагов вместо пошаговой — у нас награда шумная разность ошибок")
+    ap.add_argument("--gumbel", type=int, default=0,
+                    help="поиск Гумбеля (Danihelka, ICLR 2022): m кандидатов по Gumbel top-k "
+                         "с гарантией улучшения политики при малом числе симуляций")
+    ap.add_argument("--reanalyse", type=int, default=0,
+                    help="Reanalyse (Schrittwieser, NeurIPS 2021): каждые N шагов старые "
+                         "переходы переигрываются поиском с текущей моделью — свежие цели "
+                         "из тех же данных")
     ap.add_argument("--smdp", action="store_true",
                     help="полу-марковская трактовка (Sutton, Precup, Singh 1999): дисконт "
                          "по ДЛИТЕЛЬНОСТИ действия gamma^(эпох/100), а не по числу шагов. "
@@ -936,6 +951,14 @@ def main():
     n_updates_total, last_reset, last_redo = 0, 0, 0
     # SPR: латентная модель поверх энкодера; обучается тем же оптимизатором
     spr = None
+    vem = vem_opt = None
+    if args.vem or args.gumbel or args.reanalyse:
+        from advanced_agents import ValueEquivalentModel
+        vem = ValueEquivalentModel(net.enc.out_dim, prefix_k=args.prefix_k).to(dev)
+        vem_opt = torch.optim.Adam(vem.parameters(), lr=args.lr)
+        print(f"модель по ценности: латент {net.enc.out_dim}, префикс k={args.prefix_k}, "
+              f"поиск Гумбеля={args.gumbel or 'нет'}, reanalyse={args.reanalyse or 'нет'}",
+              flush=True)
     hlg = None
     if args.hl_gauss:
         from advanced_agents import HLGauss
@@ -1016,7 +1039,11 @@ def main():
             else:
                 x = torch.as_tensor(((state[None] - mean) / std) if mean is not None else state[None],
                                     device=dev).float()
-                if wm is not None and args.search_depth > 1:
+                if vem is not None and args.gumbel:
+                    from advanced_agents import gumbel_select
+                    a = gumbel_select(net, vem, x, gamma=GAMMA, n_sample=args.gumbel)
+                    how = f"Гумбель m={args.gumbel}"
+                elif wm is not None and args.search_depth > 1:
                     a = deep_search(net, wm, x, gamma=GAMMA, alpha=args.qwm_alpha,
                                     depth=args.search_depth, beam=args.search_beam)
                     how = f"поиск D={args.search_depth}"
@@ -1139,6 +1166,15 @@ def main():
             if args.bbf:
                 # BBF: дисконт отжигается 0.97 -> 0.997, горизонт n-step 10 -> 3
                 GAMMA = anneal(steps_done, 200, 0.97, 0.997)
+            if vem is not None and len(buf) >= 8:
+                from advanced_agents import vem_update, reanalyse_update
+                vbufs = [buf] + ([off_buf] if off_buf is not None else [])
+                vem_update(net, vem, vem_opt, vbufs, args.batch_size, dev,
+                           gamma=GAMMA, unroll=args.vem_unroll)
+                if args.reanalyse and steps_done % args.reanalyse == 0:
+                    rl_ = reanalyse_update(net, vem, buf, q_opt, args.batch_size, dev,
+                                           gamma=GAMMA)
+                    print(f"[reanalyse] переигран буфер, потеря {rl_:.4f}", flush=True)
             if spr is not None and len(buf) >= 8:
                 # SPR: награда не нужна, поэтому учится и на сорванных цепочках
                 ss, aa, _, ss2, _, _ = buf.sample(min(args.batch_size, len(buf)), dev)
