@@ -42,6 +42,9 @@ import torch  # module-level: QNet/soft_update/q_cvar are used by online_eval to
 
 GAMMA = 0.9   # их значение (rl_agent_params в poisson_boltzmann2d_chain.py)
 N_ACTIONS = 27
+# эпохи на действие: a -> (opt=a//9, lr=(a//3)%3, ep=a%3); таблица и индексация
+# те же, что в online_train_env.py (иначе SMDP-дисконт разойдётся с онлайном)
+EPOCHS_TABLE = [100, 1000, 2500, 100, 500, 1000, 100, 200, 300]
 REPO = "danil-e/rlpinn-ablation-buffers"
 SUBDIR = "poisson_boltzmann_2d"
 OUT_REPO = "danil-e/pinnacle-optuna-db"
@@ -318,6 +321,94 @@ class QNet:
 
 
 # --------------------------------------------------------------------------
+# Targets: n-step returns, potential-based shaping, SMDP discount
+# --------------------------------------------------------------------------
+
+def action_epochs(a) -> int:
+    """Сколько эпох тратит действие a. Кодировка a = opt*9 + lr*3 + ep."""
+    return EPOCHS_TABLE[(int(a) // 9) * 3 + (int(a) % 3)]
+
+
+def build_targets(data, args, gamma):
+    """n-шаговые цели + PBRS + SMDP-дисконт.
+
+    Возвращает (NR, NG, NIDX, ND):
+        NR[i]   сумма (возможно преобразованных) наград на m шагах вперёд
+        NG[i]   произведение дисконтов на этих m шагах — множитель бутстрэпа
+        NIDX[i] индекс перехода, из next_state которого делается бутстрэп
+        ND[i]   признак терминальности в точке бутстрэпа
+    Цель обучения: tgt = NR + NG * (1 - ND) * Q(s'_{NIDX}).
+
+    При n_step=1, pbrs=0 и выключенном smdp это в точности прежние
+    (R, gamma, i, D), то есть поведение не меняется.
+
+    Награда в буфере — «absolute» (RL/rl_environment.compute_reward):
+    r_t = -(coeff_op*err_op + coeff_bnd*err_bnd) состояния s_{t+1}.
+    Проверено на данных: все 26 858 наград строго отрицательны. Поэтому
+    потенциал восстанавливается точно: Ф(s_{t+1}) = -log10(-r_t), а
+    Ф(s_t) = -log10(-r_{t-1}). У первого перехода эпизода Ф(s_0) неизвестен
+    и добавка обнуляется — так же, как в онлайновой реализации.
+    """
+    R, D, EP, A = data["R"], data["D"], data["EP"], data["A"]
+    n = len(R)
+
+    gam = np.full(n, float(gamma), dtype=np.float64)
+    if getattr(args, "smdp", False):
+        cost = np.array([action_epochs(a) for a in A], dtype=np.float64)
+        gam = float(gamma) ** (cost / float(args.smdp_scale))
+
+    R_eff = R.astype(np.float64).copy()
+    w_pbrs = float(getattr(args, "pbrs", 0.0) or 0.0)
+    if w_pbrs:
+        def phi(err):
+            return -math.log10(max(float(err), 1e-8))
+        for ei in np.unique(EP):
+            idx = np.where(EP == ei)[0]
+            for pos in range(1, len(idx)):
+                i, prev = idx[pos], idx[pos - 1]
+                # ошибка s' — из награды самого перехода, ошибка s — из предыдущей
+                R_eff[i] += w_pbrs * (gam[i] * phi(-R[i]) - phi(-R[prev]))
+
+    nst = max(1, int(getattr(args, "n_step", 1) or 1))
+    NR = np.zeros(n, dtype=np.float64)
+    NG = np.zeros(n, dtype=np.float64)
+    NIDX = np.arange(n, dtype=np.int64)
+    ND = np.zeros(n, dtype=np.float64)
+    for ei in np.unique(EP):
+        idx = np.where(EP == ei)[0]
+        L = len(idx)
+        for pos in range(L):
+            i = idx[pos]
+            m = min(nst, L - pos)
+            acc, g = 0.0, 1.0
+            for k in range(m):
+                j = idx[pos + k]
+                acc += g * R_eff[j]
+                g *= gam[j]
+            last = idx[pos + m - 1]
+            NR[i], NG[i], NIDX[i], ND[i] = acc, g, last, D[last]
+    return (NR.astype(np.float32), NG.astype(np.float32), NIDX,
+            ND.astype(np.float32))
+
+
+# группа симметрий латентной сетки. Сетка строится на квадрате [-1.2, 1.2]^2
+# с одинаковым шагом по обеим осям (plot_loss_surface.py: min_y, max_y =
+# min_x, max_x; один step_size), 26 узлов симметричны относительно нуля,
+# поэтому D4 переставляет узлы точно. Базис 2-мерного латента автоэнкодера
+# обучается заново на каждом эпизоде и канонической ориентации не имеет.
+# Проверено на буфере ns2d (3229 карт): центроид области минимума
+# (12.47, 12.48) при симметричном центре 12.5, баланс масс верх/низ 0.970 и
+# лево/право 0.979, расхождение средней карты с её отражениями 0.011-0.031
+# при шуме половина-к-половине 0.022.
+def d4_apply(x, g: int):
+    """g в 0..7: g>=4 — отражение по последней оси, затем g%4 поворотов."""
+    if g >= 4:
+        x = torch.flip(x, dims=[-1])
+    k = g % 4
+    return torch.rot90(x, k, dims=[-2, -1]) if k else x
+
+
+# --------------------------------------------------------------------------
 # Training
 # --------------------------------------------------------------------------
 
@@ -394,7 +485,8 @@ def train_variant(variant, data, train_mask, args, seed):
     torch.manual_seed(seed); np.random.seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     net = QNet(variant, device)
-    opt = torch.optim.Adam(net.params(), lr=1e-3)
+    opt = torch.optim.Adam(net.params(), lr=1e-3,
+                           weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
 
     idx = np.where(train_mask)[0]
     mean = data["S"][idx].mean(axis=(0, 2, 3), keepdims=True)
@@ -408,6 +500,15 @@ def train_variant(variant, data, train_mask, args, seed):
 
     S = to_t(norm(data["S"])).float(); S2 = to_t(norm(data["S2"])).float()
     A = to_t(data["A"]); R = to_t(data["R"]); D = to_t(data["D"])
+
+    # n-шаговые цели / PBRS / SMDP: при значениях по умолчанию совпадают с (R, GAMMA, D)
+    nr_np, ng_np, nidx_np, nd_np = build_targets(data, args, GAMMA)
+    NR = to_t(nr_np); NG = to_t(ng_np); ND = to_t(nd_np)
+    NIDX = to_t(nidx_np).long()
+    aug_n = 8 if getattr(args, "aug", "none") == "d4" else 1
+    w_margin = float(getattr(args, "dqfd", 0.0) or 0.0)
+    ckpt_every = int(getattr(args, "ckpt_every", 0) or 0)
+    ckpts = []
 
     bs = args.batch_size
     n_epochs = args.epochs
@@ -434,7 +535,14 @@ def train_variant(variant, data, train_mask, args, seed):
         order = rng.permutation(idx)
         for k in range(0, len(order), bs):
             b = to_t(order[k:k + bs]).long()
-            s, a, r, s2, d = S[b], A[b], R[b], S2[b], D[b]
+            # r/d/gm — n-шаговые: награда за m шагов, терминальность и дисконт
+            # в точке бутстрэпа; s2 — next_state именно того перехода (NIDX)
+            s, a, r, d, gm = S[b], A[b], NR[b], ND[b], NG[b]
+            s2 = S2[NIDX[b]]
+            s_raw = s                      # неаугментированное s: маска BCQ и margin
+            if aug_n > 1:                  # одно преобразование на батч, общее для s и s'
+                g = int(rng.integers(aug_n))
+                s = d4_apply(s, g); s2 = d4_apply(s2, g)
 
             if variant == "cnn_iql":
                 with torch.no_grad():
@@ -446,7 +554,7 @@ def train_variant(variant, data, train_mask, args, seed):
                 v_loss = (w * diff ** 2).mean()
                 with torch.no_grad():
                     v2 = net.v_online(s2)
-                    tgt = r + GAMMA * (1 - d) * v2
+                    tgt = r + gm * (1 - d) * v2
                 q = net.q_online(s).gather(1, a[:, None]).squeeze(1)
                 loss = v_loss + F.mse_loss(q, tgt)
             elif variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
@@ -456,7 +564,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     a2 = net.q_online(s2).mean(-1).argmax(1)
                     q2 = net.q_target(s2).gather(
                         1, a2[:, None, None].expand(-1, 1, net.nq)).squeeze(1)
-                    tgt = r[:, None] + GAMMA * (1 - d)[:, None] * q2   # (B,nq)
+                    tgt = r[:, None] + (gm * (1 - d))[:, None] * q2    # (B,nq)
                 u = tgt[:, None, :] - q_data[:, :, None]               # (B,nq_pred,nq_tgt)
                 huber = torch.where(u.abs() <= 1.0, 0.5 * u ** 2, u.abs() - 0.5)
                 loss = (torch.abs(taus[None, :, None] - (u.detach() < 0).float()) * huber).mean()
@@ -470,19 +578,32 @@ def train_variant(variant, data, train_mask, args, seed):
                 with torch.no_grad():
                     a2 = net.q_online(s2).argmax(1)
                     q2 = net.q_target(s2).gather(1, a2[:, None]).squeeze(1)
-                    tgt = r + GAMMA * (1 - d) * q2
+                    tgt = r + gm * (1 - d) * q2
                 loss = F.mse_loss(q, tgt)
                 if variant == "cnx_bcq":      # discrete BCQ: маска поддержки
+                    # модель поведения обучена на неаугментированных состояниях,
+                    # поэтому маска берётся с s_raw; сама маска считается
+                    # инвариантной к D4 — это и есть предпосылка аугментации
                     with torch.no_grad():
-                        pb = bcq_behaviour(S[b].flatten(1)).softmax(-1)
+                        pb = bcq_behaviour(s_raw.flatten(1)).softmax(-1)
                         keep = pb >= 0.3 * pb.max(-1, keepdim=True).values
-                    qs_all = net.q_online(S[b])
+                    qs_all = net.q_online(s)
                     loss = loss + 0.5 * (qs_all.masked_fill(keep, 0.0).clamp_min(0) ** 2).mean()
                 if variant in ("cnn_cql", "cnx_cql", "their_cql"):
                     qs = net.q_online(s)
                     loss = loss + args.cql_alpha * (
                         torch.logsumexp(qs, dim=1) - qs.gather(1, a[:, None]).squeeze(1)
                     ).mean()
+
+            if w_margin:
+                # DQfD, большой отступ: J_E = max_a[Q(s,a)+L(a_E,a)] - Q(s,a_E).
+                # Все переходы буфера считаются демонстрацией (чистый офлайн).
+                qs_m = net.q_scalar(s)
+                marg = torch.full_like(qs_m, float(args.dqfd_margin))
+                marg.scatter_(1, a[:, None], 0.0)
+                loss = loss + w_margin * (
+                    (qs_m + marg).max(1).values
+                    - qs_m.gather(1, a[:, None]).squeeze(1)).mean()
 
             opt.zero_grad(); loss.backward(); opt.step()
             net.soft_update()
@@ -515,8 +636,42 @@ def train_variant(variant, data, train_mask, args, seed):
             if stall >= args.plateau_patience:
                 print(f"  [{variant} s{seed}] plateau reached at epoch {epoch+1}", flush=True)
                 break
+        if ckpt_every and (epoch + 1) % ckpt_every == 0:
+            import copy as _c
+            ckpts.append((epoch + 1, _c.deepcopy(net.model.state_dict())))
 
     train_time = time.time() - t0
+    net.extra = {}
+    if getattr(args, "fqe_select", False):
+        # отбор чекпоинта по FQE на отложенных эпизодах: сравниваем ценность
+        # жадной политики каждого снимка, берём лучший. Последняя эпоха всегда
+        # в списке, поэтому отбор не может оказаться хуже обычного финала по
+        # этому критерию (но по метрике в среде — может, критерий приблизителен)
+        import copy as _c
+        last_ep = epoch + 1
+        pool = list(ckpts)
+        if not pool or pool[-1][0] != last_ep:      # финальные веса всегда в пуле
+            pool.append((last_ep, _c.deepcopy(net.model.state_dict())))
+        stats_sel = dict(mean=mean, std=std)
+        pol = "cvar" if (variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
+                         and getattr(args, "select_policy", "mean") == "cvar") else "mean"
+        scored = []
+        for pi, (ep_no, sd) in enumerate(pool):
+            net.model.load_state_dict(sd)
+            fq = fqe(net, stats_sel, data, train_mask, ~train_mask, pol, args, seed)
+            v = fq["fqe_value_init"]
+            if v is None:
+                v = fq["fqe_value_all"]
+            scored.append((float(v), pi))
+            print(f"  [{variant} s{seed}] чекпоинт эпоха {ep_no}: FQE={v:.4f}", flush=True)
+        best_v, best_pi = max(scored)
+        best_ep = pool[best_pi][0]
+        net.model.load_state_dict(pool[best_pi][1])
+        net.target.load_state_dict(net.model.state_dict())
+        net.extra = {"fqe_select_epoch": best_ep, "fqe_select_value": best_v,
+                     "fqe_select_pool": [pool[pi][0] for _, pi in scored]}
+        print(f"  [{variant} s{seed}] выбран чекпоинт эпохи {best_ep} (FQE={best_v:.4f})",
+              flush=True)
     return net, dict(mean=mean, std=std), train_time
 
 
@@ -670,7 +825,7 @@ def main():
                     choices=["cnn_dqn", "convnext_dqn", "cnn_cql", "cnn_iql",
                              "cnn_qrdqn", "cnn_vqc", "cnx_cql", "cnx_cql_qr",
                              "their_dqn", "their_cql", "cnx_dueling",
-                             "cnx_bcq", "cnx_bbf", "cnx_smdp"])
+                             "cnx_bcq", "cnx_bbf", "cnx_smdp", "cnx_qrdqn"])
     ap.add_argument("--seeds", default="1,2,3,4,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--fqe-epochs", type=int, default=100)
@@ -688,7 +843,34 @@ def main():
                     help="Stop when holdout TD stops improving for N checks (every 25 epochs); 0=off")
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--smoke", action="store_true")
+    # --- методы из статей (по умолчанию всё выключено: прежнее поведение) ---
+    ap.add_argument("--aug", default="none", choices=["none", "d4"],
+                    help="D4-аугментация карт: 8 симметрий квадратной латентной сетки")
+    ap.add_argument("--n-step", type=int, default=1,
+                    help="n-шаговые возвраты внутри эпизода (1 = как раньше)")
+    ap.add_argument("--dqfd", type=float, default=0.0,
+                    help="Вес отступного лосса DQfD (0 = выключен)")
+    ap.add_argument("--dqfd-margin", type=float, default=0.8,
+                    help="Отступ L(a_E,a) в лоссе DQfD")
+    ap.add_argument("--l2", type=float, default=0.0,
+                    help="weight_decay в Adam (L2 из DQfD)")
+    ap.add_argument("--pbrs", type=float, default=0.0,
+                    help="Вес потенциального преобразования награды, Ф=-log10(ошибка)")
+    ap.add_argument("--smdp", action="store_true",
+                    help="Дисконт по длительности действия: gamma^(эпохи/scale)")
+    ap.add_argument("--smdp-scale", type=float, default=100.0)
+    ap.add_argument("--ckpt-every", type=int, default=0,
+                    help="Снимать чекпоинт каждые N эпох (для --fqe-select)")
+    ap.add_argument("--fqe-select", action="store_true",
+                    help="Выбрать чекпоинт с лучшей ценностью по FQE на отложенных эпизодах")
+    ap.add_argument("--select-policy", default="mean", choices=["mean", "cvar"])
+    ap.add_argument("--model-tag", default="",
+                    help="Суффикс в именах результатов и чекпоинта: арм не перетирает базу")
     args = ap.parse_args()
+    if args.fqe_select and not args.ckpt_every:
+        ap.error("--fqe-select требует --ckpt-every N")
+    if args.n_step < 1:
+        ap.error("--n-step должен быть >= 1")
     if args.smoke:
         args.epochs, args.fqe_epochs = 2, 2
 
@@ -710,11 +892,15 @@ def main():
             row = dict(variant=args.variant, policy=pol, seed=seed, gamma=GAMMA,
                        fixed_ns=bool(args.fix_next_state), dataset=args.subdir,
                        n_params=net.n_params(), train_time_s=round(train_time, 1),
-                       epochs=args.epochs, smoke=args.smoke, **m, **fq)
+                       epochs=args.epochs, smoke=args.smoke,
+                       aug=args.aug, n_step=args.n_step, dqfd=args.dqfd,
+                       l2=args.l2, pbrs=args.pbrs, smdp=bool(args.smdp),
+                       model_tag=args.model_tag, **getattr(net, "extra", {}), **m, **fq)
             print(json.dumps(row), flush=True)
             if not args.smoke:
                 tag = ("_fixns" if args.fix_next_state else "") + \
-                      ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0])
+                      ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0]) + \
+                      (("_" + args.model_tag) if args.model_tag else "")
                 upload_result(row, f"{args.variant}{tag}_{pol}_seed{seed}")
         if args.save_model and not args.smoke:
             import torch as _t
@@ -722,7 +908,8 @@ def main():
                     "state_dict": {k: v.cpu() for k, v in net.model.state_dict().items()},
                     "mean": stats["mean"], "std": stats["std"]}
             sfx = ("_fixns" if args.fix_next_state else "") + \
-                  ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0])
+                  ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0]) + \
+                  (("_" + args.model_tag) if args.model_tag else "")
             fn = f"/tmp/agent_{args.variant}{sfx}_seed{seed}.pt"
             _t.save(ckpt, fn)
             tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")

@@ -143,6 +143,9 @@ def load_agent(model_file):
     return net, ckpt["mean"], ckpt["std"], ckpt["variant"]
 
 
+Q_POLICY = "auto"   # auto | mean | cvar — как сводить квантили к скаляру
+
+
 def pick_action(agent, state, mean, std, variant):
     # deepxde на GPU ставит default device = cuda, поэтому вход надо создавать
     # на том же устройстве, где лежат веса агента
@@ -152,7 +155,14 @@ def pick_action(agent, state, mean, std, variant):
         hlg = getattr(agent, "_hlg", None)
         if hlg is not None:
             q = hlg.to_scalar(agent.q_online(x))
+        elif Q_POLICY == "cvar":
+            q = agent.q_cvar(x)
+        elif Q_POLICY == "mean":
+            q = agent.q_scalar(x)
         else:
+            # auto — прежнее поведение: у cnn_qrdqn и cnx_cql_qr политика по CVaR,
+            # у остальных (включая cnx_qrdqn) по среднему. Оставлено ради
+            # воспроизводимости уже снятых прогонов; для новых задавайте явно
             q = (agent.q_cvar(x) if variant in ("cnn_qrdqn", "cnx_cql_qr")
                  else agent.q_scalar(x))
     return int(q.argmax(1).item())
@@ -271,6 +281,9 @@ def run_seed(seed, args, progress_cb=None):
     agent = mean = std = variant = None
     if args.policy == "agent":
         agent, mean, std, variant = load_agent(args.model_file)
+        if Q_POLICY == "cvar" and variant not in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
+            sys.exit(f"--q-policy cvar требует квантильного варианта, а в чекпоинте "
+                     f"{variant}: у него один выход на действие, брать хвост распределения не из чего")
 
     vm = VisualizationModel(device=dev, path_to_plot_model=None,
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
@@ -485,6 +498,8 @@ def main():
                     help="Индекс повторяемого действия для --policy fixed "
                          "(4 = Adam lr 1e-3 x 1000 эпох)")
     ap.add_argument("--model-file", default=None)
+    ap.add_argument("--q-policy", default="auto", choices=["auto", "mean", "cvar"],
+                    help="Как сводить квантили к скаляру у квантильных вариантов")
     ap.add_argument("--seeds", default="42,43,44")
     ap.add_argument("--pde", default="poissonboltzmann2d")
     ap.add_argument("--hidden-layers", default="100*5")
@@ -529,6 +544,8 @@ def main():
                          "none/plateau/midpoint — там карты не используются")
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
+    global Q_POLICY
+    Q_POLICY = args.q_policy
     if args.no_state and (args.policy == "agent"
                           or args.boost_trigger.startswith("landscape")):
         sys.exit("--no-state несовместим с policy=agent и ландшафтными триггерами: "
