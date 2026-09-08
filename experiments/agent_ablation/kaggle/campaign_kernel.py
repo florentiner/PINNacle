@@ -66,6 +66,22 @@ def sh(cmd, **kwargs):
     return subprocess.run(cmd, shell=True, check=True, **kwargs)
 
 
+def sh_retry(cmd, attempts=5, wait=30, **kwargs):
+    """Как sh(), но с повтором: сетевые шаги (клон, pip) иногда падают на
+    воркере Kaggle из-за мгновенного сбоя DNS — одна такая секунда стоила бы
+    всего 10-часового слота сессии."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return sh(cmd, **kwargs)
+        except subprocess.CalledProcessError as exc:
+            if attempt == attempts:
+                raise
+            pause = wait * attempt
+            print(f"⚠️  шаг не прошёл (попытка {attempt}/{attempts}, код {exc.returncode}); "
+                  f"повтор через {pause} с", flush=True)
+            time.sleep(pause)
+
+
 def ensure_torch_matches_gpu():
     """Kaggle через API не даёт выбрать модель GPU и может выдать P100 (sm_60),
     который предустановленный torch (sm_70+) не поддерживает — падение
@@ -125,7 +141,7 @@ def main():
     os.makedirs(os.path.dirname(CLONE_DIR), exist_ok=True)
     if os.path.exists(CLONE_DIR):
         shutil.rmtree(CLONE_DIR)
-    sh(f"git clone -b {BRANCH} --single-branch {REPO_URL} {CLONE_DIR}")
+    sh_retry(f"rm -rf {CLONE_DIR} && git clone -b {BRANCH} --single-branch {REPO_URL} {CLONE_DIR}")
     if COMMIT:
         sh(f"git -C {CLONE_DIR} checkout --quiet {COMMIT}")
     sh(f"git -C {CLONE_DIR} log -1 --format='КОММИТ КОДА: %h %cd %s' --date=iso")
@@ -135,7 +151,7 @@ def main():
         sys.exit(f"❌ В клоне нет {RUNNER}: ветка {BRANCH} ещё не содержит раннер "
                  "расширенной кампании — сначала запушьте код, потом пушьте кернелы.")
 
-    sh(f"{sys.executable} -m pip install -q gym python-dotenv dill")
+    sh_retry(f"{sys.executable} -m pip install -q gym python-dotenv dill")
     ensure_torch_matches_gpu()
 
     os.chdir(CLONE_DIR)
