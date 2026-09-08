@@ -173,12 +173,15 @@ def build_cells(args):
             f"{', '.join(unavailable)}."
         )
 
-    missing_tol = [k for k in keys if PDE_SPECS[k].tolerance is None]
-    if missing_tol:
+    # Критерий успеха по умолчанию — L2RE против эталона (формула 11 статьи),
+    # и порог берётся как EPS_FACTOR x peline_l2re. Значит нужен эталон из
+    # таблицы 1, а не откалиброванный по буферу loss-порог.
+    missing_eps = [k for k in keys if PDE_SPECS[k].eps_l2re is None]
+    if missing_eps:
         raise SystemExit(
-            "У этих уравнений не откалиброван порог успеха, кампания на них "
-            f"считаться не должна: {', '.join(missing_tol)}.\n"
-            "Посчитайте calibrate_tolerance.py и впишите значения в реестр."
+            "У этих уравнений нет эталонного L2RE в реестре, порог успеха взять "
+            f"неоткуда: {', '.join(missing_eps)}.\n"
+            "Впишите peline_l2re из таблицы 1 статьи."
         )
 
     # Порядок ячеек — СИД-МАЖОРНЫЙ: сначала все уравнения x все режимы на первом

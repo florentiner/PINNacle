@@ -35,6 +35,17 @@
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
+# Во сколько раз порог успеха выше эталонной ошибки уравнения.
+#
+# Статья задаёт КРИТЕРИЙ успеха (формула 11: e(theta) <= eps, где e — ошибка
+# против эталонного решения), но само значение eps не публикует — ни в статье,
+# ни в ответе ревьюерам его нет. Поэтому единственная свободная величина здесь
+# привязана к уже опубликованному числу: eps = EPS_FACTOR x L2RE из таблицы 1
+# (колонка PELINE). Множитель 2 выбран по собранным траекториям: при 1.5x
+# poissoninv не берётся вовсе, при 3x почти всё уходит в 100%, при 2x доли
+# успеха ложатся в 44-100% — то есть метрика различает режимы.
+EPS_FACTOR = 2.0
+
 # Режимы абляции DQN-стека (совпадают с RL.rl_algorithms.ABLATION_MODES).
 ABLATION_MODES = ("none", "no_per", "no_soft_watkins", "no_trust_region")
 
@@ -65,6 +76,11 @@ class PDESpec:
     # False — класс задачи в этой ветке ещё не реализован: спецификация есть,
     # но собрать и посчитать уравнение нельзя (select() его не отдаёт).
     available: bool = True
+
+    @property
+    def eps_l2re(self) -> Optional[float]:
+        """Порог успеха траектории по критерию статьи: L2RE против эталона."""
+        return None if self.peline_l2re is None else EPS_FACTOR * self.peline_l2re
 
     @property
     def optimizers(self) -> Dict:

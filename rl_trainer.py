@@ -203,6 +203,15 @@ def run_deepxde_rl_training(
     trajectory_logger = rl_agent_params.get("trajectory_logger")
     run_control = rl_agent_params.get("run_control")
 
+    # Критерий успеха: "l2re" (как в статье), "rmse" (формула 15) или "loss"
+    # (кампания v5 и loss-вариант из ответа ревьюерам).
+    success_metric = str(rl_agent_params.get("success_metric", "loss")).lower()
+    success_op_coeff = float(rl_agent_params.get("success_op_coeff", 1.0))
+    success_bnd_coeff = float(rl_agent_params.get("success_bnd_coeff", 0.0))
+
+    # Максимальная длина цепочки: в статье Kmax = 10 (формула 11).
+    max_chain_length = int(rl_agent_params.get("max_chain_length", 10))
+
     # Режим оценки: жадная политика, фиксированный бюджет шагов, агент не обучается
     eval_only = bool(rl_agent_params.get("eval_only", False))
     fixed_steps = int(rl_agent_params.get("fixed_steps", 0))
@@ -462,9 +471,35 @@ def run_deepxde_rl_training(
                 print(f"Weighted train loss: {train_loss}")
 
                 env.solver_models = solver_models
-                env.reward_params = {
-                    "loss": train_loss,
-                }
+                # Критерий успеха траектории. Статья (формулы 11 и 15) и ответ
+                # ревьюерам ("Stopping criterion (agent training): Yes")
+                # определяют его как ошибку против ЭТАЛОННОГО решения, а не как
+                # train loss. Обе ветки есть в EnvRLOptimizer.step(); какую
+                # выбрать, задаёт success_metric:
+                #   "l2re" — относительная L2-ошибка против эталона; та самая
+                #            величина, что в таблице 1 статьи, нормированная и
+                #            сравнимая между задачами (по умолчанию);
+                #   "rmse" — E = λ_op·RMSE_op + λ_bc·RMSE_bc буквально по (15);
+                #   "loss" — взвешенный train loss; так считалась кампания v5 и
+                #            loss-вариант из ответа ревьюерам.
+                if success_metric == "loss":
+                    env.reward_params = {"loss": train_loss}
+                else:
+                    op_err, bnd_err = (
+                        (tester_callback.l2re, tester_callback.bc_l2re)
+                        if success_metric == "l2re" else (rmse, b_rmse)
+                    )
+                    # bc-метрика бывает NaN, если у задачи нет опорных точек на
+                    # границе: тогда считаем критерий по одному оператору,
+                    # иначе success никогда не сработает.
+                    if not np.isfinite(bnd_err):
+                        bnd_err, bnd_w = 0.0, 0.0
+                    else:
+                        bnd_w = success_bnd_coeff
+                    env.reward_params = {
+                        "operator": {"coeff": success_op_coeff, "error": float(op_err)},
+                        "bconds": {"coeff": bnd_w, "error": float(bnd_err)},
+                    }
                 env.rl_penalty = rl_penalty
 
                 optimizers_history.append(action["type"])
@@ -534,7 +569,10 @@ def run_deepxde_rl_training(
             if done == 1:
                 break
             elif done == 0:
-                if t == 10:
+                # Kmax из статьи (формула 11): дойдя до предела длины цепочки,
+                # помечаем эпизод неуспешным. rl_penalty=-1 заставляет env
+                # выставить done=-1 на следующем шаге.
+                if (t + 1) >= max_chain_length:
                     rl_penalty = -1
             elif done == -1:
                 rl_penalty = 0

@@ -125,7 +125,15 @@ def build_parser():
     parser.add_argument("--smoke-test", action="store_true",
                         help="Пометить строки CSV как smoke_test=True (не зачётный запуск).")
     parser.add_argument("--tolerance", type=float, default=None,
-                        help="Переопределить порог успеха траектории (по умолчанию — из реестра).")
+                        help="Переопределить порог успеха траектории (по умолчанию — из реестра: "
+                             "для l2re это EPS_FACTOR x эталонного L2RE, для loss — tolerance).")
+    parser.add_argument("--success-metric", choices=["l2re", "rmse", "loss"], default="l2re",
+                        help="Чем меряется успех траектории. l2re — относительная L2-ошибка "
+                             "против эталона, критерий статьи (формула 11), по умолчанию; "
+                             "rmse — E = RMSE_op + RMSE_bc буквально по формуле (15); "
+                             "loss — взвешенный train loss, как считалась кампания v5.")
+    parser.add_argument("--max-chain-length", type=int, default=10,
+                        help="Kmax из формулы (11) статьи: предел длины цепочки.")
     parser.add_argument("--offline-pretrain-steps", type=int, default=DEFAULT_PRETRAIN_STEPS,
                         help="Шагов оффлайн-претрена агента на буфере до онлайн-траекторий "
                              "(0 = выключить). Каждый шаг = --offline-pretrain-iters апдейтов.")
@@ -180,7 +188,12 @@ def print_registry():
 def resolve_config(args):
     """Сводит CLI и реестр в один словарь настроек запуска."""
     spec = get_spec(args.pde)
-    tolerance = args.tolerance if args.tolerance is not None else spec.tolerance
+    if args.tolerance is not None:
+        tolerance = args.tolerance
+    elif args.success_metric == "loss":
+        tolerance = spec.tolerance
+    else:
+        tolerance = spec.eps_l2re
     if tolerance is None:
         raise SystemExit(
             f"У уравнения {spec.key} порог успеха не откалиброван. Посчитайте его по "
@@ -230,6 +243,8 @@ def main():
             "seed": args.seed,
             "hidden_layers": cfg["hidden_layers"],
             "tolerance": cfg["tolerance"],
+            "success_metric": args.success_metric,
+            "max_chain_length": args.max_chain_length,
             "optimizers": cfg["optimizers"],
             "buffer": {"src": args.buffer_src, "hf_repo": args.hf_repo,
                        "hf_subdir": cfg["hf_subdir"], "comet_project": cfg["buffer_proj"],
@@ -451,6 +466,10 @@ def main():
         "n_save_models": args.n_save_models,
         "n_trajectories": args.n_trajectories,
         "tolerance": cfg["tolerance"],
+        "success_metric": args.success_metric,
+        "success_op_coeff": 1.0,
+        "success_bnd_coeff": 0.0,
+        "max_chain_length": args.max_chain_length,
         "use_tol": False,
         "new_tol": True,
         "prev_tol": 0.0,
