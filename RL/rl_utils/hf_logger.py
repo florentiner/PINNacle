@@ -54,6 +54,39 @@ def _json_safe(value):
     return str(value)
 
 
+def hf_retry(fn, *args, what="HF-запрос", attempts=8, base_wait=30.0, **kwargs):
+    """Повтор HF-вызова при 429 (лимит запросов) и сетевых сбоях.
+
+    У аккаунта HF общий лимит ~1000 API-запросов на 5 минут, и он ОБЩИЙ для
+    всех параллельных сессий кампании: одна `snapshot_download` буфера — это
+    запрос на каждый файл (у heatinv их 212), поэтому два десятка сессий,
+    стартовавших разом, выбивают лимит за минуты. Ошибка приходит как 429 с
+    заголовком "Retry after N seconds" — ждём именно столько, если сказано.
+    """
+    import random as _random
+    import re as _re
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            text = str(exc)
+            is_429 = "429" in text or "rate limit" in text.lower()
+            is_net = any(s in type(exc).__name__.lower() for s in ("timeout", "connection"))
+            if not (is_429 or is_net) or attempt == attempts:
+                raise
+            wait = base_wait * (2 ** (attempt - 1))
+            match = _re.search(r"[Rr]etry after (\d+)", text)
+            if match:
+                wait = float(match.group(1)) + 5.0
+            wait = min(wait, 600.0) + _random.uniform(0, 15)
+            print(f"⏳ {what}: попытка {attempt}/{attempts} не прошла "
+                  f"({'лимит запросов HF' if is_429 else type(exc).__name__}); "
+                  f"ждём {wait:.0f} с", flush=True)
+            time.sleep(wait)
+
+
+
 class HFExperiment:
     """Пишет метрики/параметры/ассеты локально и синхронизирует их на HF."""
 
@@ -102,7 +135,8 @@ class HFExperiment:
         from huggingface_hub import HfApi
 
         self._api = HfApi(token=token)
-        self._api.create_repo(repo_id, repo_type="dataset", private=private, exist_ok=True)
+        hf_retry(self._api.create_repo, repo_id, repo_type="dataset", private=private,
+                 exist_ok=True, what="create_repo")
         print(f"📤 HF-логгер: {repo_id}/{self.repo_path} (локально: {self.run_dir})")
 
     # --- интерфейс, совместимый с comet-экспериментом ---

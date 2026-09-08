@@ -52,6 +52,8 @@ KERNEL_TEMPLATE = Path(__file__).with_name("campaign_kernel.py")
 # Недельная квота GPU на аккаунт Kaggle (по ней считается, сколько волн
 # в неделю получится прогнать).
 WEEKLY_GPU_QUOTA_H = 30.0
+# Шаг разноса стартов сессий внутри волны, секунды (см. build).
+DEFAULT_START_SPACING_SEC = 90
 
 MODE_SLUG = {
     "none": "full",
@@ -274,6 +276,7 @@ def cmd_plan(args):
         "hf_results": args.hf_results,
         "hf_buffer": args.hf_buffer,
         "slots_per_account": args.slots_per_account,
+        "start_spacing_sec": args.start_spacing_sec,
         "n_accounts": len(accounts),
         "waves": waves,
     }
@@ -334,6 +337,7 @@ def render_kernel(manifest, cell, hf_token):
         "HF_RESULTS": manifest["hf_results"],
         "HF_BUFFER": manifest["hf_buffer"],
         "HF_PREFIX": manifest["prefix"],
+        "START_DELAY_SEC": str(int(cell.get("start_delay_sec", 0))),
     }
     for name, value in replacements.items():
         pattern = rf'^{name} = os\.getenv\("{name}", "[^"]*"\)$'
@@ -366,7 +370,11 @@ def cmd_build(args):
                          "в них зашивается HF_TOKEN.")
     out_root.mkdir(parents=True, exist_ok=True)
 
-    for cell in wave:
+    # Разносим старты: ячейка i ждёт i*spacing секунд. Так пик обращений к HF
+    # растягивается и лимит 1000 запросов / 5 мин не выбивается.
+    spacing = int(manifest.get("start_spacing_sec", DEFAULT_START_SPACING_SEC))
+    for index, cell in enumerate(wave):
+        cell["start_delay_sec"] = index * spacing
         cell_dir = out_root / cell["account"] / cell["kernel_slug"]
         cell_dir.mkdir(parents=True, exist_ok=True)
         (cell_dir / "campaign_kernel.py").write_text(
@@ -507,6 +515,10 @@ def main():
     # идёт до часа. Плюс финальная выгрузка на HF с ретраями (до ~8 мин).
     # 10.5 + 1 + 0.15 = 11.65 ч, запас есть; при 10.75 его почти нет.
     p_plan.add_argument("--max-hours", type=float, default=10.5)
+    p_plan.add_argument("--start-spacing-sec", type=int, default=DEFAULT_START_SPACING_SEC,
+                        help="Разнос стартов сессий внутри волны, секунд на ячейку. "
+                             "Защищает от лимита HF (1000 запросов / 5 мин на аккаунт, "
+                             "общий для всех сессий). Пауза вычитается из бюджета сессии.")
     p_plan.add_argument("--resume", default="auto", choices=["auto", "none"])
     p_plan.add_argument("--commit", default="",
                         help="Пин коммита раннера (иначе HEAD ветки).")

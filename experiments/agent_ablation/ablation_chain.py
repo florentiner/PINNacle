@@ -275,11 +275,18 @@ def main():
         buffer_dir = args.buffer_dir
     elif args.buffer_src == "hf":
         from huggingface_hub import snapshot_download
+        from RL.rl_utils.hf_logger import hf_retry
 
-        ds_root = snapshot_download(
+        # Скачивание буфера — это запрос на каждый файл (их до ~400), а лимит
+        # HF (1000 запросов / 5 мин) общий на все параллельные сессии кампании.
+        # max_workers=2 сглаживает всплеск, hf_retry переживает 429.
+        ds_root = hf_retry(
+            snapshot_download,
             repo_id=args.hf_repo,
             repo_type="dataset",
             allow_patterns=[f"{cfg['hf_subdir']}/*"],
+            max_workers=2,
+            what=f"скачивание буфера {cfg['hf_subdir']}",
         )
         buffer_dir = os.path.join(ds_root, cfg["hf_subdir"])
         if not os.path.isdir(buffer_dir):

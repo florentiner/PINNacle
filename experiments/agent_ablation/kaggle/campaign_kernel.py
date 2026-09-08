@@ -46,6 +46,12 @@ HF_PREFIX = os.getenv("HF_PREFIX", "runs_kaggle_v6")
 # и при 900 с это ~200 коммитов в час — HF начинает отвечать 429; при 1800 с
 # вдвое меньше, а теряется при обрыве всё равно не больше одного интервала.
 HF_SYNC_SEC = os.getenv("HF_SYNC_SEC", "1800")
+# Пауза перед стартом, секунды. Ставится генератором своя на каждую ячейку:
+# скачивание буфера — это запрос на каждый файл, а лимит HF (1000 запросов /
+# 5 мин) общий на все сессии кампании. Полсотни сессий, стартовавших разом,
+# выбивают его за минуты — так упали 5 ячеек первой волны. Пауза вычитается
+# из MAX_HOURS, чтобы сессия всё равно уложилась в 12-часовой лимит Kaggle.
+START_DELAY_SEC = os.getenv("START_DELAY_SEC", "0")
 HF_TOKEN_EMBEDDED = ""  # подставляется генератором в пушимую копию
 
 REPO_URL = "https://github.com/florentiner/PINNacle.git"
@@ -104,8 +110,16 @@ def main():
     else:
         print("⚠️  HF_TOKEN не найден — результаты останутся только в output кернела.")
 
+    delay = max(0.0, float(START_DELAY_SEC))
+    max_hours = float(MAX_HOURS)
+    if delay > 0:
+        max_hours = max(1.0, max_hours - delay / 3600.0)
+        print(f"⏸  Пауза перед стартом {delay/60:.0f} мин (разносим обращения к HF); "
+              f"бюджет сессии уменьшен до {max_hours:.2f} ч", flush=True)
+        time.sleep(delay)
+
     run_tag = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{socket.gethostname()}_seed{SEED}"
-    print(f"Ячейка: PDE={PDE}, MODE={MODE}, SEED={SEED}, MAX_HOURS={MAX_HOURS}, "
+    print(f"Ячейка: PDE={PDE}, MODE={MODE}, SEED={SEED}, MAX_HOURS={max_hours:.2f}, "
           f"PREFIX={HF_PREFIX}, run_tag={run_tag}", flush=True)
 
     os.makedirs(os.path.dirname(CLONE_DIR), exist_ok=True)
@@ -130,7 +144,7 @@ def main():
         "--pde", PDE,
         "--ablation", MODE,
         "--seed", SEED,
-        "--max-hours", MAX_HOURS,
+        "--max-hours", f"{max_hours:.4f}",
         "--buffer-src", "hf",
         "--hf-repo", HF_BUFFER,
         "--hf-results", HF_RESULTS,
