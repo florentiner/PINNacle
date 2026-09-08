@@ -27,10 +27,12 @@ smoke_test=True выбрасываются. success rate считается от
 """
 import argparse
 import csv
+import json
 import math
 import os
 import statistics
 import sys
+import collections
 from collections import defaultdict
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -103,6 +105,25 @@ def fmt(value, digits=6):
     return value
 
 
+def run_params(repo, run_base):
+    """params.json прогона: по нему отличаем прогоны с разным критерием успеха.
+
+    Под одним префиксом могут лежать прогоны разных ревизий протокола — так
+    вышло с runs_kaggle_v6, где первая попытка считалась по train loss, а
+    вторая по L2RE против эталона (критерий статьи). Смешивать их в одну
+    строку таблицы нельзя.
+    """
+    from huggingface_hub import hf_hub_download
+
+    try:
+        local = hf_hub_download(repo, repo_type="dataset",
+                                filename=f"{run_base}/results/params.json")
+        with open(local, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def read_rows(repo, path):
     from huggingface_hub import hf_hub_download
 
@@ -159,6 +180,11 @@ def main():
     parser.add_argument("--out", default="ablation_final_metrics.csv")
     parser.add_argument("--pde", action="append", default=None,
                         help="Ограничить уравнениями (можно повторять).")
+    parser.add_argument("--success-metric", default=None,
+                        choices=["l2re", "rmse", "loss"],
+                        help="Брать только прогоны с этим критерием успеха (читается "
+                             "из results/params.json). Под одним префиксом могут лежать "
+                             "прогоны разных ревизий протокола.")
     parser.add_argument("--keep-smoke", action="store_true",
                         help="Не выбрасывать строки smoke_test=True.")
     parser.add_argument("--upload", action="store_true",
@@ -178,6 +204,7 @@ def main():
     # (pde, mode, seed) -> строки; сид берём из строки CSV, а не из run_tag
     by_agent = defaultdict(list)
     run_tags = defaultdict(set)
+    skipped_metric = collections.Counter()
     for path in sorted(csv_paths):
         parts = path.split("/")  # prefix / pde / mode / run_tag / results / file
         if len(parts) < 6:
@@ -185,6 +212,11 @@ def main():
         pde, mode, run_tag = parts[1], parts[2], parts[3]
         if args.pde and pde not in args.pde:
             continue
+        if args.success_metric:
+            got = run_params(args.hf_repo, "/".join(parts[:4])).get("success_metric", "loss")
+            if got != args.success_metric:
+                skipped_metric[got] += 1
+                continue
         try:
             rows = read_rows(args.hf_repo, path)
         except Exception as exc:
@@ -196,6 +228,10 @@ def main():
             seed = row.get("seed", "") or "?"
             by_agent[(pde, mode, seed)].append(row)
             run_tags[(pde, mode, seed)].add(run_tag)
+
+    if skipped_metric:
+        print("пропущено прогонов с другим критерием успеха: "
+              + ", ".join(f"{k}={v}" for k, v in sorted(skipped_metric.items())))
 
     agent_rows, agg_rows = [], []
     pdes = sorted({k[0] for k in by_agent}, key=lambda p: list(PDE_SPECS).index(p) if p in PDE_SPECS else 99)
