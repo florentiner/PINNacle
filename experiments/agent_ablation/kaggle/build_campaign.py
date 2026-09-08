@@ -441,6 +441,46 @@ def cmd_push(args):
         if not keep:
             print("Перезапускать нечего — упавших ячеек нет.")
             return 0
+        if args.reassign:
+            # Аккаунт может быть устойчиво нерабочим: на Kaggle интернет из
+            # кернела включается только после подтверждения телефона, и без
+            # него git clone падает с "Could not resolve host" на всех попытках.
+            # Перевешиваем такую ячейку на наименее загруженный другой аккаунт.
+            load = existing_load(args.campaign_root, args.prefix)
+            names = [a for a, _ in load_accounts(args.accounts_file)]
+            for cell in keep:
+                old_account = cell["account"]
+                candidates = [a for a in names if a != old_account]
+                if not candidates:
+                    continue
+                new_account = min(candidates, key=lambda a: (load[a], names.index(a)))
+                load[new_account] += 1
+                load[old_account] = max(0, load[old_account] - 1)
+                cell["account"] = new_account
+                cell["kernel_id"] = f"{new_account}/{cell['kernel_slug']}"
+                cell["reassigned_from"] = old_account
+                print(f"   переношу {cell['pde']}/{cell['mode']}: "
+                      f"{old_account} -> {new_account}")
+            # пакеты надо пересобрать под новый аккаунт
+            hf_token = read_hf_token(args)
+            for cell in keep:
+                cell_dir = (Path(args.campaign_root) / manifest["prefix"] / (args.batch or "")
+                            / f"wave{args.wave}" / cell["account"] / cell["kernel_slug"])
+                cell_dir.mkdir(parents=True, exist_ok=True)
+                (cell_dir / "campaign_kernel.py").write_text(
+                    render_kernel(manifest, cell, hf_token), encoding="utf-8")
+                (cell_dir / "kernel-metadata.json").write_text(json.dumps({
+                    "id": cell["kernel_id"], "title": cell["kernel_slug"],
+                    "code_file": "campaign_kernel.py", "language": "python",
+                    "kernel_type": "script", "is_private": True, "enable_gpu": True,
+                    "enable_tpu": False, "enable_internet": True, "keywords": [],
+                    "dataset_sources": [], "kernel_sources": [],
+                    "competition_sources": [], "model_sources": [],
+                }, indent=2), encoding="utf-8")
+                cell["package_dir"] = str(cell_dir)
+            manifest_path(args.campaign_root, args.prefix, args.batch).write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
         print(f"К перезапуску {len(keep)} ячеек:")
         for cell in keep:
             print(f"   {cell['pde']}/{cell['mode']} seed{cell['seed']}  {cell['kernel_id']}")
@@ -566,6 +606,9 @@ def main():
         p.add_argument("--wave", type=int, default=1)
         if name == "push":
             p.add_argument("--yes", action="store_true", help="подтвердить запуск сессий")
+            p.add_argument("--reassign", action="store_true",
+                           help="Перевесить упавшие ячейки на другой аккаунт (когда "
+                                "аккаунт устойчиво нерабочий, например без интернета).")
             p.add_argument("--retry-failed", action="store_true",
                            help="Запушить только ячейки, которые сейчас упали или не "
                                 "запускались; работающие сессии не трогать.")
