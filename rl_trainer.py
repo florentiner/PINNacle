@@ -231,6 +231,15 @@ def run_deepxde_rl_training(
                          loss_surface_params=loss_surface_params,
                          n_save_models=rl_agent_params['n_save_models'],
                          tolerance=rl_agent_params["tolerance"])
+    # Порог для разметки офлайн-буфера — отдельная величина. В буфере лежат
+    # только лоссы (loss_total/loss_oper/loss_bnd), эталонного решения там нет,
+    # поэтому done=1 в нём нельзя ставить по L2RE-порогу онлайн-критерия:
+    # это разные шкалы. По умолчанию совпадает с онлайн-порогом (старое
+    # поведение, когда критерий тоже был по лоссу).
+    buffer_tolerance = rl_agent_params.get("buffer_tolerance")
+    if buffer_tolerance is None:
+        buffer_tolerance = rl_agent_params["tolerance"]
+    buffer_tolerance = float(buffer_tolerance)
     env.configure_chain_reward(
         alpha=rl_agent_params.get("chain_reward_alpha", 0.2),
         dense_clip=rl_agent_params.get("chain_reward_dense_clip", 5.0),
@@ -275,7 +284,7 @@ def run_deepxde_rl_training(
     elif rl_agent_params.get("buffer_dir"):
         # Локальный буфер (экспортированный из Comet заранее) — COMET_API_KEY не нужен
         rl_agent.replay_buffer = collect_all_local_transitions(rl_agent.replay_buffer, buffer_dir=rl_agent_params["buffer_dir"],
-                                                               max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
+                                                               max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = buffer_tolerance,
                                                                prev_tol= rl_agent_params["prev_tol"], new_tol = rl_agent_params["new_tol"],
                                                                use_log_state=rl_agent_params["log_key"],
                                                                proj_name=rl_agent_params["proj_name"],
@@ -283,7 +292,7 @@ def run_deepxde_rl_training(
                                                                recompute_chain_rewards=rl_agent_params.get("recompute_chain_rewards", True),
                                                             set_reward_from_next_loss=rl_agent_params.get("set_reward_from_next_loss", True))
     else:
-        rl_agent.replay_buffer = collect_all_comet_transitions(rl_agent.replay_buffer, max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = rl_agent_params["tolerance"],
+        rl_agent.replay_buffer = collect_all_comet_transitions(rl_agent.replay_buffer, max_exps_last=rl_agent_params.get("n_exps", 500), tolerance = buffer_tolerance,
                                                            prev_tol= rl_agent_params["prev_tol"], use_tol = rl_agent_params["use_tol"], new_tol = rl_agent_params["new_tol"],
                                                            use_log_state=rl_agent_params["log_key"],
                                                            proj_name=rl_agent_params["proj_name"],

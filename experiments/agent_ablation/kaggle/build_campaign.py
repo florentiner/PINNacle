@@ -428,6 +428,49 @@ def cell_state(cell, token):
     return "unknown"
 
 
+def cmd_stop(args):
+    """Останавливает сессии волны.
+
+    Программной паузы у Kaggle нет: единственный способ снять работающую
+    сессию — удалить кернел (kaggle kernels delete). Результаты от этого не
+    теряются, они лежат на HF; следующий push создаёт кернел заново, а
+    resume=auto подхватывает последний чекпоинт.
+    """
+    manifest, _ = load_manifest(args)
+    wave = wave_of(manifest, args.wave)
+    tokens = dict(load_accounts(args.accounts_file))
+    if args.only_pde:
+        wave = [c for c in wave if c["pde"] in set(args.only_pde)]
+
+    if not args.yes:
+        print(f"Волна {args.wave}: будет снято {len(wave)} сессий "
+              f"(kaggle kernels delete). Повторите с --yes.")
+        for cell in wave[:10]:
+            print(f"   {cell['kernel_id']}")
+        if len(wave) > 10:
+            print(f"   ... ещё {len(wave) - 10}")
+        return 1
+
+    stopped, failed = 0, []
+    for cell in wave:
+        token = tokens.get(cell["account"])
+        if not token:
+            failed.append((cell["kernel_id"], "нет токена"))
+            continue
+        res = kaggle_cli(cell["account"], token,
+                         ["kernels", "delete", "-y", cell["kernel_id"]], timeout=300)
+        out = (res.stdout + res.stderr).strip().replace("\n", " ")
+        ok = res.returncode == 0
+        stopped += ok
+        if not ok:
+            failed.append((cell["kernel_id"], out[:160]))
+        print(f"{'OK  ' if ok else 'FAIL'} {cell['kernel_id']}: {out[:110]}")
+    print(f"\nСнято: {stopped}/{len(wave)}")
+    for kid, why in failed:
+        print(f"   не снят {kid}: {why}")
+    return 0 if not failed else 1
+
+
 def cmd_push(args):
     manifest, _ = load_manifest(args)
     wave = wave_of(manifest, args.wave)
@@ -623,9 +666,15 @@ def main():
 
     for name, help_text in (("build", "собрать пуш-пакеты волны"),
                             ("push", "запушить волну"),
+                            ("stop", "снять работающие сессии волны"),
                             ("status", "статусы кернелов волны")):
         p = sub.add_parser(name, parents=[common], help=help_text)
         p.add_argument("--wave", type=int, default=1)
+        if name == "stop":
+            p.add_argument("--yes", action="store_true",
+                           help="подтвердить удаление кернелов")
+            p.add_argument("--only-pde", action="append", default=None,
+                           help="Снять только ячейки этих уравнений.")
         if name == "push":
             p.add_argument("--yes", action="store_true", help="подтвердить запуск сессий")
             p.add_argument("--reassign", action="store_true",
@@ -637,7 +686,8 @@ def main():
 
     args = parser.parse_args()
     handlers = {"accounts": cmd_accounts, "plan": cmd_plan,
-                "build": cmd_build, "push": cmd_push, "status": cmd_status}
+                "build": cmd_build, "push": cmd_push, "stop": cmd_stop,
+                "status": cmd_status}
     sys.exit(handlers[args.command](args))
 
 

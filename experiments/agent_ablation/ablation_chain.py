@@ -124,6 +124,10 @@ def build_parser():
                         help="Колонка value_type в CSV метрик (по умолчанию — режим абляции).")
     parser.add_argument("--smoke-test", action="store_true",
                         help="Пометить строки CSV как smoke_test=True (не зачётный запуск).")
+    parser.add_argument("--buffer-tolerance", type=float, default=None,
+                        help="Порог разметки офлайн-буфера (по лоссу). По умолчанию — "
+                             "tolerance из реестра; для --success-metric loss совпадает "
+                             "с онлайн-порогом.")
     parser.add_argument("--tolerance", type=float, default=None,
                         help="Переопределить порог успеха траектории (по умолчанию — из реестра: "
                              "для l2re это EPS_FACTOR x эталонного L2RE, для loss — tolerance).")
@@ -200,6 +204,26 @@ def resolve_config(args):
             f"буферу (experiments/agent_ablation/calibrate_tolerance.py --pde {spec.key}) "
             "и впишите в реестр либо передайте --tolerance явно."
         )
+
+    # Порог разметки офлайн-буфера — величина другой природы. Онлайн-критерий
+    # статьи (eq. 11) сравнивает ошибку относительно эталонного решения, а в
+    # сохранённых переходах эталона нет: там только loss_total/loss_oper/
+    # loss_bnd. Сравнивать лосс с L2RE-порогом бессмысленно — на heatinv это
+    # оставляет 1 успешный терминал на 15 тысяч переходов, на ns2d_backstep,
+    # наоборот, размечает успехом всё подряд и не оставляет ни одного провала.
+    # Поэтому для буфера берём откалиброванный по нему лосс-порог из реестра.
+    if args.buffer_tolerance is not None:
+        buffer_tolerance = args.buffer_tolerance
+    elif args.success_metric == "loss":
+        buffer_tolerance = tolerance
+    else:
+        buffer_tolerance = spec.tolerance
+    if buffer_tolerance is None:
+        raise SystemExit(
+            f"У уравнения {spec.key} нет лосс-порога для разметки буфера. Посчитайте "
+            f"его (experiments/agent_ablation/prepare_pde.py --pde {spec.key}), впишите "
+            "в реестр как tolerance либо передайте --buffer-tolerance явно."
+        )
     if spec.tier == "unsolvable":
         l2re = f"L2RE ~ {spec.peline_l2re:.2g}" if spec.peline_l2re else "L2RE порядка 1"
         print(f"⚠️  {spec.key}: PELINE на этом уравнении даёт {l2re}. Абляция "
@@ -214,6 +238,7 @@ def resolve_config(args):
         "buffer_proj": args.buffer_proj or spec.comet_project,
         "comet_project": args.comet_project or f"rlpinn-{spec.key.replace('_', '-')}-ablation",
         "tolerance": tolerance,
+        "buffer_tolerance": buffer_tolerance,
         "optimizers": spec.optimizers,
     }
 
@@ -243,6 +268,7 @@ def main():
             "seed": args.seed,
             "hidden_layers": cfg["hidden_layers"],
             "tolerance": cfg["tolerance"],
+            "buffer_tolerance": cfg["buffer_tolerance"],
             "success_metric": args.success_metric,
             "max_chain_length": args.max_chain_length,
             "optimizers": cfg["optimizers"],
@@ -466,6 +492,7 @@ def main():
         "n_save_models": args.n_save_models,
         "n_trajectories": args.n_trajectories,
         "tolerance": cfg["tolerance"],
+        "buffer_tolerance": cfg["buffer_tolerance"],
         "success_metric": args.success_metric,
         "success_op_coeff": 1.0,
         "success_bnd_coeff": 0.0,
