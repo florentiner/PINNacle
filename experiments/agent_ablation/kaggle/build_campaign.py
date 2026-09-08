@@ -461,6 +461,7 @@ def cmd_push(args):
             # Перевешиваем такую ячейку на наименее загруженный другой аккаунт.
             load = existing_load(args.campaign_root, args.prefix)
             names = [a for a, _ in load_accounts(args.accounts_file)]
+            plan = []
             for cell in keep:
                 old_account = cell["account"]
                 candidates = [a for a in names if a != old_account]
@@ -469,14 +470,20 @@ def cmd_push(args):
                 new_account = min(candidates, key=lambda a: (load[a], names.index(a)))
                 load[new_account] += 1
                 load[old_account] = max(0, load[old_account] - 1)
+                plan.append((cell, old_account, new_account))
+                print(f"   переношу {cell['pde']}/{cell['mode']}: "
+                      f"{old_account} -> {new_account}")
+        # Перенос применяем только вместе с реальным пушем. Иначе предпросмотр
+        # (без --yes) записал бы новый аккаунт в манифест, и следующий вызов
+        # увидел бы его занятым и перевесил ячейку обратно на упавший аккаунт.
+        if args.reassign and args.yes:
+            for cell, old_account, new_account in plan:
                 cell["account"] = new_account
                 cell["kernel_id"] = f"{new_account}/{cell['kernel_slug']}"
                 cell["reassigned_from"] = old_account
-                print(f"   переношу {cell['pde']}/{cell['mode']}: "
-                      f"{old_account} -> {new_account}")
             # пакеты надо пересобрать под новый аккаунт
             hf_token = read_hf_token(args)
-            for cell in keep:
+            for cell, _, _ in plan:
                 cell_dir = (Path(args.campaign_root) / manifest["prefix"] / (args.batch or "")
                             / f"wave{args.wave}" / cell["account"] / cell["kernel_slug"])
                 cell_dir.mkdir(parents=True, exist_ok=True)
@@ -493,6 +500,8 @@ def cmd_push(args):
                 cell["package_dir"] = str(cell_dir)
             manifest_path(args.campaign_root, args.prefix, args.batch).write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        elif args.reassign:
+            print("   (перенос запишется в манифест только вместе с --yes)")
 
         print(f"К перезапуску {len(keep)} ячеек:")
         for cell in keep:
