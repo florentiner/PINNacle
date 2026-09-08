@@ -409,14 +409,22 @@ def cmd_build(args):
 # --- пуш и статус ---------------------------------------------------------
 
 def cell_state(cell, token):
-    """Текущее состояние ячейки на Kaggle."""
+    """Текущее состояние ячейки на Kaggle.
+
+    Статус разбирается по строке вида KernelWorkerStatus.RUNNING, а не поиском
+    подстрок в выводе. Наивный поиск слова "error" ловил транзиентные сбои
+    самого API ("500 Server Error" при опросе) и объявлял упавшими живые
+    сессии: один сбой в цикле опроса помечал все 24 ячейки разом. Для
+    --retry-failed это означало бы перезапуск здоровых прогонов.
+    Всё неразобранное — "unknown", и упавшим не считается.
+    """
     res = kaggle_cli(cell["account"], token, ["kernels", "status", cell["kernel_id"]])
     out = (res.stdout + res.stderr).strip().replace("\n", " ")
+    match = re.search(r"KernelWorkerStatus\.([A-Za-z_]+)", out)
+    if match:
+        return match.group(1).lower()
     if "403" in out and "forbidden" in out.lower():
         return "not_pushed"
-    for candidate in ("complete", "running", "error", "cancelAcknowledged", "queued"):
-        if candidate.lower() in out.lower():
-            return candidate
     return "unknown"
 
 
@@ -438,7 +446,9 @@ def cmd_push(args):
             token = tokens.get(cell["account"])
             st = cell_state(cell, token) if token else "нет токена"
             states[st] += 1
-            if st in ("error", "cancelAcknowledged", "not_pushed", "unknown"):
+            # "unknown" сюда НЕ входит: это чаще всего сбой опроса, а не
+            # упавшая сессия, и перезапуск убил бы живой прогон.
+            if st in ("error", "cancel_acknowledged", "not_pushed"):
                 keep.append(cell)
         print("Состояние волны: " + ", ".join(f"{k}={v}" for k, v in sorted(states.items())))
         if not keep:
