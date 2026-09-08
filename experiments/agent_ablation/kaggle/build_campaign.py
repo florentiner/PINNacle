@@ -30,6 +30,7 @@
     python experiments/agent_ablation/kaggle/build_campaign.py status --wave 1
 """
 import argparse
+import collections
 import json
 import math
 import os
@@ -191,23 +192,49 @@ def build_cells(args):
     return cells
 
 
-def assign_waves(cells, accounts, slots_per_account):
+def existing_load(campaign_root, prefix, skip_batch=None):
+    """Сколько сессий уже разложено на каждый аккаунт в других партиях этого
+    префикса. Буферы приезжают порциями, партии пушатся одна за другой, и без
+    этого учёта вторая партия положила бы третью сессию на аккаунт, который в
+    первой уже получил две."""
+    load = collections.Counter()
+    base = Path(campaign_root) / prefix
+    for man_path in sorted(base.glob("*/manifest.json")) + sorted(base.glob("manifest.json")):
+        batch_name = man_path.parent.name if man_path.parent != base else None
+        if skip_batch is not None and batch_name == skip_batch:
+            continue
+        try:
+            man = json.loads(man_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for wave in man.get("waves", []):
+            for cell in wave:
+                load[cell["account"]] += 1
+    return load
+
+
+def assign_waves(cells, accounts, slots_per_account, start_load=None):
     """Раскладка ячеек по аккаунтам: 4 режима одной строки таблицы — на разные
     аккаунты (иначе строка считается последовательно и упирается в квоту).
 
     Волны режутся поровну, а не «полная волна + хвост»: иначе последняя волна
-    занимает пару аккаунтов, а остальные простаивают.
+    занимает пару аккаунтов, а остальные простаивают. Внутри волны аккаунт
+    выбирается по наименьшей текущей загрузке (с учётом других партий), чтобы
+    ни на одном не оказалось больше slots_per_account одновременных сессий.
     """
     per_wave_cap = len(accounts) * slots_per_account
     n_waves = max(1, math.ceil(len(cells) / per_wave_cap))
-    waves, start, offset = [], 0, 0
+    names = [a for a, _ in accounts]
+    load = collections.Counter(start_load or {})
+
+    waves, start = [], 0
     for wave_index in range(n_waves):
         size = math.ceil((len(cells) - start) / (n_waves - wave_index))
         wave = []
-        for i, cell in enumerate(cells[start:start + size]):
-            # Сдвиг переносится между волнами: иначе первые аккаунты берут по
-            # две сессии в каждой волне, а последние простаивают.
-            account, _token = accounts[(offset + i) % len(accounts)]
+        for cell in cells[start:start + size]:
+            # наименее загруженный аккаунт; при равенстве — по порядку в файле
+            account = min(names, key=lambda a: (load[a], names.index(a)))
+            load[account] += 1
             item = dict(cell)
             item["account"] = account
             item["kernel_slug"] = slugify_cell(cell["pde"], cell["mode"], cell["seed"])
@@ -215,7 +242,6 @@ def assign_waves(cells, accounts, slots_per_account):
             wave.append(item)
         waves.append(wave)
         start += size
-        offset = (offset + size) % len(accounts)
     return waves
 
 
@@ -231,7 +257,12 @@ def manifest_path(root, prefix, batch=None):
 def cmd_plan(args):
     accounts = load_accounts(args.accounts_file)
     cells = build_cells(args)
-    waves = assign_waves(cells, accounts, args.slots_per_account)
+    prior = existing_load(args.campaign_root, args.prefix, skip_batch=args.batch)
+    if prior:
+        busiest = ", ".join(f"{a}={n}" for a, n in prior.most_common(3))
+        print(f"Уже разложено в других партиях {args.prefix}: {sum(prior.values())} сессий "
+              f"на {len(prior)} аккаунтах (самые загруженные: {busiest})")
+    waves = assign_waves(cells, accounts, args.slots_per_account, start_load=prior)
 
     manifest = {
         "prefix": args.prefix,
