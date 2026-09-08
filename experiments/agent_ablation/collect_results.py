@@ -44,6 +44,7 @@ AGG_FIELDS = [
     "pde_name", "title", "ablation",
     "n_agents", "n_trajectories", "n_success", "n_fail", "n_interrupted", "success_rate",
     "success_rate_mean_over_agents", "success_rate_ci95",
+    "l2re_op_median", "l2re_op_best",
     "l2re_median", "l2re_best", "l2re_min_median", "l2re_min_median_success",
     "l2re_min_best", "l2re_last_success",
     "l2re_min_best_mean_over_agents", "l2re_min_best_ci95",
@@ -55,7 +56,8 @@ AGG_FIELDS = [
 AGENT_FIELDS = [
     "pde_name", "ablation", "seed", "n_runs", "n_trajectories", "n_success", "n_fail",
     "n_interrupted",
-    "success_rate", "l2re_median", "l2re_best", "l2re_min_median",
+    "success_rate", "l2re_op_median", "l2re_op_best",
+    "l2re_median", "l2re_best", "l2re_min_median",
     "l2re_min_median_success", "l2re_min_best", "l2re_last_success",
     "steps_median", "elapsed_s_median", "run_tags",
 ]
@@ -150,6 +152,14 @@ def agent_stats(rows):
     interrupted = [r for r in rows if as_int(r, "done") == 0]
     terminal = len(success) + len(fails)
     success_l2re = finite([as_float(r, "l2re") for r in success])
+    # Величина статьи и ответа ревьюерам — ошибка решения против эталона, то
+    # есть tester.l2re; в CSV она лежит в колонке l2re_op. Колонка l2re — это
+    # sqrt(l2re_op^2 + l2re_bnd^2), она включает ошибку на границе и в таблице 1
+    # ей ничего не соответствует. По ней же считается критерий остановки,
+    # поэтому и в отчёте должна стоять она, иначе success rate и L2RE в одной
+    # строке измеряют разные вещи (на poissoninv это давало «успех» с медианой
+    # 0.0309 при пороге 0.0306).
+    success_l2re_op = finite([as_float(r, "l2re_op") for r in success])
 
     return {
         "n_trajectories": len(rows),
@@ -157,6 +167,8 @@ def agent_stats(rows):
         "n_fail": len(fails),
         "n_interrupted": len(interrupted),
         "success_rate": len(success) / terminal if terminal else math.nan,
+        "l2re_op_median": median_or_nan(success_l2re_op),
+        "l2re_op_best": min(success_l2re_op, default=math.nan),
         "l2re_median": median_or_nan(success_l2re),
         "l2re_best": min(success_l2re, default=math.nan),
         "l2re_min_median": median_or_nan(l2re_min),
@@ -210,7 +222,7 @@ def render_rebuttal_table(agg_rows):
             rate = float(row["success_rate"]) if row["success_rate"] != "" else math.nan
             sr_cells.append(f"{rate:.2f} ({row['n_success']}/{terminal})"
                             if terminal else "— (0/0)")
-            l2_cells.append(row["l2re_median"] if row["l2re_median"] != ""
+            l2_cells.append(row["l2re_op_median"] if row["l2re_op_median"] != ""
                             else "нет успешных цепочек")
         lines.append("| " + " | ".join([title, "success rate"] + sr_cells) + " |")
         lines.append("| " + " | ".join(["", "L2RE median"] + l2_cells) + " |")
@@ -320,6 +332,8 @@ def main():
                 "success_rate": fmt(pooled["success_rate"], 4),
                 "success_rate_mean_over_agents": fmt(sr_mean, 4),
                 "success_rate_ci95": fmt(sr_ci, 3),
+                "l2re_op_median": fmt(pooled["l2re_op_median"]),
+                "l2re_op_best": fmt(pooled["l2re_op_best"]),
                 "l2re_median": fmt(pooled["l2re_median"]),
                 "l2re_best": fmt(pooled["l2re_best"]),
                 "l2re_min_median": fmt(pooled["l2re_min_median"]),
@@ -338,7 +352,7 @@ def main():
             })
             print(f"[{pde:26s} {mode:16s}] агентов={len(seeds)} траекторий={pooled['n_trajectories']:3d} "
                   f"(прервано {pooled['n_interrupted']:2d}) успех={pooled['success_rate']:.2f} "
-                  f"l2re_med={fmt(pooled['l2re_median'], 4)}")
+                  f"l2re_op_med={fmt(pooled['l2re_op_median'], 4)}")
 
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=AGG_FIELDS)
