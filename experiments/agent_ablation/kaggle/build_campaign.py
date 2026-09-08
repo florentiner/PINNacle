@@ -405,6 +405,18 @@ def cmd_build(args):
 
 # --- пуш и статус ---------------------------------------------------------
 
+def cell_state(cell, token):
+    """Текущее состояние ячейки на Kaggle."""
+    res = kaggle_cli(cell["account"], token, ["kernels", "status", cell["kernel_id"]])
+    out = (res.stdout + res.stderr).strip().replace("\n", " ")
+    if "403" in out and "forbidden" in out.lower():
+        return "not_pushed"
+    for candidate in ("complete", "running", "error", "cancelAcknowledged", "queued"):
+        if candidate.lower() in out.lower():
+            return candidate
+    return "unknown"
+
+
 def cmd_push(args):
     manifest, _ = load_manifest(args)
     wave = wave_of(manifest, args.wave)
@@ -413,6 +425,26 @@ def cmd_push(args):
     missing = [c for c in wave if not c.get("package_dir")]
     if missing:
         raise SystemExit(f"Волна {args.wave} не собрана (build), ячеек без пакета: {len(missing)}")
+
+    if args.retry_failed:
+        # Перезапуск только упавших: запушить ячейку с тем же kernel_id — это
+        # новая версия того же кернела, то есть новый запуск на том же аккаунте.
+        # Работающие сессии не трогаем.
+        keep, states = [], collections.Counter()
+        for cell in wave:
+            token = tokens.get(cell["account"])
+            st = cell_state(cell, token) if token else "нет токена"
+            states[st] += 1
+            if st in ("error", "cancelAcknowledged", "not_pushed", "unknown"):
+                keep.append(cell)
+        print("Состояние волны: " + ", ".join(f"{k}={v}" for k, v in sorted(states.items())))
+        if not keep:
+            print("Перезапускать нечего — упавших ячеек нет.")
+            return 0
+        print(f"К перезапуску {len(keep)} ячеек:")
+        for cell in keep:
+            print(f"   {cell['pde']}/{cell['mode']} seed{cell['seed']}  {cell['kernel_id']}")
+        wave = keep
     if not args.yes:
         print(f"Волна {args.wave}: {len(wave)} сессий на {len({c['account'] for c in wave})} "
               "аккаунтах. Это запустит счётчик GPU-квоты. Повторите с --yes.")
@@ -534,6 +566,9 @@ def main():
         p.add_argument("--wave", type=int, default=1)
         if name == "push":
             p.add_argument("--yes", action="store_true", help="подтвердить запуск сессий")
+            p.add_argument("--retry-failed", action="store_true",
+                           help="Запушить только ячейки, которые сейчас упали или не "
+                                "запускались; работающие сессии не трогать.")
 
     args = parser.parse_args()
     handlers = {"accounts": cmd_accounts, "plan": cmd_plan,
