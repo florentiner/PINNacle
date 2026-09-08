@@ -89,7 +89,18 @@ def ensure_torch_matches_gpu():
     import torch
 
     if not torch.cuda.is_available():
-        print("CUDA недоступна — GPU-проверка пропущена.")
+        # Молча считать на CPU нельзя: это 10 часов слота и GPU-квоты впустую.
+        # Обычная причина — недельная квота аккаунта кончилась, и Kaggle отдал
+        # сессию без ускорителя, ничего не сообщив. Лучше упасть сразу: ячейка
+        # пометится error, и её видно в status/--retry-failed.
+        if os.getenv("ALLOW_CPU", "0") != "1":
+            sys.exit("❌ CUDA недоступна: у аккаунта, скорее всего, кончилась "
+                     "недельная GPU-квота, либо сессия выдана без ускорителя. "
+                     "Обучение на CPU не имеет смысла — выходим, не тратя слот. "
+                     "Перезапустить на другом аккаунте: build_campaign.py push "
+                     "--retry-failed --reassign. Осознанно считать на CPU: "
+                     "ALLOW_CPU=1.")
+        print("⚠️  CUDA недоступна, но ALLOW_CPU=1 — продолжаем на CPU.")
         return
     cap = torch.cuda.get_device_capability(0)
     cap_tag = f"sm_{cap[0]}{cap[1]}"
