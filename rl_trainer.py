@@ -2,6 +2,7 @@
 import sys
 import time
 import json
+import zlib
 import dill
 import random
 import itertools
@@ -244,7 +245,11 @@ def run_deepxde_rl_training(
                         n_transitions_reinit = rl_agent_params["n_transitions_reinit"],
                         exp = rl_agent_params["exp"],
                         model_snapshot_dir=f"{save_path}/rl_model_snapshots",
-                        ablation=rl_agent_params.get("ablation", "none"))
+                        ablation=rl_agent_params.get("ablation", "none"),
+                        # Расписание ε и warmup PER задаются раннером; без них —
+                        # прежние дефолты агента (старые раннеры не меняются).
+                        warmup_updates=rl_agent_params.get("warmup_updates", 50),
+                        eps_decay=rl_agent_params.get("eps_decay"))
 
     # init state (как у тебя в model.py: нулевые карты)
     state_shape = get_state_shape(loss_surface_params)
@@ -388,9 +393,15 @@ def run_deepxde_rl_training(
 
         for t in itertools.count():
 
-            # Не начинаем новый чанк оптимизатора после запроса на остановку:
-            # один чанк LBFGS может идти больше получаса.
-            if run_control is not None and run_control.stop_requested and t > 0:
+            # Не начинаем новый чанк оптимизатора после запроса на остановку или
+            # по исчерпании бюджета времени: один чанк LBFGS может идти больше
+            # получаса, а целая траектория на тяжёлом уравнении — 2–3 часа.
+            # Раньше дедлайн проверялся только между траекториями, и траектория,
+            # начатая за минуты до --max-hours, могла упереться в 12-часовой
+            # лимит Kaggle: финальный чекпоинт агента при этом не сохраняется.
+            # Прерванная траектория уходит в буфер и CSV с done=0 (не успех и не
+            # провал) — агрегатор такие строки в success rate не считает.
+            if run_control is not None and t > 0 and run_control.should_stop():
                 print(f"\n⏹  Обрываем траекторию на шаге {t}: {run_control.stop_reason}.")
                 break
 
@@ -697,7 +708,21 @@ def train_process_rl(data, save_path, device, seed, rl_agent_params):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dde.config.set_default_float("float32")
-    # dde.config.set_random_seed(seed)
+
+    # Сид: раньше здесь была закомментированная строка, и --seed ничего не
+    # сидировал — «разные сиды» отличались только недетерминизмом процесса.
+    # Сидируем python/numpy/torch (dde для pytorch делает ровно это, без
+    # флагов детерминизма cudnn). При продолжении с чекпоинта к сиду
+    # добавляется сдвиг от тега прошлого запуска: иначе каждая следующая сессия
+    # той же ячейки повторяла бы ту же последовательность инициализаций PINN и
+    # ε-жадных бросков, что и первая.
+    if seed is not None:
+        resume_tag = (rl_agent_params.get("resume_checkpoint") or {}).get("tag")
+        offset = zlib.crc32(str(resume_tag).encode()) % 100_000 if resume_tag else 0
+        effective_seed = int(seed) + offset
+        dde.config.set_random_seed(effective_seed)
+        print(f"🎲 Сид запуска: {effective_seed} (базовый {seed}"
+              f"{f', сдвиг {offset} от резюма {resume_tag}' if offset else ''}).")
 
     payload = dill.loads(data)
 

@@ -41,10 +41,14 @@ class DQNAgent:
                  epsilon_decay=0.995, epsilon_min=0.01, memory_size=50000, batch_size=128, n_transitions_reinit = 2000, per_alpha =  0.6, per_beta0 = 0.4, device='cpu', exp=None,
                  warmup_updates: int = 50, recalc_batch_size: int = 32, success_frac = 0.2,
                  model_snapshot_dir="rl_model_snapshots", ablation: str = "none",
-                 snapshot_keep_last: int = 5):
+                 snapshot_keep_last: int = 5, eps_decay: float = None):
         if ablation not in ABLATION_MODES:
             raise ValueError(f"Unknown ablation mode: {ablation}. Expected one of {ABLATION_MODES}.")
         self.ablation = ablation
+        # Постоянная времени спада ε: eps = END + (START-END)*exp(-steps_done/eps_decay).
+        # steps_done растёт и на оффлайн-претрене, поэтому после 500 шагов претрена
+        # при 50 ε уже равен END, а при 200 (настройка Saitama32) остаётся ~0.09.
+        self.eps_decay = float(eps_decay) if eps_decay is not None else float(EPS_DECAY)
         self.snapshot_keep_last = snapshot_keep_last
         self.n_observation = n_observation
         self.n_action = n_action
@@ -126,7 +130,7 @@ class DQNAgent:
             "recalc_batch_size": recalc_batch_size,
             "EPS_START": EPS_START,
             "EPS_END": EPS_END,
-            "EPS_DECAY": EPS_DECAY,
+            "EPS_DECAY": self.eps_decay,
             "TAU": TAU,
             "ablation": self.ablation
         }
@@ -936,7 +940,7 @@ class DQNAgent:
 
         # eps-greedy
         sample = random.random()
-        eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * self.steps_done / EPS_DECAY)
+        eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * self.steps_done / self.eps_decay)
         self.steps_done += 1
 
         if self.steps_done < self.slot_bootstrap_steps:

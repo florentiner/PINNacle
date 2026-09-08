@@ -5,9 +5,16 @@
 для всех четырёх режимов абляции. Comet не задействован вообще — тест падает,
 если код попытается сходить в Comet за ключом.
 
+Это же — предполётная проверка нового уравнения: после экспорта буфера
+(experiments/agent_ablation/export_buffers.py) прогнать с --pde <ключ> и
+убедиться, что с порогом из реестра в буфере остаются успешные терминалы,
+иначе агенту не на чем учиться успеху.
+
 Запуск из корня репозитория:
     python smoke_test_hf_buffer.py
+    python smoke_test_hf_buffer.py --pde ns2d_liddriven
 """
+import argparse
 import os
 import sys
 import tempfile
@@ -31,6 +38,23 @@ OPTIMIZERS = {
     "LBFGS": {"lr": [1, 5e-1, 1e-1], "epochs": [100, 500, 1500]},
     "PSO": {"lr": [0.0, 1e-3, 1e-4], "epochs": [100, 200, 300]},
 }
+
+
+def apply_pde_from_registry(key):
+    """Подменяет подпапку, порог и сетку действий на значения реестра."""
+    global HF_SUBDIR, TOLERANCE, OPTIMIZERS
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from experiments.agent_ablation.pde_registry import get_spec
+
+    spec = get_spec(key)
+    if spec.tolerance is None:
+        raise SystemExit(
+            f"У {key} порог успеха не откалиброван — сначала "
+            f"experiments/agent_ablation/calibrate_tolerance.py --pde {key}"
+        )
+    HF_SUBDIR, TOLERANCE, OPTIMIZERS = spec.key, spec.tolerance, spec.optimizers
+    print(f"Уравнение из реестра: {spec.key} ({spec.title}), tolerance={TOLERANCE:.10g}")
 
 
 def download_buffer():
@@ -122,6 +146,14 @@ def run_mode(ablation, base_buffer):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pde", default=None,
+                        help="Ключ уравнения из реестра (иначе подпапка и порог "
+                             "берутся из констант/переменных окружения).")
+    args = parser.parse_args()
+    if args.pde:
+        apply_pde_from_registry(args.pde)
+
     if os.getenv("COMET_API_KEY"):
         print("⚠️  COMET_API_KEY выставлен — тест должен работать и без него.")
 

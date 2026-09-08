@@ -26,6 +26,7 @@
 """
 import json
 import os
+import random
 import shutil
 import sys
 import time
@@ -203,31 +204,48 @@ class HFExperiment:
         if time.time() - self._last_sync >= self.sync_every_sec:
             self._sync()
 
+    # Финальная выгрузка — единственная копия agent_final.pt и последних строк
+    # CSV. Десятки параллельных сессий коммитят в один датасет, и HF отвечает
+    # 429/409 на гонки коммитов, поэтому force-синхронизация повторяется с
+    # растущей паузой, а не сдаётся с первой попытки.
+    FINAL_SYNC_ATTEMPTS = 5
+    FINAL_SYNC_BACKOFF_SEC = 30.0
+
     def _sync(self, force=False):
         self._last_sync = time.time()
-        try:
-            sys.stdout.flush()
-            self._api.upload_folder(
-                folder_path=self.run_dir,
-                repo_id=self.repo_id,
-                repo_type="dataset",
-                path_in_repo=self.repo_path,
-                commit_message=f"sync run {self.repo_path} (#{self._sync_count + 1})",
-                # Зеркалим ротацию: снапшоты/ассеты, удалённые локально,
-                # удаляются и на HF (паттерны ограничены папкой этого запуска).
-                delete_patterns=[
-                    f"{self.repo_path}/rl_model_snapshots/*",
-                    f"{self.repo_path}/assets/*",
-                ],
-            )
-            self._sync_count += 1
-            print(f"📤 HF sync #{self._sync_count}: {self.repo_id}/{self.repo_path}")
-        except Exception as exc:
-            # Обрыв сети не должен ронять многочасовое обучение.
-            self._failed_syncs += 1
-            print(f"⚠️ HF sync не удался ({self._failed_syncs}): {exc}")
-            if force:
-                traceback.print_exc()
+        attempts = self.FINAL_SYNC_ATTEMPTS if force else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                sys.stdout.flush()
+                self._api.upload_folder(
+                    folder_path=self.run_dir,
+                    repo_id=self.repo_id,
+                    repo_type="dataset",
+                    path_in_repo=self.repo_path,
+                    commit_message=f"sync run {self.repo_path} (#{self._sync_count + 1})",
+                    # Зеркалим ротацию: снапшоты/ассеты, удалённые локально,
+                    # удаляются и на HF (паттерны ограничены папкой этого запуска).
+                    delete_patterns=[
+                        f"{self.repo_path}/rl_model_snapshots/*",
+                        f"{self.repo_path}/assets/*",
+                    ],
+                )
+                self._sync_count += 1
+                print(f"📤 HF sync #{self._sync_count}: {self.repo_id}/{self.repo_path}")
+                return
+            except Exception as exc:
+                # Обрыв сети не должен ронять многочасовое обучение.
+                self._failed_syncs += 1
+                print(f"⚠️ HF sync не удался ({self._failed_syncs}, попытка {attempt}/{attempts}): {exc}")
+                if attempt < attempts:
+                    pause = self.FINAL_SYNC_BACKOFF_SEC * (2 ** (attempt - 1))
+                    pause += random.uniform(0, pause / 2)  # джиттер против синхронных ретраев
+                    print(f"   повтор через {pause:.0f} с", flush=True)
+                    time.sleep(pause)
+                elif force:
+                    traceback.print_exc()
+                    print(f"❌ Финальная выгрузка на HF не удалась после {attempts} попыток; "
+                          f"результаты остались локально в {self.run_dir}", flush=True)
 
 
 class Tee:

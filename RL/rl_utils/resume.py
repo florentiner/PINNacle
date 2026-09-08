@@ -25,7 +25,15 @@ def _snap_step(path):
     return int(match.group(1)) if match else -1
 
 
-def resolve_resume_checkpoint(hf_repo, prefix, pde, mode, quiet=False):
+def resolve_resume_checkpoint(hf_repo, prefix, pde, mode, quiet=False, seed=None):
+    """Последний чекпоинт ячейки (pde, mode[, seed]) в HF-датасете результатов.
+
+    seed: если задан, рассматриваются только запуски с тегом `..._seed<seed>`
+    (так тег ставит Kaggle-кернел). Без этого фильтра ячейки с разными сидами
+    подхватывали бы чекпоинт друг друга — в кампании v5 запуск seed4321 на
+    poisson3d_complexgeometry/none так и продолжился с агента seed1234, то есть
+    «независимо обученных агентов» в нём было меньше, чем сидов.
+    """
     from huggingface_hub import HfApi, hf_hub_download
 
     base = f"{prefix}/{pde}/{mode}/"
@@ -36,12 +44,22 @@ def resolve_resume_checkpoint(hf_repo, prefix, pde, mode, quiet=False):
         return None
 
     # теги-запуски: только начинающиеся с даты (отсекаем smoke/служебные)
-    tags = sorted({
+    all_tags = sorted({
         _tag_of(f) for f in files
         if f.startswith(base) and _tag_of(f) and _tag_of(f)[:2] == "20"
     })
+    if seed is not None:
+        suffix = f"_seed{int(seed)}"
+        tags = [t for t in all_tags if t.endswith(suffix)]
+        foreign = len(all_tags) - len(tags)
+        if foreign and not quiet:
+            print(f"resume: {foreign} запуск(ов) в {base} с другим сидом (или без метки "
+                  f"сида) пропущено — продолжаем только цепочку {suffix}.")
+    else:
+        tags = all_tags
     if not tags and not quiet:
-        print(f"resume: прошлых запусков в {hf_repo}/{base} нет — старт с нуля.")
+        print(f"resume: прошлых запусков в {hf_repo}/{base}"
+              f"{f' с сидом {seed}' if seed is not None else ''} нет — старт с нуля.")
 
     for tag in reversed(tags):
         troot = f"{base}{tag}/"

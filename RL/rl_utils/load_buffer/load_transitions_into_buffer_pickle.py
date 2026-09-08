@@ -55,6 +55,7 @@ def load_transitions_to_replay_buffer(replay_buffer, source, learn_or_analyze="l
     count = 0
     count_done_1 = 0
     count_done_minus_1 = 0
+    nonlocal_counter = {"blocked": 0}
 
     def process_transition_dict(data, file_label="memory"):
         nonlocal count, count_done_1, count_done_minus_1
@@ -78,10 +79,14 @@ def load_transitions_to_replay_buffer(replay_buffer, source, learn_or_analyze="l
         action_cpu     = to_cpu(data['action'])
 
         # reward / model_reward — сразу CPU float32
+        # Точечный фильтр битых транзишенов, добавленный когда-то под буфер
+        # Burgers. Он безымянно применяется ко ВСЕМ уравнениям, поэтому на
+        # новом уравнении может тихо выкинуть валидные данные — считаем и
+        # печатаем итог одной строкой, чтобы это было видно в логе запуска.
         BLOCKED_ROUNDED = {round(x, 4) for x in [-1.3047, -1.3186, -1.0238]}
         reward_val = float(data['reward'])
         if round(reward_val, 4) in BLOCKED_ROUNDED:
-            print(f"⚠️ Фильтр Burgers: reward={reward_val}")
+            nonlocal_counter['blocked'] += 1
             return
         if prev_tol != 0.0:
             data = modify_transition(data, prev_tol=prev_tol, current_tol=current_tol)
@@ -172,6 +177,10 @@ def load_transitions_to_replay_buffer(replay_buffer, source, learn_or_analyze="l
         raise ValueError("Аргумент source должен быть либо путём к директории, либо списком структур (list[dict])")
 
     print(f"✅ Загружено {count} переходов ({count_done_1} успешных, {count_done_minus_1} неуспешных)")
+    if nonlocal_counter["blocked"]:
+        print(f"⚠️ Точечный фильтр битых наград (список BLOCKED_ROUNDED, заведён под "
+              f"Burgers) выкинул {nonlocal_counter['blocked']} переходов. Если это "
+              f"новое уравнение — проверьте, что выброшены действительно битые данные.")
     return replay_buffer
 
 
