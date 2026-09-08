@@ -241,6 +241,15 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         tolerance=None, peline_l2re=8.03e-1, tier="unsolvable",
     ),
     _spec(
+        key="wave2d_longtime", title="Wave 2d-MS",
+        module="src.pde.wave", cls="Wave2D_LongTime",
+        comet_project="rlpinn-wave2d-longtime-tolerance",
+        tolerance=None, peline_l2re=9.37e-1, tier="unsolvable",
+        note="в таблице 1 статьи это строка Wave 2d-MS (класс Wave2D_LongTime, "
+             "t in [0, 100]). Буфер на HF есть, но PELINE даёт L2RE 0.937: "
+             "цепочка не решает уравнение, и success rate по eq. (11) вырождается.",
+    ),
+    _spec(
         key="kuramoto_sivashinsky", title="KS",
         module="src.pde.chaotic", cls="KuramotoSivashinskyEquation",
         comet_project="rlpinn-ks-farm-transitions",
