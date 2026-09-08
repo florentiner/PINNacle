@@ -173,6 +173,50 @@ def agent_stats(rows):
     }
 
 
+# Заголовки колонок — как в ответе ревьюерам (комментарий авторов от 03.08.2026,
+# вопрос 4 рецензента DV8H), чтобы расширенная таблица читалась как продолжение
+# уже опубликованной, а не как другая таблица.
+REBUTTAL_COLUMNS = [("none", "full"), ("no_per", "no PER"),
+                    ("no_soft_watkins", "no soft-Watkins"),
+                    ("no_trust_region", "no trust region")]
+
+
+def render_rebuttal_table(agg_rows):
+    """Таблица в форме ответа ревьюерам: на уравнение две строки — success rate
+    (доля цепочек, достигших критерия остановки, с сырым счётом в скобках) и
+    медианная L2RE. Медиана считается по успешным цепочкам, поэтому в ячейке
+    без единого успеха стоит прочерк — ровно как в опубликованной таблице,
+    где такие клетки оставлены пустыми.
+    """
+    by_cell = {(r["pde_name"], r["ablation"]): r for r in agg_rows}
+    pdes = []
+    for r in agg_rows:
+        if r["pde_name"] not in pdes:
+            pdes.append(r["pde_name"])
+
+    header = ["PDE", "metric"] + [label for _, label in REBUTTAL_COLUMNS]
+    lines = ["| " + " | ".join(header) + " |",
+             "|" + "|".join(["---"] * len(header)) + "|"]
+    for pde in pdes:
+        title = next((r["title"] or pde for r in agg_rows if r["pde_name"] == pde), pde)
+        sr_cells, l2_cells = [], []
+        for mode, _ in REBUTTAL_COLUMNS:
+            row = by_cell.get((pde, mode))
+            if row is None:
+                sr_cells.append("—")
+                l2_cells.append("—")
+                continue
+            terminal = int(row["n_success"]) + int(row["n_fail"])
+            rate = float(row["success_rate"]) if row["success_rate"] != "" else math.nan
+            sr_cells.append(f"{rate:.2f} ({row['n_success']}/{terminal})"
+                            if terminal else "— (0/0)")
+            l2_cells.append(row["l2re_median"] if row["l2re_median"] != ""
+                            else "нет успешных цепочек")
+        lines.append("| " + " | ".join([title, "success rate"] + sr_cells) + " |")
+        lines.append("| " + " | ".join(["", "L2RE median"] + l2_cells) + " |")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf-repo", default="danil-e/rlpinn-ablation-runs")
@@ -306,7 +350,18 @@ def main():
         writer.writeheader()
         writer.writerows(agent_rows)
 
-    print(f"\n✅ {args.out} ({len(agg_rows)} строк), {by_agent_out} ({len(agent_rows)} строк)")
+    table_out = os.path.splitext(args.out)[0] + ".rebuttal.md"
+    table = render_rebuttal_table(agg_rows)
+    with open(table_out, "w", encoding="utf-8") as f:
+        f.write("# Абляция компонентов DQN\n\n"
+                "Форма таблицы — как в ответе ревьюерам (вопрос 4 рецензента DV8H).\n"
+                "Один сид на конфигурацию, одинаковый бюджет PINN. success rate —\n"
+                "доля построенных цепочек, достигших критерия остановки; число\n"
+                "траекторий по ячейкам разное, поэтому сравнима именно доля.\n\n")
+        f.write(table + "\n")
+    print("\n" + table)
+    print(f"\n✅ {args.out} ({len(agg_rows)} строк), {by_agent_out} ({len(agent_rows)} строк), "
+          f"{table_out}")
 
     if args.upload:
         token = os.getenv("HF_TOKEN")
