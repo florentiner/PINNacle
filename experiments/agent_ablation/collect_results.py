@@ -151,14 +151,13 @@ def agent_stats(rows):
     # ни провал, в знаменатель success rate не идёт.
     interrupted = [r for r in rows if as_int(r, "done") == 0]
     terminal = len(success) + len(fails)
+    # Отчётная величина — колонка l2re, то есть sqrt(l2re_op^2 + l2re_bnd^2).
+    # Это проверено по сырым CSV кампании v5: все восемь ячеек опубликованной
+    # в ответе ревьюерам таблицы (0.0107, 0.0158, 0.0127, 0.0475, 0.0545,
+    # 0.0458, 0.0476) воспроизводятся именно ею, а один l2re_op даёт числа в
+    # 1.16-2.89 раза меньше. Он остаётся рядом как диагностика: полезно видеть,
+    # какая часть ошибки приходится на границу.
     success_l2re = finite([as_float(r, "l2re") for r in success])
-    # Величина статьи и ответа ревьюерам — ошибка решения против эталона, то
-    # есть tester.l2re; в CSV она лежит в колонке l2re_op. Колонка l2re — это
-    # sqrt(l2re_op^2 + l2re_bnd^2), она включает ошибку на границе и в таблице 1
-    # ей ничего не соответствует. По ней же считается критерий остановки,
-    # поэтому и в отчёте должна стоять она, иначе success rate и L2RE в одной
-    # строке измеряют разные вещи (на poissoninv это давало «успех» с медианой
-    # 0.0309 при пороге 0.0306).
     success_l2re_op = finite([as_float(r, "l2re_op") for r in success])
 
     return {
@@ -222,7 +221,7 @@ def render_rebuttal_table(agg_rows):
             rate = float(row["success_rate"]) if row["success_rate"] != "" else math.nan
             sr_cells.append(f"{rate:.2f} ({row['n_success']}/{terminal})"
                             if terminal else "— (0/0)")
-            l2_cells.append(row["l2re_op_median"] if row["l2re_op_median"] != ""
+            l2_cells.append(row["l2re_median"] if row["l2re_median"] != ""
                             else "нет успешных цепочек")
         lines.append("| " + " | ".join([title, "success rate"] + sr_cells) + " |")
         lines.append("| " + " | ".join(["", "L2RE median"] + l2_cells) + " |")
@@ -352,7 +351,7 @@ def main():
             })
             print(f"[{pde:26s} {mode:16s}] агентов={len(seeds)} траекторий={pooled['n_trajectories']:3d} "
                   f"(прервано {pooled['n_interrupted']:2d}) успех={pooled['success_rate']:.2f} "
-                  f"l2re_op_med={fmt(pooled['l2re_op_median'], 4)}")
+                  f"l2re_med={fmt(pooled['l2re_median'], 4)}")
 
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=AGG_FIELDS)

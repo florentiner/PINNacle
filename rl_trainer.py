@@ -493,11 +493,29 @@ def run_deepxde_rl_training(
                 #            loss-вариант из ответа ревьюерам.
                 if success_metric == "loss":
                     env.reward_params = {"loss": train_loss}
+                elif success_metric == "l2re":
+                    # Величина, с которой сравнивается eps, должна быть той же,
+                    # что публикуется. Отчётная L2RE кампании (и число из
+                    # таблицы 1, из которого считается eps) — это
+                    # sqrt(l2re_op^2 + l2re_bnd^2), см. RL/rl_utils/
+                    # trajectory_metrics.py. Проверено по сырым CSV кампании
+                    # v5: все восемь ячеек опубликованной таблицы сходятся
+                    # именно с этой комбинацией, а не с одним l2re_op.
+                    # Сравнивать eps с одним l2re_op нельзя: он меньше
+                    # комбинации в 0.35-0.86 раза, причём коэффициент свой у
+                    # каждого уравнения, то есть порог оказался бы ослаблен
+                    # неконтролируемо и по-разному (на ns2d_liddriven — в 2.7
+                    # раза, на poisson_boltzmann_2d — в 1.3).
+                    op_err = float(tester_callback.l2re)
+                    bnd_err = float(tester_callback.bc_l2re)
+                    if np.isfinite(bnd_err):
+                        op_err = float(np.hypot(op_err, bnd_err))
+                    env.reward_params = {
+                        "operator": {"coeff": success_op_coeff, "error": op_err},
+                        "bconds": {"coeff": 0.0, "error": 0.0},
+                    }
                 else:
-                    op_err, bnd_err = (
-                        (tester_callback.l2re, tester_callback.bc_l2re)
-                        if success_metric == "l2re" else (rmse, b_rmse)
-                    )
+                    op_err, bnd_err = rmse, b_rmse
                     # bc-метрика бывает NaN, если у задачи нет опорных точек на
                     # границе: тогда считаем критерий по одному оператору,
                     # иначе success никогда не сработает.
