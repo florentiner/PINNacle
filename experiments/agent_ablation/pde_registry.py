@@ -14,6 +14,18 @@
   module/cls     — класс PINNacle-задачи и аргументы конструктора;
   comet_project  — проект-источник транзишенов в воркспейсе saitama32
                    (из него export_buffers.py делает буфер на HF);
+  peline_l2re    — колонка PELINE таблицы 1 статьи (стр. 8). От неё считается
+                   порог успеха eps = EPS_FACTOR x peline_l2re, поэтому ошибка
+                   здесь тихо смещает всю абляцию уравнения. Все значения
+                   сверены с PDF 2026-09-09; тогда же исправлено
+                   poisson2d_classic (стояло 3.10E-2 вместо 3.10E-1 из строки
+                   Poisson 2d-C, то есть порог был бы в десять раз строже).
+                   Соответствие строк таблицы классам PINNacle:
+                   Poisson 2d-C = Poisson2D_Classic, 2d-CG = PoissonBoltzmann2D,
+                   3d-CG = Poisson3D_ComplexGeometry, 2d-MS = Poisson2D_ManyArea;
+                   NS 2d-C = NS2D_LidDriven, 2d-CG = NS2D_BackStep;
+                   Wave 2d-CG = Wave2D_Heterogeneous, 2d-MS = Wave2D_LongTime.
+                   Единственное исключение — poisson_boltzmann_2d, см. его note;
   tolerance      — порог успеха траектории по взвешенному лоссу PINN
                    (`abs(loss) < tolerance` => done=1 в EnvRLOptimizer).
                    None означает «не откалиброван»: раннер откажется
@@ -106,7 +118,13 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         comet_project="rlpinn-poisson-boltzmann2d-tolerance",
         tolerance=0.039669186, peline_l2re=1.07e-2, tier="solvable", campaign="done",
         lbfgs_epochs=(100, 500, 1500),
-        note="peline_l2re — медиана l2re кампании v5, в таблице рецензии строки нет",
+        note="ВНИМАНИЕ: у этого уравнения peline_l2re взят не из таблицы 1, как у "
+             "остальных, а как медиана l2re кампании v5 (1.07E-2) — то самое число, "
+             "которое стоит в опубликованной таблице абляции. В таблице 1 строке "
+             "Poisson 2d-CG отвечает PELINE 4.11E-3, но это результат ОБУЧЕННОГО "
+             "агента на полном бюджете оценки, и порог 2 x 4.11E-3 тренировочные "
+             "цепочки не берут вовсе. Уравнение используется как контроль к "
+             "опубликованной таблице, поэтому основание порога выбрано под неё",
     ),
     _spec(
         key="poisson3d_complexgeometry", title="Poisson 3d-CG",
@@ -135,9 +153,12 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="poisson2d_classic", title="Poisson 2d-C",
         module="src.pde.poisson", cls="Poisson2D_Classic",
         comet_project="rlpinn-poisson-2d-classic-farm-transitions",
-        tolerance=0.000063, peline_l2re=3.10e-2, tier="solvable",
-        note="tolerance из optimization_multi_pde/poisson_2d_classic_chain.py; "
-             "перепроверить calibrate_tolerance.py после экспорта буфера",
+        tolerance=0.000063, peline_l2re=3.10e-1, tier="solvable",
+        note="peline_l2re — строка Poisson 2d-C таблицы 1 (PELINE 3.10E-1); до "
+             "сверки с PDF здесь стояло 3.10E-2, то есть порог был бы в десять "
+             "раз строже. tolerance из optimization_multi_pde/"
+             "poisson_2d_classic_chain.py; перепроверить prepare_pde.py после "
+             "экспорта буфера",
     ),
     _spec(
         key="heat2d_multiscale", title="Heat 2d-MS",
