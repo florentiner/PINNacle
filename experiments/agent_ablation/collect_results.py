@@ -225,6 +225,35 @@ def render_rebuttal_table(agg_rows):
                             else "нет успешных цепочек")
         lines.append("| " + " | ".join([title, "success rate"] + sr_cells) + " |")
         lines.append("| " + " | ".join(["", "L2RE median"] + l2_cells) + " |")
+
+    # Пустая клетка сама по себе ничего не объясняет. В опубликованной таблице
+    # она сопровождается диагностикой: до какой точки цепочки этого режима
+    # вообще доходили («The lowest error reached at any point along those
+    # chains is 0.054, against 0.011 for the full agent»). Статистика там —
+    # МЕДИАНА по цепочкам от лучшей точки каждой, а не глобальный минимум:
+    # на сырых CSV v5 медиана l2re_min даёт 0.054325 у no PER против 0.010852
+    # у полного агента, то есть ровно опубликованную пару; глобальный минимум
+    # дал бы 0.028 против 0.0064.
+    сноски = []
+    for pde in pdes:
+        полный = by_cell.get((pde, "none"), {}).get("l2re_min_median", "")
+        for mode, label in REBUTTAL_COLUMNS:
+            row = by_cell.get((pde, mode))
+            if row is None or row["l2re_median"] != "" or not row["l2re_min_median"]:
+                continue
+            title = row["title"] or pde
+            сноска = (f"- {title}, {label}: успешных цепочек нет; медиана лучшей "
+                      f"точки цепочки — {row['l2re_min_median']}")
+            if полный:
+                сноска += f" против {полный} у полного агента"
+            сноски.append(сноска + ".")
+    if сноски:
+        lines.append("")
+        lines.append("Диагностика по клеткам без успешных цепочек "
+                     "(значения по l2re_min, то есть по лучшей точке траектории, "
+                     "а не по финальной стадии):")
+        lines.append("")
+        lines += сноски
     return "\n".join(lines)
 
 
