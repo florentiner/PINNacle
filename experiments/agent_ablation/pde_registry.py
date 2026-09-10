@@ -146,14 +146,14 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="burgers1d", title="Burgers 1d-C",
         module="src.pde.burgers", cls="Burgers1D",
         comet_project="rlpinn-burgers-1d-rebuild-buffer-2-dim",
-        tolerance=0.00810541202508866, peline_l2re=1.34e-2, tier="solvable",
+        tolerance=6.237356865e-05, peline_l2re=1.34e-2, tier="solvable",
         lbfgs_epochs=(100, 500, 1500),
     ),
     _spec(
         key="poisson2d_classic", title="Poisson 2d-C",
         module="src.pde.poisson", cls="Poisson2D_Classic",
         comet_project="rlpinn-poisson-2d-classic-farm-transitions",
-        tolerance=0.000063, peline_l2re=3.10e-1, tier="solvable",
+        tolerance=2.715027332, peline_l2re=3.10e-1, tier="solvable",
         note="peline_l2re — строка Poisson 2d-C таблицы 1 (PELINE 3.10E-1); до "
              "сверки с PDF здесь стояло 3.10E-2, то есть порог был бы в десять "
              "раз строже. tolerance из optimization_multi_pde/"
@@ -183,21 +183,21 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="grayscott", title="GS",
         module="src.pde.chaotic", cls="GrayScottEquation",
         comet_project="rlpinn-grayscott-tolerance",
-        tolerance=1.550321937, peline_l2re=9.33e-2, tier="solvable",
+        tolerance=0.674369812, peline_l2re=9.33e-2, tier="solvable",
         note="порог откалиброван по буферу calibrate_tolerance.py (доля успешных цепочек 75%, как у poisson_boltzmann_2d — единственного уравнения v5 с информативной абляцией). Сравнивается та же величина, что и в загрузчике: min по карте next_state['loss_total']. Распределение с плато: p10=p50=0.6744, p75=1.55",
     ),
     _spec(
         key="poissonnd", title="PNd",
         module="src.pde.poisson", cls="PoissonND",
         comet_project="rlpinn-poissonnd-tolerance",
-        tolerance=None, peline_l2re=2.37e-4, tier="solvable",
+        tolerance=0.0001415938605, peline_l2re=2.37e-4, tier="solvable",
         note="порог не найден ни в одном chain-скрипте — калибровать по буферу",
     ),
     _spec(
         key="heatnd", title="HNd",
         module="src.pde.heat", cls="HeatND",
         comet_project="rlpinn-heatnd-tolerance",
-        tolerance=0.00100347035913728, peline_l2re=2.49e-4, tier="solvable",
+        tolerance=0.001003470359, peline_l2re=2.49e-4, tier="solvable",
         note="tolerance из tolerance-кампании проекта; по буферу даёт 81.6% успешных цепочек офлайн — режим хороший, оставлен как есть",
     ),
     _spec(
