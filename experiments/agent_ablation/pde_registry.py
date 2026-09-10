@@ -170,7 +170,8 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="heat2d_complexgeometry", title="Heat 2d-CG",
         module="src.pde.heat", cls="Heat2D_ComplexGeometry",
         comet_project="rlpinn-heat-2d-cg-farm-trans",
-        tolerance=0.0455133201723103, peline_l2re=1.58e-2, tier="solvable",
+        tolerance=1.226250887, peline_l2re=1.58e-2, tier="solvable",
+        note="порог откалиброван prepare_pde.py по буферу 2026-09-10",
     ),
     _spec(
         key="wave1d", title="Wave 1d-C",
@@ -226,7 +227,8 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="heat2d_varyingcoef", title="Heat 2d-VC",
         module="src.pde.heat", cls="Heat2D_VaryingCoef",
         comet_project="rlpinn-heat-2d-vc-farm-transitions",
-        tolerance=0.0585015359142309, peline_l2re=2.27e-1, tier="borderline",
+        tolerance=3.105021477, peline_l2re=2.27e-1, tier="borderline",
+        note="порог откалиброван prepare_pde.py по буферу 2026-09-10",
     ),
     _spec(
         key="burgers2d", title="Burgers 2d-C",

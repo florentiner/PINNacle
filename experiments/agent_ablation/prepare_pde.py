@@ -19,6 +19,7 @@
     python experiments/agent_ablation/prepare_pde.py --pde wave1d --target-success-frac 0.75
 """
 import argparse
+import json
 import math
 import os
 import statistics
@@ -46,6 +47,51 @@ def _done(tr):
             except (TypeError, ValueError):
                 return 0
     return 0
+
+
+def manifest_check(buffer_dir):
+    """Сверяет список экспериментов манифеста с файлами на диске.
+
+    Экспортёр пишет manifest.json заранее и помечает complete=true, когда
+    считает работу законченной, но выгрузка части файлов может не доехать:
+    у heat2d_multiscale манифест объявил 139 экспериментов при 64 файлах, то
+    есть 53% переходов отсутствовало. Ни загрузчик, ни проверка структуры
+    такого не заметят — они читают то, что лежит. Поэтому сверяем явно.
+    """
+    manifest_path = os.path.join(buffer_dir, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        return {"summary": "manifest.json нет — сверить полноту не с чем "
+                           "(старый буфер, выгружен до появления манифестов)",
+                "fatal": ""}
+    with open(manifest_path, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    exps = manifest.get("experiments", [])
+    files = [f for f in os.listdir(buffer_dir) if f.endswith(".pt")]
+    missing, present_tr, missing_tr = [], 0, 0
+    for e in exps:
+        name = e.get("name", "")
+        n_tr = int(e.get("n_transitions", 0) or 0)
+        if name and any(name in f for f in files):
+            present_tr += n_tr
+        else:
+            missing.append(name or "(без имени)")
+            missing_tr += n_tr
+    orphans = [f for f in files
+               if not any(e.get("name") and e["name"] in f for e in exps)]
+    total_tr = present_tr + missing_tr
+    summary = (f"манифест: экспериментов {len(exps)}, complete={manifest.get('complete')}; "
+               f"файлов {len(files)}; без файла {len(missing)}; "
+               f"файлов вне манифеста {len(orphans)}")
+    fatal = ""
+    if missing:
+        доля = missing_tr / total_tr if total_tr else 1.0
+        fatal = (f"у {len(missing)} экспериментов из {len(exps)} нет файла: "
+                 f"потеряно {missing_tr} переходов из {total_tr} ({доля:.0%}). "
+                 f"Примеры: {', '.join(missing[:3])}")
+    elif orphans:
+        summary += ("\n   ВНИМАНИЕ: файлы вне манифеста — вероятно, остатки "
+                    f"прошлой попытки выгрузки: {', '.join(orphans[:3])}")
+    return {"summary": summary, "fatal": fatal}
 
 
 def structural_check(buffer_dir):
@@ -164,7 +210,18 @@ def main():
 
     print(f"=== {spec.key} ({spec.title}) ===\n{buffer_dir}\n")
 
-    print("--- 1. структура буфера ---")
+    print("--- 0. полнота выгрузки ---")
+    manifest_report = manifest_check(buffer_dir)
+    print(manifest_report["summary"])
+    if manifest_report["fatal"]:
+        print("\n" + "=" * 70)
+        print(f"НЕ ГОДИТСЯ: {spec.key}")
+        print(f"  - {manifest_report['fatal']}")
+        print("  Буфер надо выгрузить заново: запускать кампанию на неполном "
+              "буфере нельзя, недостача ничем себя не проявит.")
+        sys.exit(1)
+
+    print("\n--- 1. структура буфера ---")
     rep = structural_check(buffer_dir)
     print(f"файлов {rep['files']}, транзишенов {rep['transitions']}, цепочек {rep['chains']} "
           f"(done=1 {rep['done1']}, done=-1 {rep['done_1']})")
