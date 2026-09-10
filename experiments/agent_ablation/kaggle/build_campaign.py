@@ -276,6 +276,9 @@ def cmd_plan(args):
         "max_hours": args.max_hours,
         "resume": args.resume,
         "commit": args.commit,
+        # Произвольные флаги раннеру (например --resume-prefix для проверочного
+        # запуска, который берёт чекпоинт из прошлой кампании, а пишет в свою).
+        "extra_args": getattr(args, "extra_args", "") or "",
         "hf_results": args.hf_results,
         "hf_buffer": args.hf_buffer,
         "slots_per_account": args.slots_per_account,
@@ -337,6 +340,7 @@ def render_kernel(manifest, cell, hf_token):
         "MAX_HOURS": str(manifest["max_hours"]),
         "RESUME": manifest["resume"],
         "COMMIT": manifest["commit"] or "",
+        "EXTRA_ARGS": manifest.get("extra_args", "") or "",
         "HF_RESULTS": manifest["hf_results"],
         "HF_BUFFER": manifest["hf_buffer"],
         "HF_PREFIX": manifest["prefix"],
@@ -659,6 +663,9 @@ def main():
     p_plan.add_argument("--resume", default="auto", choices=["auto", "none"])
     p_plan.add_argument("--commit", default="",
                         help="Пин коммита раннера (иначе HEAD ветки).")
+    p_plan.add_argument("--extra-args", default="",
+                        help="Дополнительные флаги раннеру, одной строкой "
+                             "(например \"--resume-prefix runs_kaggle_v8\").")
     p_plan.add_argument("--hf-results", default="danil-e/rlpinn-ablation-runs")
     p_plan.add_argument("--hf-buffer", default="danil-e/rlpinn-ablation-buffers")
     p_plan.add_argument("--skip-done", action="store_true",
