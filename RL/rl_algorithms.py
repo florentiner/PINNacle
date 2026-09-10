@@ -269,8 +269,20 @@ class DQNAgent:
             self.needs_priority_recalc = False
             print(f"⏯  Приоритеты PER восстановлены из чекпоинта ({len(saved_prior)}).")
         elif saved_prior is not None:
+            # Так бывает ВСЕГДА, как только прошлая сессия собрала хоть один
+            # свой переход: сохранённый список длиннее пересобранного с HF
+            # буфера. Раньше здесь только печаталось «нужен пересчёт», а флаг
+            # needs_priority_recalc не читал никто, и сессия продолжения
+            # работала на плоских приоритетах (push с priority=None даёт всем
+            # max(prior)*coeff). PER при этом вырождается в смещённый uniform,
+            # то есть режим полного агента незаметно превращается в no_per.
             print(f"⚠️ Приоритеты из чекпоинта не подходят по размеру "
-                  f"({len(saved_prior)} vs {len(self.replay_buffer.prior)}) — нужен пересчёт.")
+                  f"({len(saved_prior)} vs {len(self.replay_buffer.prior)}) — "
+                  f"пересчитываю приоритеты по буферу.")
+            if self.ablation != "no_per" and len(self.replay_buffer) > 0:
+                recalc_all_priorities_batched(self, batch_size=self.recalc_batch_size)
+                self.needs_priority_recalc = False
+                print("⏯  Приоритеты пересчитаны офлайн по всему буферу.")
 
         print(f"⏯  Загружен полный чекпоинт агента: {path} "
               f"(ablation={ckpt_ablation}, steps_done={self.steps_done}, opt_step={self.opt_step}); "
