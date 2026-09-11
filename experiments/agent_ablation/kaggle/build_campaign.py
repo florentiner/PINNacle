@@ -194,6 +194,26 @@ def build_cells(args):
         for key in keys:
             for mode in args.modes:
                 cells.append({"pde": key, "mode": mode, "seed": int(seed)})
+
+    # Добор конкретных ячеек: декартово произведение режимов на сиды не умеет
+    # выбрать разрозненные пары, а «тонкие» ячейки (мало траекторий у агента)
+    # как раз разрозненные. Формат: pde:mode:seed через запятую.
+    if getattr(args, "cells", ""):
+        нужно = set()
+        for item in args.cells.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            части = item.split(":")
+            if len(части) != 3:
+                raise SystemExit(f"--cells: ожидается pde:mode:seed, получено {item!r}")
+            нужно.add((части[0], части[1], int(части[2])))
+        найдено = {(c["pde"], c["mode"], c["seed"]) for c in cells}
+        нет = sorted(нужно - найдено)
+        if нет:
+            raise SystemExit("--cells: этих ячеек нет в произведении --pde x --modes x "
+                             f"--seeds (опечатка?): {нет}")
+        cells = [c for c in cells if (c["pde"], c["mode"], c["seed"]) in нужно]
     return cells
 
 
@@ -427,7 +447,11 @@ def cell_state(cell, token):
     match = re.search(r"KernelWorkerStatus\.([A-Za-z_]+)", out)
     if match:
         return match.group(1).lower()
-    if "403" in out and "forbidden" in out.lower():
+    # Кернела ещё нет: Kaggle отвечает 403 на чужой приватный и 404 на
+    # несуществующий. Второе бывает, когда пуш не прошёл (сеть, сбой API), и
+    # такую ячейку надо именно допушить, а не считать упавшей.
+    низ = out.lower()
+    if ("403" in out and "forbidden" in низ) or ("404" in out and "not found" in низ):
         return "not_pushed"
     return "unknown"
 
@@ -670,6 +694,9 @@ def main():
     p_plan.add_argument("--hf-buffer", default="danil-e/rlpinn-ablation-buffers")
     p_plan.add_argument("--skip-done", action="store_true",
                         help="Выкинуть уравнения, уже посчитанные прошлой кампанией.")
+    p_plan.add_argument("--cells", default="",
+                        help="Только эти ячейки: pde:mode:seed через запятую "
+                             "(добор тонких ячеек после основной партии).")
 
     for name, help_text in (("build", "собрать пуш-пакеты волны"),
                             ("push", "запушить волну"),
