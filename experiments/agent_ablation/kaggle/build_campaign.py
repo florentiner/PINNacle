@@ -31,6 +31,7 @@
 """
 import argparse
 import collections
+import datetime
 import json
 import math
 import os
@@ -499,6 +500,61 @@ def cmd_stop(args):
     return 0 if not failed else 1
 
 
+def _version_created(cell, token):
+    """Время создания последней версии кернела — по листингу выходных файлов.
+
+    Kaggle печатает у каждого файла дату создания версии («8:41 pm, Saturday 12
+    September 2026 UTC»). Если выходных файлов нет (сессия умерла до старта
+    раннера), вернём None, и ячейка пойдёт в перезапуск как раньше.
+    """
+    res = kaggle_cli(cell["account"], token, ["kernels", "files", cell["kernel_id"]], timeout=240)
+    out = res.stdout + res.stderr
+    m = re.search(r"(\d{1,2}:\d{2} [ap]m), \w+ (\d{1,2} \w+ \d{4}) UTC", out)
+    if not m:
+        return None
+    try:
+        return datetime.datetime.strptime(f"{m.group(1)} {m.group(2)}", "%I:%M %p %d %B %Y").replace(
+            tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+
+
+def _hf_finished_after(manifest, cell, since_utc, hf_token):
+    """Тег завершённого на HF прогона ячейки, начатого не раньше since_utc, или None.
+
+    Ограничение по времени принципиально: у ячейки продолжения (например,
+    второй заход) уже есть завершённый прогон первого захода, и без сравнения
+    с моментом пуша умершее на старте продолжение сочлось бы досчитанным.
+    """
+    from huggingface_hub import HfApi, hf_hub_download
+    api = HfApi(token=hf_token)
+    base = f"{manifest['prefix']}/{cell['pde']}/{cell['mode']}"
+    try:
+        entries = api.list_repo_tree(manifest["hf_results"], path_in_repo=base,
+                                     repo_type="dataset", recursive=False)
+        tags = sorted(e.path.split("/")[-1] for e in entries
+                      if e.path.split("/")[-1].endswith(f"_seed{cell['seed']}"))
+    except Exception:
+        return None
+    for tag in reversed(tags):
+        m = re.match(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", tag)
+        if not m:
+            continue
+        started = datetime.datetime.strptime(m.group(1), "%Y-%m-%d_%H-%M-%S").replace(
+            tzinfo=datetime.timezone.utc)
+        if started < since_utc - datetime.timedelta(minutes=5):
+            break
+        try:
+            local = hf_hub_download(manifest["hf_results"], repo_type="dataset",
+                                    filename=f"{base}/{tag}/results/status.json", token=hf_token)
+            state = json.loads(open(local, encoding="utf-8").read()).get("state")
+        except Exception:
+            continue
+        if state == "finished":
+            return tag
+    return None
+
+
 def cmd_push(args):
     manifest, _ = load_manifest(args)
     wave = wave_of(manifest, args.wave)
@@ -513,15 +569,40 @@ def cmd_push(args):
         # новая версия того же кернела, то есть новый запуск на том же аккаунте.
         # Работающие сессии не трогаем.
         keep, states = [], collections.Counter()
+        finished_error, hf_token_cache = [], [None]
         for cell in wave:
             token = tokens.get(cell["account"])
             st = cell_state(cell, token) if token else "нет токена"
             states[st] += 1
             # "unknown" сюда НЕ входит: это чаще всего сбой опроса, а не
             # упавшая сессия, и перезапуск убил бы живой прогон.
-            if st in ("error", "cancel_acknowledged", "not_pushed"):
+            if st == "error":
+                # ERROR часто означает не падение, а ненулевой код выхода в
+                # самом конце: 429 при финальной выгрузке на HF. Данные при этом
+                # целы (2026-09-13: 4 из 4 проверенных ERROR-ячеек досчитаны).
+                # Повтор такой ячейки жжёт квоту впустую, поэтому ищем на HF
+                # завершённый прогон, начатый после пуша этой версии.
+                since = None
+                if cell.get("pushed_at"):
+                    since = datetime.datetime.fromisoformat(cell["pushed_at"])
+                elif token:
+                    since = _version_created(cell, token)
+                if since is not None:
+                    if hf_token_cache[0] is None:
+                        hf_token_cache[0] = read_hf_token(args)
+                    tag = _hf_finished_after(manifest, cell, since, hf_token_cache[0])
+                    if tag:
+                        states["error"] -= 1
+                        states["finished_error"] += 1
+                        finished_error.append((cell, tag))
+                        continue
                 keep.append(cell)
-        print("Состояние волны: " + ", ".join(f"{k}={v}" for k, v in sorted(states.items())))
+            elif st in ("cancel_acknowledged", "not_pushed"):
+                keep.append(cell)
+        print("Состояние волны: " + ", ".join(f"{k}={v}" for k, v in sorted(states.items()) if v))
+        for cell, tag in finished_error:
+            print(f"   досчитана (ERROR только в коде выхода, прогон {tag} finished) — не перезапускаю: "
+                  f"{cell['pde']}/{cell['mode']} seed{cell['seed']} {cell['kernel_id']}")
         if not keep:
             непрочитано = states.get("unknown", 0) + states.get("нет токена", 0)
             if непрочитано:
@@ -611,6 +692,11 @@ def cmd_push(args):
                          ["kernels", "push", "-p", cell["package_dir"]], timeout=600)
         out = (res.stdout + res.stderr).strip()
         ok = res.returncode == 0 and "error" not in out.lower()
+        if ok:
+            # Момент пуша нужен, чтобы отличать прогон ЭТОЙ версии от старых.
+            cell["pushed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            manifest_path(args.campaign_root, args.prefix, args.batch).write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"{'OK  ' if ok else 'FAIL'} {cell['kernel_id']}: "
               f"{out.splitlines()[-1] if out else '<пусто>'}")
         if not ok:
