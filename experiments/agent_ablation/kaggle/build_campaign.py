@@ -531,7 +531,11 @@ def cmd_push(args):
             # него git clone падает с "Could not resolve host" на всех попытках.
             # Перевешиваем такую ячейку на наименее загруженный другой аккаунт.
             load = existing_load(args.campaign_root, args.prefix)
-            names = [a for a, _ in load_accounts(args.accounts_file)]
+            # Кандидатов для переноса можно ограничить отдельным файлом. Токены
+            # для опроса статусов нужны по ВСЕМ аккаунтам (иначе ячейки на
+            # исчерпанных аккаунтах получают «нет токена» и в перенос не
+            # попадают), а переносить надо только туда, где квота ещё есть.
+            names = [a for a, _ in load_accounts(args.reassign_to or args.accounts_file)]
             plan = []
             for cell in keep:
                 old_account = cell["account"]
@@ -711,6 +715,11 @@ def main():
                            help="Снять только ячейки этих уравнений.")
         if name == "push":
             p.add_argument("--yes", action="store_true", help="подтвердить запуск сессий")
+            p.add_argument("--reassign-to", default=None,
+                           help="Файл аккаунтов-кандидатов для --reassign (по умолчанию "
+                                "--accounts-file). Нужен, когда часть флота упёрлась в "
+                                "недельную квоту: статусы опрашиваются по полному файлу, "
+                                "а переносить надо только на аккаунты с квотой.")
             p.add_argument("--reassign", action="store_true",
                            help="Перевесить упавшие ячейки на другой аккаунт (когда "
                                 "аккаунт устойчиво нерабочий, например без интернета).")
