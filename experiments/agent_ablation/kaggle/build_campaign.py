@@ -33,6 +33,7 @@ import argparse
 import collections
 import datetime
 import json
+import time
 import math
 import os
 import re
@@ -573,6 +574,13 @@ def cmd_push(args):
         for cell in wave:
             token = tokens.get(cell["account"])
             st = cell_state(cell, token) if token else "нет токена"
+            if st in ("error", "cancel_acknowledged") and token:
+                # Одно чтение статуса Kaggle ненадёжно (см. _hf_finished_after).
+                # Ложные ERROR до сих пор ловились только на завершённых
+                # кернелах, но перепуш РАБОТАЮЩЕГО кернела по такому чтению
+                # оборвал бы живую сессию. Перед перезапуском читаем ещё раз.
+                time.sleep(5)
+                st = cell_state(cell, token)
             states[st] += 1
             # "unknown" сюда НЕ входит: это чаще всего сбой опроса, а не
             # упавшая сессия, и перезапуск убил бы живой прогон.
