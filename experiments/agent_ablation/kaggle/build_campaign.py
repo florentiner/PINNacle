@@ -301,6 +301,10 @@ def cmd_plan(args):
         # Произвольные флаги раннеру (например --resume-prefix для проверочного
         # запуска, который берёт чекпоинт из прошлой кампании, а пишет в свою).
         "extra_args": getattr(args, "extra_args", "") or "",
+        # Каждый успешный пуш пишет в ячейку pushed_at, и кернел без этой
+        # отметки считается чужим (см. effective_state). Старые манифесты без
+        # поля читаются по-прежнему: их ячейки пушились до появления отметки.
+        "track_pushes": True,
         "hf_results": args.hf_results,
         "hf_buffer": args.hf_buffer,
         "slots_per_account": args.slots_per_account,
@@ -458,6 +462,35 @@ def cell_state(cell, token):
     return "unknown"
 
 
+# Kaggle знает кернел только по id аккаунт/rlpinn-abl-<pde>-<mode>-s<seed>, а в
+# id нет ни партии, ни захода. Второй заход той же ячейки или перенос
+# (--reassign) на аккаунт, где такой слаг уже считался, читает статус СТАРОГО
+# кернела: 2026-09-14 шесть ячеек w10_h2dcg_r2 оказались на аккаунтах с
+# завершёнными кернелами первого захода (версии от 09-12 07:05), читались как
+# complete, и наполнитель так и не запустил бы их второй заход.
+TERMINAL_STATES = ("complete", "error", "cancel_acknowledged")
+
+
+def effective_state(manifest, cell, token):
+    """Состояние ячейки с учётом того, пушила ли её ЭТА партия.
+
+    hold — ячейка отложена вручную (поле "hold" с причиной в манифесте): она
+    не пушится и не считается готовой, пока поле не снимут.
+
+    В манифесте с track_pushes каждый успешный пуш пишет в ячейку pushed_at.
+    Завершённый или упавший кернел у ячейки без этой отметки — чужой (прошлая
+    партия, прошлый заход), и ячейка на самом деле не запускалась. Работающий
+    кернел так не переписываем: старые сессии давно закончились, а живую
+    сессию лучше не перепушивать даже при потерянной отметке.
+    """
+    if cell.get("hold"):
+        return "hold"
+    state = cell_state(cell, token)
+    if manifest.get("track_pushes") and not cell.get("pushed_at") and state in TERMINAL_STATES:
+        return "not_pushed"
+    return state
+
+
 def cmd_stop(args):
     """Останавливает сессии волны.
 
@@ -571,16 +604,23 @@ def cmd_push(args):
         # Работающие сессии не трогаем.
         keep, states = [], collections.Counter()
         finished_error, hf_token_cache = [], [None]
+        held = []
         for cell in wave:
             token = tokens.get(cell["account"])
-            st = cell_state(cell, token) if token else "нет токена"
+            if cell.get("hold"):
+                # Считаем в состоянии волны: наполнитель не должен принять
+                # волну с отложенной ячейкой за готовую.
+                states["hold"] += 1
+                held.append(cell)
+                continue
+            st = effective_state(manifest, cell, token) if token else "нет токена"
             if st in ("error", "cancel_acknowledged") and token:
                 # Одно чтение статуса Kaggle ненадёжно (см. _hf_finished_after).
                 # Ложные ERROR до сих пор ловились только на завершённых
                 # кернелах, но перепуш РАБОТАЮЩЕГО кернела по такому чтению
                 # оборвал бы живую сессию. Перед перезапуском читаем ещё раз.
                 time.sleep(5)
-                st = cell_state(cell, token)
+                st = effective_state(manifest, cell, token)
             states[st] += 1
             # "unknown" сюда НЕ входит: это чаще всего сбой опроса, а не
             # упавшая сессия, и перезапуск убил бы живой прогон.
@@ -608,6 +648,9 @@ def cmd_push(args):
             elif st in ("cancel_acknowledged", "not_pushed"):
                 keep.append(cell)
         print("Состояние волны: " + ", ".join(f"{k}={v}" for k, v in sorted(states.items()) if v))
+        for cell in held:
+            print(f"   отложена (hold) — не пушу и готовой не считаю: {cell['pde']}/{cell['mode']} "
+                  f"seed{cell['seed']}: {cell['hold']}")
         for cell, tag in finished_error:
             print(f"   досчитана (ERROR только в коде выхода, прогон {tag} finished) — не перезапускаю: "
                   f"{cell['pde']}/{cell['mode']} seed{cell['seed']} {cell['kernel_id']}")
@@ -681,6 +724,12 @@ def cmd_push(args):
         for cell in keep:
             print(f"   {cell['pde']}/{cell['mode']} seed{cell['seed']}  {cell['kernel_id']}")
         wave = keep
+    else:
+        for cell in wave:
+            if cell.get("hold"):
+                print(f"   отложена (hold) — не пушу: {cell['pde']}/{cell['mode']} "
+                      f"seed{cell['seed']}: {cell['hold']}")
+        wave = [c for c in wave if not c.get("hold")]
     if not args.yes:
         print(f"Волна {args.wave}: {len(wave)} сессий на {len({c['account'] for c in wave})} "
               "аккаунтах. Это запустит счётчик GPU-квоты. Повторите с --yes.")
@@ -723,21 +772,14 @@ def cmd_status(args):
         if not token:
             print(f"  ?  {cell['kernel_id']}: нет токена")
             continue
-        res = kaggle_cli(cell["account"], token, ["kernels", "status", cell["kernel_id"]])
-        out = (res.stdout + res.stderr).strip().replace("\n", " ")
-        # До первого push статус-запрос на несуществующий кернел даёт не 404,
-        # а "403 Client Error: Forbidden" — без этой ветки такая ячейка
-        # попадала бы в "error" наравне с реально упавшим запуском.
-        if "403" in out and "forbidden" in out.lower():
-            state = "not_pushed"
-        else:
-            state = "unknown"
-            for candidate in ("complete", "running", "error", "cancelAcknowledged", "queued"):
-                if candidate.lower() in out.lower():
-                    state = candidate
-                    break
+        # Тот же разбор, что у push. Свой поиск подстрок находил слово "Error"
+        # в "404 Client Error: Not Found" и показывал незапушенные ячейки
+        # упавшими (2026-09-14: 4 ячейки в w10_h2dcg_r2 и 2 в w7_h2dms).
+        state = effective_state(manifest, cell, token)
         counts[state] = counts.get(state, 0) + 1
         print(f"  {state:20s} {cell['kernel_id']}")
+        if state == "hold":
+            print(f"      -> отложена: {cell['hold']}")
     print("\nИтого:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     return 0
 
