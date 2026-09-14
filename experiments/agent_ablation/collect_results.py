@@ -192,6 +192,13 @@ REBUTTAL_COLUMNS = [("none", "full"), ("no_per", "no PER"),
                     ("no_trust_region", "no trust region")]
 
 
+# Отчётная L2RE — комбинация ошибки решения с граничной частью, та же величина,
+# с которой критерий остановки сравнивает порог (см. agent_stats). Подпись в
+# самой таблице, чтобы при переносе в статью её нельзя было прочитать как l2re_op.
+L2RE_DEFINITION = "l2re=sqrt(l2re_op^2+l2re_bnd^2)"
+L2RE_ROW_LABEL = f"L2RE median ({L2RE_DEFINITION})"
+
+
 def render_rebuttal_table(agg_rows):
     """Таблица в форме ответа ревьюерам: на уравнение две строки — success rate
     (доля цепочек, достигших критерия остановки, с сырым счётом в скобках) и
@@ -224,7 +231,7 @@ def render_rebuttal_table(agg_rows):
             l2_cells.append(row["l2re_median"] if row["l2re_median"] != ""
                             else "нет успешных цепочек")
         lines.append("| " + " | ".join([title, "success rate"] + sr_cells) + " |")
-        lines.append("| " + " | ".join(["", "L2RE median"] + l2_cells) + " |")
+        lines.append("| " + " | ".join(["", L2RE_ROW_LABEL] + l2_cells) + " |")
 
     # Пустая клетка сама по себе ничего не объясняет. В опубликованной таблице
     # она сопровождается диагностикой: до какой точки цепочки этого режима
@@ -252,7 +259,8 @@ def render_rebuttal_table(agg_rows):
     if сноски:
         lines.append("")
         lines.append("Диагностика по клеткам без успешных цепочек "
-                     "(значения по l2re_min, то есть по лучшей точке траектории, "
+                     "(значения по l2re_min — минимуму той же "
+                     "l2re=sqrt(l2re_op^2+l2re_bnd^2) по валидациям траектории, "
                      "а не по финальной стадии):")
         lines.append("")
         lines += сноски
@@ -397,11 +405,19 @@ def main():
     table_out = os.path.splitext(args.out)[0] + ".rebuttal.md"
     table = render_rebuttal_table(agg_rows)
     with open(table_out, "w", encoding="utf-8") as f:
+        # Сиды берём из данных, а не пишем «один сид» из формы ответа ревьюерам:
+        # кампания v10 считает пять независимо обученных агентов на конфигурацию.
+        сиды = sorted({int(float(r["seed"])) for r in agent_rows
+                       if str(r.get("seed", "")).strip() not in ("", "nan")})
         f.write("# Абляция компонентов DQN\n\n"
                 "Форма таблицы — как в ответе ревьюерам (вопрос 4 рецензента DV8H).\n"
-                "Один сид на конфигурацию, одинаковый бюджет PINN. success rate —\n"
+                f"Независимо обученные агенты: по одному на сид, сиды "
+                f"{', '.join(map(str, сиды))}; одинаковый бюджет PINN. success rate —\n"
                 "доля построенных цепочек, достигших критерия остановки; число\n"
-                "траекторий по ячейкам разное, поэтому сравнима именно доля.\n\n")
+                "траекторий по ячейкам разное, поэтому сравнима именно доля.\n\n"
+                f"L2RE везде — {L2RE_DEFINITION}: ошибка решения вместе с граничной\n"
+                "частью, та же величина, с которой критерий сравнивает порог.\n"
+                "Медиана L2RE — по успешным цепочкам.\n\n")
         f.write(table + "\n")
     print("\n" + table)
     print(f"\n✅ {args.out} ({len(agg_rows)} строк), {by_agent_out} ({len(agent_rows)} строк), "
