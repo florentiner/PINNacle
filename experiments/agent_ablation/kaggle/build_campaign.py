@@ -154,9 +154,11 @@ def cmd_accounts(args):
 
 # --- план кампании --------------------------------------------------------
 
-def slugify_cell(pde, mode, seed):
+def slugify_cell(pde, mode, seed, prefix="rlpinn-abl"):
+    # У партий оценки свой префикс (rlpinn-eval): со слагом обучения кернел оценки
+    # на том же аккаунте читался бы статусом завершённого кернела обучения.
     pde_part = re.sub(r"[^a-z0-9]", "", pde.lower())[:20]
-    return f"rlpinn-abl-{pde_part}-{MODE_SLUG[mode]}-s{seed}"
+    return f"{prefix}-{pde_part}-{MODE_SLUG[mode]}-s{seed}"
 
 
 def build_cells(args):
@@ -240,7 +242,7 @@ def existing_load(campaign_root, prefix, skip_batch=None):
     return load
 
 
-def assign_waves(cells, accounts, slots_per_account, start_load=None):
+def assign_waves(cells, accounts, slots_per_account, start_load=None, slug_prefix="rlpinn-abl"):
     """Раскладка ячеек по аккаунтам: 4 режима одной строки таблицы — на разные
     аккаунты (иначе строка считается последовательно и упирается в квоту).
 
@@ -264,7 +266,7 @@ def assign_waves(cells, accounts, slots_per_account, start_load=None):
             load[account] += 1
             item = dict(cell)
             item["account"] = account
-            item["kernel_slug"] = slugify_cell(cell["pde"], cell["mode"], cell["seed"])
+            item["kernel_slug"] = slugify_cell(cell["pde"], cell["mode"], cell["seed"], prefix=slug_prefix)
             item["kernel_id"] = f"{account}/{item['kernel_slug']}"
             wave.append(item)
         waves.append(wave)
@@ -289,7 +291,8 @@ def cmd_plan(args):
         busiest = ", ".join(f"{a}={n}" for a, n in prior.most_common(3))
         print(f"Уже разложено в других партиях {args.prefix}: {sum(prior.values())} сессий "
               f"на {len(prior)} аккаунтах (самые загруженные: {busiest})")
-    waves = assign_waves(cells, accounts, args.slots_per_account, start_load=prior)
+    waves = assign_waves(cells, accounts, args.slots_per_account, start_load=prior,
+                         slug_prefix=args.slug_prefix)
 
     manifest = {
         "prefix": args.prefix,
@@ -312,6 +315,28 @@ def cmd_plan(args):
         "n_accounts": len(accounts),
         "waves": waves,
     }
+    if args.eval_seeds:
+        # Партия оценки обученных агентов как в статье (таблица 1, приложение E):
+        # кернел гоняет замороженного агента из train_prefix по сидам eval_seeds
+        # с бюджетом eval_budget_epochs эпох PINN на цепочку.
+        if not args.train_prefix:
+            raise SystemExit("--eval-seeds требует --train-prefix (откуда брать обученных агентов)")
+        if args.slug_prefix == "rlpinn-abl":
+            raise SystemExit("у партии оценки должен быть свой --slug-prefix (например rlpinn-eval)")
+        manifest["eval_seeds"] = [int(s) for s in args.eval_seeds]
+        manifest["eval_budget_epochs"] = int(args.eval_budget_epochs)
+        manifest["train_prefix"] = args.train_prefix
+        if args.wait_train_count:
+            # Ячейка не пушится, пока у агента нет нужного числа прогонов обучения
+            # новее wait_train.after с финальным чекпоинтом (см. effective_state).
+            for wave in waves:
+                for cell in wave:
+                    cell["wait_train"] = {"prefix": args.train_prefix,
+                                          "after": args.wait_train_after or "",
+                                          "count": int(args.wait_train_count)}
+    if args.allow_cpu:
+        manifest["gpu"] = False
+        manifest["allow_cpu"] = True
     path = manifest_path(args.campaign_root, args.prefix, args.batch)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -371,6 +396,11 @@ def render_kernel(manifest, cell, hf_token):
         "HF_BUFFER": manifest["hf_buffer"],
         "HF_PREFIX": manifest["prefix"],
         "START_DELAY_SEC": str(int(cell.get("start_delay_sec", 0))),
+        # пусто — ячейка обучения; сиды через пробел — ячейка оценки
+        "EVAL_SEEDS": " ".join(str(s) for s in (manifest.get("eval_seeds") or [])),
+        "EVAL_BUDGET": str(manifest.get("eval_budget_epochs", 7000)),
+        "TRAIN_PREFIX": manifest.get("train_prefix") or "",
+        "ALLOW_CPU": "1" if manifest.get("allow_cpu") else "0",
     }
     for name, value in replacements.items():
         pattern = rf'^{name} = os\.getenv\("{name}", "[^"]*"\)$'
@@ -419,7 +449,7 @@ def cmd_build(args):
             "language": "python",
             "kernel_type": "script",
             "is_private": True,
-            "enable_gpu": True,
+            "enable_gpu": manifest.get("gpu", True),
             "enable_tpu": False,
             "enable_internet": True,
             "keywords": [],
@@ -485,10 +515,141 @@ def effective_state(manifest, cell, token):
     """
     if cell.get("hold"):
         return "hold"
+    is_eval = bool(manifest.get("eval_seeds"))
+    if is_eval and cell.get("wait_train"):
+        # Оценивать можно только доученного агента (иначе раннер откажется, а
+        # сессия съест квоту на клон и установку).
+        ready = _train_ready(manifest, cell, cell["wait_train"])
+        if ready is None:
+            return "unknown"
+        if not ready:
+            return "wait_train"
     state = cell_state(cell, token)
     if manifest.get("track_pushes") and not cell.get("pushed_at") and state in TERMINAL_STATES:
-        return "not_pushed"
+        state = "not_pushed"
+    if is_eval and state in TERMINAL_STATES + ("not_pushed",):
+        # Статус Kaggle ячейки оценки ничего не говорит о сидах: сессия может
+        # закончиться штатно, оставив сид следующей (не хватило времени). Готова
+        # только ячейка, у которой на HF досчитаны ВСЕ сиды.
+        done = _eval_seeds_done(manifest, cell)
+        if done is None:
+            return "unknown"
+        if done:
+            return "complete"
+        if state in TERMINAL_STATES:
+            return "not_pushed"
     return state
+
+
+# --- проверки по HF для партий оценки --------------------------------------
+# Факты «прогон оценки досчитан» и «у прогона обучения есть финальный чекпоинт»
+# со временем не отменяются, поэтому положительные ответы кэшируются на диске:
+# без этого каждый вызов наполнителя заново листал бы на HF сотни папок, а лимит
+# 1000 запросов / 5 мин общий со всеми сессиями кампании.
+_HF_LIST_CACHE = {}
+_HF_FACTS_PATH = DEFAULT_CAMPAIGN_ROOT / "hf_positive_facts.json"
+_HF_FACTS = None
+
+
+def _hf_facts():
+    global _HF_FACTS
+    if _HF_FACTS is None:
+        try:
+            _HF_FACTS = set(json.loads(_HF_FACTS_PATH.read_text(encoding="utf-8")))
+        except Exception:
+            _HF_FACTS = set()
+    return _HF_FACTS
+
+
+def _hf_fact_add(key):
+    facts = _hf_facts()
+    if key in facts:
+        return
+    facts.add(key)
+    tmp = _HF_FACTS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(sorted(facts), ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, _HF_FACTS_PATH)
+
+
+def _hf_list(repo, path):
+    """Имена записей папки датасета без рекурсии: [] — папки нет, None — сбой чтения."""
+    key = (repo, path)
+    if key in _HF_LIST_CACHE:
+        return _HF_LIST_CACHE[key]
+    from huggingface_hub import HfApi
+    token = os.getenv("HF_TOKEN", "").strip() or (
+        DEFAULT_HF_TOKEN_FILE.read_text(encoding="utf-8").strip() if DEFAULT_HF_TOKEN_FILE.exists() else None)
+    api = HfApi(token=token)
+    for attempt in range(4):
+        try:
+            names = [e.path.split("/")[-1] for e in api.list_repo_tree(repo, path_in_repo=path, repo_type="dataset")]
+            _HF_LIST_CACHE[key] = names
+            return names
+        except Exception as exc:
+            text = f"{type(exc).__name__}: {exc}"
+            if "404" in text or "EntryNotFound" in text or "not found" in text.lower():
+                _HF_LIST_CACHE[key] = []
+                return []
+            if attempt < 3:
+                time.sleep(20 * (attempt + 1))
+    return None
+
+
+def _eval_seeds_done(manifest, cell):
+    """Все ли сиды оценки ячейки досчитаны: у каждого есть тег с results/eval_done.json.
+    None — HF не прочитался (статус неизвестен, ничего не перезапускаем)."""
+    repo = manifest["hf_results"]
+    base = f"{manifest['prefix']}/{cell['pde']}/{cell['mode']}"
+    tags = None
+    for eval_seed in manifest["eval_seeds"]:
+        suffix = f"_eval{eval_seed}_seed{cell['seed']}"
+        if any(f.startswith(f"eval_done:{repo}:{base}/") and f.endswith(suffix) for f in _hf_facts()):
+            continue
+        if tags is None:
+            tags = _hf_list(repo, base)
+            if tags is None:
+                return None
+        found = False
+        for tag in sorted(t for t in tags if t.endswith(suffix)):
+            names = _hf_list(repo, f"{base}/{tag}/results")
+            if names is None:
+                return None
+            if "eval_done.json" in names:
+                _hf_fact_add(f"eval_done:{repo}:{base}/{tag}")
+                found = True
+                break
+        if not found:
+            return False
+    return True
+
+
+def _train_ready(manifest, cell, wait):
+    """Доучен ли агент ячейки: не меньше wait["count"] прогонов обучения новее
+    wait["after"] с финальным чекпоинтом. None — HF не прочитался."""
+    repo = manifest["hf_results"]
+    base = f"{wait['prefix']}/{cell['pde']}/{cell['mode']}"
+    after = wait.get("after") or ""
+    need = int(wait.get("count", 1))
+    suffix = f"_seed{cell['seed']}"
+    known = {f.split(f"final:{repo}:{base}/", 1)[1] for f in _hf_facts()
+             if f.startswith(f"final:{repo}:{base}/")}
+    got = sum(1 for tag in known if tag.endswith(suffix) and tag >= after)
+    if got >= need:
+        return True
+    tags = _hf_list(repo, base)
+    if tags is None:
+        return None
+    got = 0
+    for tag in sorted(t for t in tags if t.endswith(suffix) and t >= after):
+        if tag not in known:
+            names = _hf_list(repo, f"{base}/{tag}/model")
+            if names is None:
+                return None
+            if "agent_final.pt" not in names:
+                continue
+            _hf_fact_add(f"final:{repo}:{base}/{tag}")
+        got += 1
+    return got >= need
 
 
 def cmd_stop(args):
@@ -593,6 +754,10 @@ def cmd_push(args):
     manifest, _ = load_manifest(args)
     wave = wave_of(manifest, args.wave)
     tokens = dict(load_accounts(args.accounts_file))
+
+    if manifest.get("eval_seeds") and not args.retry_failed:
+        raise SystemExit("Партии оценки пушатся только с --retry-failed: ячейки ждут обучения "
+                         "агента, а досчитанность сидов проверяется по HF.")
 
     missing = [c for c in wave if not c.get("package_dir")]
     if missing:
@@ -709,7 +874,7 @@ def cmd_push(args):
                 (cell_dir / "kernel-metadata.json").write_text(json.dumps({
                     "id": cell["kernel_id"], "title": cell["kernel_slug"],
                     "code_file": "campaign_kernel.py", "language": "python",
-                    "kernel_type": "script", "is_private": True, "enable_gpu": True,
+                    "kernel_type": "script", "is_private": True, "enable_gpu": manifest.get("gpu", True),
                     "enable_tpu": False, "enable_internet": True, "keywords": [],
                     "dataset_sources": [], "kernel_sources": [],
                     "competition_sources": [], "model_sources": [],
@@ -730,6 +895,9 @@ def cmd_push(args):
                 print(f"   отложена (hold) — не пушу: {cell['pde']}/{cell['mode']} "
                       f"seed{cell['seed']}: {cell['hold']}")
         wave = [c for c in wave if not c.get("hold")]
+    if getattr(args, "max_new", None) is not None and len(wave) > args.max_new:
+        print(f"Ограничение --max-new {args.max_new}: пушу {args.max_new} из {len(wave)} ячеек.")
+        wave = wave[:max(0, args.max_new)]
     if not args.yes:
         print(f"Волна {args.wave}: {len(wave)} сессий на {len({c['account'] for c in wave})} "
               "аккаунтах. Это запустит счётчик GPU-квоты. Повторите с --yes.")
@@ -847,6 +1015,23 @@ def main():
     p_plan.add_argument("--cells", default="",
                         help="Только эти ячейки: pde:mode:seed через запятую "
                              "(добор тонких ячеек после основной партии).")
+    p_plan.add_argument("--slug-prefix", default="rlpinn-abl",
+                        help="Префикс слага кернела. У партий оценки свой (rlpinn-eval), "
+                             "чтобы не пересекаться с кернелами обучения.")
+    p_plan.add_argument("--eval-seeds", nargs="+", default=None,
+                        help="Партия ОЦЕНКИ обученных агентов как в статье: сиды прогонов "
+                             "(одинаковые у всех агентов — парное сравнение режимов).")
+    p_plan.add_argument("--eval-budget-epochs", type=int, default=7000,
+                        help="Бюджет эпох PINN на цепочку оценки (в статье 7000).")
+    p_plan.add_argument("--train-prefix", default=None,
+                        help="Префикс результатов обучения, откуда брать финальных агентов.")
+    p_plan.add_argument("--wait-train-after", default="",
+                        help="Ячейка оценки ждёт прогонов обучения с тегом не раньше этого "
+                             "(YYYY-MM-DD_HH-MM-SS).")
+    p_plan.add_argument("--wait-train-count", type=int, default=0,
+                        help="Сколько таких прогонов с финальным чекпоинтом нужно (0 — не ждать).")
+    p_plan.add_argument("--allow-cpu", action="store_true",
+                        help="Кернел без GPU (проверочный прогон, GPU-квоту не тратит).")
 
     for name, help_text in (("build", "собрать пуш-пакеты волны"),
                             ("push", "запушить волну"),
@@ -872,6 +1057,9 @@ def main():
             p.add_argument("--retry-failed", action="store_true",
                            help="Запушить только ячейки, которые сейчас упали или не "
                                 "запускались; работающие сессии не трогать.")
+            p.add_argument("--max-new", type=int, default=None,
+                           help="Запушить не больше N ячеек за вызов: наполнитель так "
+                                "ограничивает долю флота под оценку.")
 
     args = parser.parse_args()
     handlers = {"accounts": cmd_accounts, "plan": cmd_plan,

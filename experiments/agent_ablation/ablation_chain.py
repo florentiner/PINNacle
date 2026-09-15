@@ -162,6 +162,15 @@ def build_parser():
     parser.add_argument("--fixed-steps", type=int, default=0,
                         help="Фиксированный бюджет шагов агента на траекторию "
                              "(done=1 игнорируется; для честного сравнения l2re).")
+    parser.add_argument("--eval-budget-epochs", type=int, default=0,
+                        help="Оценка как в статье (таблица 1, приложение E): замороженный "
+                             "агент строит цепочку, пока не исчерпан бюджет эпох PINN "
+                             "(в статье 7000); порог eps и Kmax не останавливают, "
+                             "последняя стадия урезается до остатка. Только с --eval-only.")
+    parser.add_argument("--agent-seed", type=int, default=None,
+                        help="Сид обученного агента, чей финальный чекпоинт брать при "
+                             "--resume-from auto (по умолчанию --seed). В оценке --seed — "
+                             "сид прогона: точки коллокации, инициализация PINN, автоэнкодер.")
     parser.add_argument("--reset-success-done-to-failure", action="store_true",
                         help="При смене tolerance: сбросить старые done=1 буфера и "
                              "переразметить цепочки по новому порогу.")
@@ -252,6 +261,15 @@ def main():
         return
     if not args.pde:
         parser.error("нужен --pde <ключ> (список: --list-pdes)")
+    if args.eval_budget_epochs and not args.eval_only:
+        parser.error("--eval-budget-epochs работает только вместе с --eval-only")
+    if args.eval_budget_epochs and args.eval_budget_epochs % args.log_every:
+        # TesterCallback валидирует раз в log_every эпох и в on_train_end требует
+        # хотя бы одну валидацию за стадию. Длины стадий в сетке действий кратны
+        # 100, поэтому при кратном бюджете урезанная последняя стадия тоже кратна
+        # log_every; при некратном (например 250) она выходит в 50 эпох без единой
+        # валидации, и on_train_end падает на пустом frmses.
+        parser.error(f"--eval-budget-epochs должен делиться на --log-every ({args.log_every})")
 
     cfg = resolve_config(args)
     spec = cfg["spec"]
@@ -282,6 +300,9 @@ def main():
             "warmup_updates": args.warmup_updates,
             "max_hours": args.max_hours,
             "resume_from": args.resume_from,
+            "eval_only": args.eval_only,
+            "eval_budget_epochs": args.eval_budget_epochs,
+            "agent_seed": args.agent_seed if args.agent_seed is not None else args.seed,
         }, ensure_ascii=False, indent=2))
         return
 
@@ -314,7 +335,9 @@ def main():
         if not args.buffer_dir:
             raise SystemExit("--buffer-src local требует --buffer-dir")
         buffer_dir = args.buffer_dir
-    elif args.buffer_src == "hf":
+    # В оценке агент не учится и буфер не грузит — скачивать его незачем
+    # (это до ~400 запросов к HF на сессию из общего лимита кампании).
+    elif args.buffer_src == "hf" and not args.eval_only:
         from huggingface_hub import snapshot_download
         from RL.rl_utils.hf_logger import hf_retry
 
@@ -384,9 +407,18 @@ def main():
         # сидами — это независимо обученные агенты, чужой чекпоинт им нельзя.
         resume_checkpoint = resolve_resume_checkpoint(
             resume_repo, args.resume_prefix or args.hf_results_prefix,
-            cfg["hf_subdir"], args.ablation, seed=args.seed)
+            cfg["hf_subdir"], args.ablation,
+            seed=args.agent_seed if args.agent_seed is not None else args.seed)
     elif args.resume_from.lower() != "none":
         resume_checkpoint = {"kind": "final", "path": args.resume_from, "tag": "local"}
+    if args.eval_only and (not resume_checkpoint or resume_checkpoint.get("kind") != "final"):
+        # Оценивать можно только доученного агента: снапшот голов посреди
+        # обучения (фоллбек резюма) дал бы метрики недоученной политики.
+        msg = ("eval-only: у агента нет финального чекпоинта ("
+               f"{resume_checkpoint.get('kind') if resume_checkpoint else 'ничего не найдено'}) — "
+               "оценка не запускается")
+        run_control.write_status("failed", msg)
+        raise SystemExit(msg)
 
     # --- построчный CSV по траекториям (ложится в run_dir -> уезжает на HF) ---
     from RL.rl_utils.trajectory_metrics import TrajectoryMetricsLogger
@@ -532,6 +564,8 @@ def main():
         "refine_epochs": args.refine_epochs,
         "eval_only": args.eval_only,
         "fixed_steps": args.fixed_steps,
+        "eval_budget_epochs": args.eval_budget_epochs,
+        "agent_seed": args.agent_seed if args.agent_seed is not None else args.seed,
         "reset_success_done_to_failure": args.reset_success_done_to_failure,
     }
 
@@ -559,6 +593,17 @@ def main():
             run_control.stop_reason or "все траектории пройдены",
             extra={"trajectory_rows": trajectory_logger.rows_written},
         )
+        # Признак досчитанной оценки для планировщика: status.json=finished бывает
+        # и у прогона, оборванного дедлайном посреди цепочки, а такой надо повторить.
+        if args.eval_only and rl_agent_params.get("eval_completed_trajectories", 0) > 0:
+            with open(os.path.join(save_path, "results", "eval_done.json"), "w", encoding="utf-8") as fh:
+                json.dump({
+                    "agent_seed": rl_agent_params["agent_seed"],
+                    "eval_seed": args.seed,
+                    "budget_epochs": args.eval_budget_epochs,
+                    "completed": rl_agent_params["eval_completed_trajectories"],
+                    "agent_checkpoint_tag": (resume_checkpoint or {}).get("tag"),
+                }, fh, ensure_ascii=False)
     finally:
         print(f"\n⏱  Время запуска: {run_control.elapsed / 3600:.2f} ч, "
               f"строк в CSV: {trajectory_logger.rows_written}")

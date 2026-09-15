@@ -63,6 +63,13 @@ CSV_FIELDS_EXTRA = [
     # l2re_refined — l2re после пост-доводки за порогом (вариант A), пусто без неё
     "l2re_min",
     "l2re_refined",
+    # оценка замороженного агента как в статье (пусто в строках обучения):
+    #   eval_budget_epochs — бюджет эпох PINN на цепочку;
+    #   epochs_used        — эпохи по плану стадий (последняя урезается до остатка);
+    #   agent_seed         — сид обученного агента; seed в таких строках — сид прогона
+    "eval_budget_epochs",
+    "epochs_used",
+    "agent_seed",
 ]
 
 CSV_FIELDS = CSV_FIELDS_REQUIRED + CSV_FIELDS_EXTRA

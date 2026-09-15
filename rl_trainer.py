@@ -215,6 +215,12 @@ def run_deepxde_rl_training(
     # Режим оценки: жадная политика, фиксированный бюджет шагов, агент не обучается
     eval_only = bool(rl_agent_params.get("eval_only", False))
     fixed_steps = int(rl_agent_params.get("fixed_steps", 0))
+    # Оценка как в статье (таблица 1, приложение E): замороженный агент строит
+    # цепочку, пока не исчерпан бюджет эпох PINN; порог eps и Kmax её не
+    # останавливают. 0 — режим выключен.
+    eval_budget_epochs = int(rl_agent_params.get("eval_budget_epochs", 0) or 0)
+    if eval_budget_epochs > 0 and not eval_only:
+        raise RuntimeError("eval_budget_epochs работает только вместе с eval_only")
 
     # Доводка PINN после достижения порога (l2re глубже, RL-семантика не меняется)
     refine_steps = int(rl_agent_params.get("refine_steps", 0))
@@ -403,6 +409,12 @@ def run_deepxde_rl_training(
         final_done = 0
         trajectory_actions = []
         trajectory_start_time = time.time()
+        # done до первого шага: в оценке бюджет может кончиться на первой же
+        # стадии раньше, чем env.step() выставит done, а ниже он читается
+        done = 0
+        # бюджет оценки: эпохи по плану стадий (последняя урезается до остатка)
+        epochs_used = 0
+        eval_completed = False
 
         print('\n############################################################################' +
         f'\nStarting trajectory {idx_traj + 1}/{rl_agent_params["n_trajectories"]} ' +
@@ -446,6 +458,14 @@ def run_deepxde_rl_training(
 
             # --- compile optimizer for this chunk ---
             chunk_iters = int(action["epochs"])
+            if eval_budget_epochs > 0 and chunk_iters > eval_budget_epochs - epochs_used:
+                # Последняя стадия урезается до остатка: у всех агентов ровно
+                # eval_budget_epochs эпох, как в оценке статьи.
+                remaining = eval_budget_epochs - epochs_used
+                print(f"✂️  Стадия урезана до остатка бюджета оценки: {remaining} из {chunk_iters} эпох.")
+                chunk_iters = remaining
+                action = dict(action, epochs=chunk_iters)
+                trajectory_actions[-1] = action
             torch_opt = _build_torch_optimizer(action["type"], model.net.parameters(), action)
 
 
@@ -467,6 +487,20 @@ def run_deepxde_rl_training(
                 model_save_path=save_path,
                 save_model=False,
             )
+
+            if eval_budget_epochs > 0:
+                epochs_used += chunk_iters
+                if epochs_used >= eval_budget_epochs:
+                    # Конец бюджета: состояние для следующего решения агента не
+                    # нужно, а метрики должны относиться к последней эпохе, а не
+                    # к последней плановой валидации (раз в log_every эпох).
+                    _force_validation(base_callbacks[0] if base_callbacks else None)
+                    final_loss = _extract_weighted_train_loss(model)
+                    trajectory_losses.append(float(final_loss))
+                    final_done = 0 if np.isfinite(final_loss) else -1
+                    eval_completed = True
+                    print(f"\n⏹  Бюджет оценки {eval_budget_epochs} эпох исчерпан на стадии {t + 1} — конец цепочки.")
+                    break
 
             solver_models = saver.saved_models
             tester_callback = callbacks[0]
@@ -588,6 +622,13 @@ def run_deepxde_rl_training(
             # env.render()
             if transition_ready:
                 state = next_state
+            # Оценка с бюджетом эпох: цепочка идёт до конца бюджета, done=1
+            # (порог eps) и Kmax её не обрывают — как в приложении E статьи.
+            if eval_budget_epochs > 0:
+                if done == -1:
+                    eval_completed = True
+                    break
+                continue
             # Фиксированный бюджет шагов (режим оценки): игнорируем done=1,
             # каждая траектория получает одинаковое число решений агента
             if fixed_steps > 0 and (t + 1) >= fixed_steps:
@@ -611,7 +652,10 @@ def run_deepxde_rl_training(
                 rl_penalty = 0
                 break
 
-        if len(trajectory_transitions) > 0:
+        # В оценке агент не учится: переходы не кладутся в реплей, апдейтов нет.
+        # Без этой проверки уже после 2-3 цепочек реплей набирал бы batch_size,
+        # и optim_ ниже дообучал бы агента между прогонами оценки.
+        if len(trajectory_transitions) > 0 and not eval_only:
             if final_done == -1:
                 trajectory_transitions[-1]["done"] = -1
 
@@ -748,11 +792,23 @@ def run_deepxde_rl_training(
                     "l2re_min": traj_l2re_min if traj_l2re_min != float("inf") else float("nan"),
                     # l2re после пост-доводки (вариант A); пусто без неё
                     "l2re_refined": refined["l2re"] if refined else "",
+                    # оценка замороженного агента: бюджет, потрачено, чей агент
+                    "eval_budget_epochs": eval_budget_epochs or "",
+                    "epochs_used": epochs_used if eval_budget_epochs > 0 else "",
+                    "agent_seed": rl_agent_params.get("agent_seed", "") if eval_only else "",
                 },
             )
 
+        if eval_completed:
+            rl_agent_params["eval_completed_trajectories"] = \
+                rl_agent_params.get("eval_completed_trajectories", 0) + 1
         if done == 1:
             idx_traj += 1
+
+    if eval_only:
+        # Агент не обучался: копия чекпоинта обучения под префиксом оценки не нужна.
+        print("eval-only: финальная модель агента не сохраняется — агент не обучался.")
+        return
 
     # --- финальная модель агента: её забирает HF-логгер при последней синхронизации ---
     final_model_dir = os.path.join(save_path, "model")
@@ -766,6 +822,16 @@ def run_deepxde_rl_training(
             "steps_done": rl_agent.steps_done,
         },
     )
+
+
+def _force_validation(tester):
+    """Внеочередная валидация TesterCallback: он считает метрики раз в log_every
+    эпох по счётчику, и без этого финальная L2RE прогона оценки могла бы быть
+    на log_every-1 эпох старше конца бюджета."""
+    if tester is None or getattr(tester, "log_every", None) is None:
+        return
+    tester.epochs_since_last_resample = max(0, int(tester.log_every) - 1)
+    tester.on_epoch_end()
 
 
 def train_process_rl(data, save_path, device, seed, rl_agent_params):
@@ -789,7 +855,10 @@ def train_process_rl(data, save_path, device, seed, rl_agent_params):
     # ε-жадных бросков, что и первая.
     if seed is not None:
         resume_tag = (rl_agent_params.get("resume_checkpoint") or {}).get("tag")
-        offset = zlib.crc32(str(resume_tag).encode()) % 100_000 if resume_tag else 0
+        # В оценке сид прогона задан явно и обязан совпадать у всех агентов (одни и
+        # те же инициализации PINN для всех режимов), поэтому сдвиг от тега не нужен.
+        offset = (zlib.crc32(str(resume_tag).encode()) % 100_000
+                  if resume_tag and not rl_agent_params.get("eval_only") else 0)
         effective_seed = int(seed) + offset
         dde.config.set_random_seed(effective_seed)
         print(f"🎲 Сид запуска: {effective_seed} (базовый {seed}"

@@ -52,6 +52,14 @@ HF_SYNC_SEC = os.getenv("HF_SYNC_SEC", "1800")
 # выбивают его за минуты — так упали 5 ячеек первой волны. Пауза вычитается
 # из MAX_HOURS, чтобы сессия всё равно уложилась в 12-часовой лимит Kaggle.
 START_DELAY_SEC = os.getenv("START_DELAY_SEC", "0")
+# Оценка обученного агента как в статье (таблица 1, приложение E): сиды прогонов
+# через пробел; пусто — обычная ячейка обучения. TRAIN_PREFIX — откуда брать
+# финальный чекпоинт агента, EVAL_BUDGET — бюджет эпох PINN на цепочку.
+EVAL_SEEDS = os.getenv("EVAL_SEEDS", "")
+EVAL_BUDGET = os.getenv("EVAL_BUDGET", "7000")
+TRAIN_PREFIX = os.getenv("TRAIN_PREFIX", "")
+# 1 — разрешить CPU (проверочный запуск без GPU-квоты); в кампании всегда 0
+ALLOW_CPU = os.getenv("ALLOW_CPU", "0")
 HF_TOKEN_EMBEDDED = ""  # подставляется генератором в пушимую копию
 
 REPO_URL = "https://github.com/florentiner/PINNacle.git"
@@ -93,7 +101,7 @@ def ensure_torch_matches_gpu():
         # Обычная причина — недельная квота аккаунта кончилась, и Kaggle отдал
         # сессию без ускорителя, ничего не сообщив. Лучше упасть сразу: ячейка
         # пометится error, и её видно в status/--retry-failed.
-        if os.getenv("ALLOW_CPU", "0") != "1":
+        if ALLOW_CPU != "1":
             sys.exit("❌ CUDA недоступна: у аккаунта, скорее всего, кончилась "
                      "недельная GPU-квота, либо сессия выдана без ускорителя. "
                      "Обучение на CPU не имеет смысла — выходим, не тратя слот. "
@@ -125,6 +133,83 @@ def get_hf_token():
     except Exception as exc:
         print(f"Kaggle Secrets недоступны ({exc}).")
     return HF_TOKEN_EMBEDDED or os.getenv("HF_TOKEN")
+
+
+def eval_seed_done(api, eval_seed):
+    """Досчитан ли прогон оценки этого сида: есть тег с results/eval_done.json."""
+    base = f"{HF_PREFIX}/{PDE}/{MODE}"
+    suffix = f"_eval{eval_seed}_seed{SEED}"
+    try:
+        tags = [e.path.split("/")[-1] for e in api.list_repo_tree(
+            HF_RESULTS, path_in_repo=base, repo_type="dataset")]
+    except Exception as exc:
+        # Папки ещё нет (первый запуск ячейки) или сбой чтения: считаем сид
+        # недосчитанным — лишний прогон дешевле пропущенного.
+        print(f"   чтение {base}: {type(exc).__name__} — сид {eval_seed} считаю недосчитанным")
+        return False
+    for tag in sorted(t for t in tags if t.endswith(suffix)):
+        try:
+            names = {e.path.split("/")[-1] for e in api.list_repo_tree(
+                HF_RESULTS, path_in_repo=f"{base}/{tag}/results", repo_type="dataset")}
+        except Exception:
+            continue
+        if "eval_done.json" in names:
+            return True
+    return False
+
+
+def run_eval(max_hours):
+    """Сессия оценки: прогоны по сидам подряд, досчитанные на HF пропускаются."""
+    import socket
+    from huggingface_hub import HfApi
+
+    if not TRAIN_PREFIX:
+        print("❌ TRAIN_PREFIX не задан — неоткуда брать обученного агента.")
+        return 1
+    api = HfApi(token=os.environ.get("HF_TOKEN"))
+    start = time.time()
+    budget_s = max_hours * 3600
+    last_run_s = None
+    codes = []
+    for eval_seed in EVAL_SEEDS.split():
+        if eval_seed_done(api, eval_seed):
+            print(f"\nсид оценки {eval_seed}: уже досчитан на HF — пропускаю", flush=True)
+            continue
+        left = budget_s - (time.time() - start)
+        # Прогон идёт от получаса до многих часов. Если по длительности прошлого
+        # следующий не влезет, не начинаем: оборванный прогон не засчитывается
+        # (нет eval_done.json), а квоту съедает. Его возьмёт следующая сессия.
+        if last_run_s is not None and left < 1.15 * last_run_s:
+            print(f"\n⏭  сид оценки {eval_seed}: осталось {left / 3600:.2f} ч при прошлом прогоне "
+                  f"{last_run_s / 3600:.2f} ч — оставляю следующей сессии", flush=True)
+            break
+        tag = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{socket.gethostname()}_eval{eval_seed}_seed{SEED}"
+        cmd = [
+            sys.executable, "-u", RUNNER,
+            "--pde", PDE,
+            "--ablation", MODE,
+            "--seed", eval_seed,
+            "--agent-seed", SEED,
+            "--eval-only",
+            "--eval-budget-epochs", EVAL_BUDGET,
+            "--n-trajectories", "1",
+            "--max-hours", f"{max(left, 60.0) / 3600:.4f}",
+            "--hf-results", HF_RESULTS,
+            "--hf-results-prefix", HF_PREFIX,
+            "--hf-results-sync-sec", HF_SYNC_SEC,
+            "--run-tag", tag,
+            "--resume-from", "auto",
+            "--resume-prefix", TRAIN_PREFIX,
+        ] + shlex.split(EXTRA_ARGS)
+        print("\n$ " + " ".join(cmd), flush=True)
+        t0 = time.time()
+        result = subprocess.run(cmd)
+        last_run_s = time.time() - t0
+        print(f"\nпрогон оценки {eval_seed} завершился с кодом {result.returncode} "
+              f"за {last_run_s / 3600:.2f} ч", flush=True)
+        codes.append(result.returncode)
+    print(f"\nHF: https://huggingface.co/datasets/{HF_RESULTS}/tree/main/{HF_PREFIX}/{PDE}/{MODE}")
+    return 0 if all(code == 0 for code in codes) else 1
 
 
 def main():
@@ -166,6 +251,8 @@ def main():
     ensure_torch_matches_gpu()
 
     os.chdir(CLONE_DIR)
+    if EVAL_SEEDS.strip():
+        sys.exit(run_eval(max_hours))
     cmd = [
         sys.executable, "-u", RUNNER,
         "--pde", PDE,
