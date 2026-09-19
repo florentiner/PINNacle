@@ -26,11 +26,18 @@
                    NS 2d-C = NS2D_LidDriven, 2d-CG = NS2D_BackStep;
                    Wave 2d-CG = Wave2D_Heterogeneous, 2d-MS = Wave2D_LongTime.
                    Единственное исключение — poisson_boltzmann_2d, см. его note;
-  tolerance      — порог успеха траектории по взвешенному лоссу PINN
-                   (`abs(loss) < tolerance` => done=1 в EnvRLOptimizer).
-                   None означает «не откалиброван»: раннер откажется
-                   стартовать, пока значение не задано явно или не получено
-                   через calibrate_tolerance.py;
+  tolerance      — порог разметки офлайн-буфера по лоссу. Это НЕ критерий
+                   успеха онлайн: тот сравнивает L2RE с eps_l2re. Загрузчик
+                   (truncate_failure_chains_by_tol) в каждой цепочке-провале
+                   ищет первый переход с лоссом <= tolerance, помечает его
+                   done=1 и отбрасывает хвост цепочки. Правило коллеги, который
+                   обучал агентов статьи: порог отрезает не больше ~5% переходов
+                   буфера. Поэтому здесь стоит его значение из
+                   proj_info_for_muti_traing.py, если на нашем буфере HF оно
+                   отрезает <= 5%; иначе наибольший порог, отрезающий <= 5%
+                   (prepare_pde.py). Доли по уравнениям — в README, раздел
+                   «Порог разметки буфера». None означает «не откалиброван»:
+                   раннер откажется стартовать, пока значение не задано явно;
   peline_l2re    — L2RE PELINE при бюджете 7k эпох из таблицы рецензии
                    (по ней и делится на tier'ы);
   tier           — solvable / borderline / unsolvable. Абляция запускается
@@ -39,10 +46,10 @@
                    не скажет;
   campaign       — done (посчитано в кампании v5 и вошло в rebuttal) / todo.
 
-Значения tolerance взяты из соответствующих chain-скриптов той же
-конфигурации, что и абляция (2D-состояние, use_tol=False, new_tol=True):
-ветка Saitama32/PINNacle:rlpinn_ablation_optimization, файлы
-`experiments/*/n_dim_states/*_2d_state.py` и `multi_pde_exps/*_train.py`.
+Конфигурация загрузки буфера та же, что у агентов статьи (use_tol=False,
+new_tol=True, prev_tol=0, 200 последних экспериментов). У уравнений, которые в
+кампании не участвуют, tolerance по-прежнему взят из chain-скриптов ветки
+Saitama32/PINNacle:rlpinn_ablation_optimization и по правилу 5% не проверялся.
 """
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
@@ -57,6 +64,22 @@ from typing import Dict, Optional, Tuple
 # poissoninv не берётся вовсе, при 3x почти всё уходит в 100%, при 2x доли
 # успеха ложатся в 44-100% — то есть метрика различает режимы.
 EPS_FACTOR = 2.0
+
+# Пороги разметки буфера, с которыми обучалась кампания runs_kaggle_v10
+# (коммит b9c8aec). Их подбирали так, чтобы порога достигали 75% цепочек
+# буфера, и на 10 уравнениях из 13 они отрезали 40-56% переходов вместо
+# <= 5%, как у агентов статьи. С нынешними совпадают только
+# poisson_boltzmann_2d и wave1d: агенты v10 этих двух уравнений обучены как в
+# статье, остальные переобучаются в runs_kaggle_v11.
+TOLERANCE_V10 = {
+    "burgers1d": 6.237356865e-05, "burgers2d": 3.857996941,
+    "poisson2d_classic": 2.715027332, "poisson_boltzmann_2d": 0.039669186,
+    "poissonnd": 0.0001415938605, "poissoninv": 0.6834585667,
+    "heat2d_varyingcoef": 3.105021477, "heat2d_multiscale": 0.006643642,
+    "heat2d_complexgeometry": 1.226250887, "heatnd": 0.001003470359,
+    "heatinv": 0.6998662353, "wave1d": 0.012694936,
+    "ns2d_backstep": 0.001932991785, "grayscott": 0.674369812,
+}
 
 # Режимы абляции DQN-стека (совпадают с RL.rl_algorithms.ABLATION_MODES).
 ABLATION_MODES = ("none", "no_per", "no_soft_watkins", "no_trust_region")
@@ -145,74 +168,80 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
     _spec(
         key="burgers1d", title="Burgers 1d-C",
         module="src.pde.burgers", cls="Burgers1D",
-        comet_project="rlpinn-burgers-1d-rebuild-buffer-2-dim",
-        tolerance=6.237356865e-05, peline_l2re=1.34e-2, tier="solvable",
+        comet_project="rlpinn-burgers1d-tolerance-corrected",
+        tolerance=9.550565e-06, peline_l2re=1.34e-2, tier="solvable",
         lbfgs_epochs=(100, 500, 1500),
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 4.8% переходов",
     ),
     _spec(
         key="poisson2d_classic", title="Poisson 2d-C",
         module="src.pde.poisson", cls="Poisson2D_Classic",
-        comet_project="rlpinn-poisson-2d-classic-farm-transitions",
-        tolerance=2.715027332, peline_l2re=3.10e-1, tier="solvable",
+        comet_project="rlpinn-poisson2d-classic-tolerance",
+        tolerance=0.014836011, peline_l2re=3.10e-1, tier="solvable",
         note="peline_l2re — строка Poisson 2d-C таблицы 1 (PELINE 3.10E-1); до "
              "сверки с PDF здесь стояло 3.10E-2, то есть порог был бы в десять "
-             "раз строже. tolerance из optimization_multi_pde/"
-             "poisson_2d_classic_chain.py; перепроверить prepare_pde.py после "
-             "экспорта буфера",
+             "раз строже. Порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 3.0% переходов",
     ),
     _spec(
         key="heat2d_multiscale", title="Heat 2d-MS",
         module="src.pde.heat", cls="Heat2D_Multiscale",
         comet_project="rlpinn-heat2d-multiscale-tolerance-corrected",
-        tolerance=0.006643642, peline_l2re=1.27e-1, tier="solvable",
+        tolerance=0.001009691, peline_l2re=1.27e-1, tier="solvable",
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 0.5% переходов. Буфер на HF выгружен из "
+             "rlpinn-heat2d-multiscale-tolerance-with-models (так в его manifest.json), "
+             "а у коллеги указан проект -tolerance-corrected",
     ),
     _spec(
         key="heat2d_complexgeometry", title="Heat 2d-CG",
         module="src.pde.heat", cls="Heat2D_ComplexGeometry",
-        comet_project="rlpinn-heat-2d-cg-farm-trans",
-        tolerance=1.226250887, peline_l2re=1.58e-2, tier="solvable",
-        note="порог откалиброван prepare_pde.py по буферу 2026-09-10",
+        comet_project="rlpinn-heat-2d-cg-tolerance",
+        tolerance=0.9436, peline_l2re=1.58e-2, tier="solvable",
+        note="порог буфера — наибольший порог, отрезающий <= 5% переходов буфера HF (5.0%); значение коллеги 1.0336 отрезает здесь 15.2%",
     ),
     _spec(
         key="wave1d", title="Wave 1d-C",
         module="src.pde.wave", cls="Wave1D",
-        comet_project="rlpinn-wave1d-loss-chain-reward-tolerance",
+        comet_project="rlpinn-wave1d-tolerance",
         tolerance=0.012694936, peline_l2re=6.47e-2, tier="solvable",
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 4.6% переходов; тот же был и в v10",
     ),
     _spec(
         key="grayscott", title="GS",
         module="src.pde.chaotic", cls="GrayScottEquation",
         comet_project="rlpinn-grayscott-tolerance",
-        tolerance=0.674369812, peline_l2re=9.33e-2, tier="solvable",
-        note="порог откалиброван по буферу calibrate_tolerance.py (доля успешных цепочек 75%, как у poisson_boltzmann_2d — единственного уравнения v5 с информативной абляцией). Сравнивается та же величина, что и в загрузчике: min по карте next_state['loss_total']. Распределение с плато: p10=p50=0.6744, p75=1.55",
+        tolerance=0.6743578, peline_l2re=9.33e-2, tier="solvable",
+        note="порог буфера — наибольший порог, отрезающий <= 5% переходов буфера HF (<= 5%); значение коллеги 0.674358726 отрезает здесь 10.4%. "
+             "Распределение лосса с плато (p10=p50=0.6744): в шестом знаке порог "
+             "меняет долю отрезанного с 5% до 45%",
     ),
     _spec(
         key="poissonnd", title="PNd",
         module="src.pde.poisson", cls="PoissonND",
         comet_project="rlpinn-poissonnd-tolerance",
-        tolerance=0.0001415938605, peline_l2re=2.37e-4, tier="solvable",
-        note="порог не найден ни в одном chain-скрипте — калибровать по буферу",
+        tolerance=1.34e-05, peline_l2re=2.37e-4, tier="solvable",
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 5.0% переходов",
     ),
     _spec(
         key="heatnd", title="HNd",
         module="src.pde.heat", cls="HeatND",
         comet_project="rlpinn-heatnd-tolerance",
-        tolerance=0.001003470359, peline_l2re=2.49e-4, tier="solvable",
-        note="tolerance из tolerance-кампании проекта; по буферу даёт 81.6% успешных цепочек офлайн — режим хороший, оставлен как есть",
+        tolerance=4.998e-05, peline_l2re=2.49e-4, tier="solvable",
+        note="порог буфера — наибольший порог, отрезающий <= 5% переходов буфера HF (4.8%); значение коллеги 5.99e-05 отрезает здесь 11.0%",
     ),
     _spec(
         key="poissoninv", title="PInv",
         module="src.pde.inverse", cls="PoissonInv",
         comet_project="rlpinn-poissoninv-tolerance",
-        tolerance=0.6834585667, peline_l2re=1.53e-2, tier="solvable",
-        note="порог откалиброван по буферу calibrate_tolerance.py (доля успешных цепочек 75%, как у poisson_boltzmann_2d — единственного уравнения v5 с информативной абляцией). Сравнивается та же величина, что и в загрузчике: min по карте next_state['loss_total']",
+        tolerance=0.6663, peline_l2re=1.53e-2, tier="solvable",
+        note="порог буфера — наибольший порог, отрезающий <= 5% переходов буфера HF (4.8%); значение коллеги 0.6690 отрезает здесь 7.6%",
     ),
     _spec(
         key="heatinv", title="HInv",
         module="src.pde.inverse", cls="HeatInv",
         comet_project="rlpinn-heatinv-tolerance",
-        tolerance=0.6998662353, peline_l2re=3.77e-2, tier="solvable",
-        note="порог откалиброван по буферу calibrate_tolerance.py (доля успешных цепочек 75%, как у poisson_boltzmann_2d — единственного уравнения v5 с информативной абляцией). Сравнивается та же величина, что и в загрузчике: min по карте next_state['loss_total']. Значение tolerance-кампании проекта (0.0588328) даёт 0% успешных цепочек офлайн и здесь не годится",
+        tolerance=0.6779, peline_l2re=3.77e-2, tier="solvable",
+        note="порог буфера — наибольший порог, отрезающий <= 5% переходов буфера HF (5.0%); значение коллеги 0.6825 отрезает здесь 10.7%. "
+             "Значение tolerance-кампании проекта (0.0588328) даёт 0% успешных цепочек офлайн",
     ),
 
     # --- пограничные: решаются плохо (L2RE 0.2-0.5), запускать после solvable ---
@@ -220,22 +249,22 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="ns2d_backstep", title="NS 2d-CG (backstep)",
         module="src.pde.ns", cls="NS2D_BackStep",
         comet_project="rlpinn-ns2d-backstep-tolerance",
-        tolerance=0.001932991785, peline_l2re=1.98e-1, tier="borderline",
-        note="порог откалиброван по буферу calibrate_tolerance.py (доля успешных цепочек 75%, как у poisson_boltzmann_2d — единственного уравнения v5 с информативной абляцией). Сравнивается та же величина, что и в загрузчике: min по карте next_state['loss_total']. Прежнее значение 0.0817 давало 99.2% — успех почти тривиален, режимы не различались бы",
+        tolerance=0.000519512, peline_l2re=1.98e-1, tier="borderline",
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 3.2% переходов",
     ),
     _spec(
         key="heat2d_varyingcoef", title="Heat 2d-VC",
         module="src.pde.heat", cls="Heat2D_VaryingCoef",
-        comet_project="rlpinn-heat-2d-vc-farm-transitions",
-        tolerance=3.105021477, peline_l2re=2.27e-1, tier="borderline",
-        note="порог откалиброван prepare_pde.py по буферу 2026-09-10",
+        comet_project="rlpinn-heat-2d-vc-tolerance",
+        tolerance=1.0225213766098, peline_l2re=2.27e-1, tier="borderline",
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 0.2% переходов",
     ),
     _spec(
         key="burgers2d", title="Burgers 2d-C",
         module="src.pde.burgers", cls="Burgers2D",
         comet_project="rlpinn-burgers2d-tolerance",
-        tolerance=3.857996941, peline_l2re=4.13e-1, tier="borderline",
-        note="порог откалиброван по буферу calibrate_tolerance.py (доля успешных цепочек 75%, как у poisson_boltzmann_2d — единственного уравнения v5 с информативной абляцией). Сравнивается та же величина, что и в загрузчике: min по карте next_state['loss_total']. Задача тяжёлая (PELINE L2RE 4.13E-1), лучший лосс цепочек буфера p50=3.04",
+        tolerance=2.17448616027832, peline_l2re=4.13e-1, tier="borderline",
+        note="порог буфера — значение коллеги (proj_info_for_muti_traing.py), на буфере HF отрезает 3.2% переходов. Задача тяжёлая (PELINE L2RE 4.13E-1)",
     ),
 
     # --- не запускаем: PINN не решает задачу, абляция агента ничего не покажет ---

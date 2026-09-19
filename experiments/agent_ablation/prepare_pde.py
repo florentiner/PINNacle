@@ -8,17 +8,23 @@
 Что проверяется:
   1. структура — все .pt читаются, нет NaN в наградах и состояниях, формы
      состояний одинаковые, формат действий понятен загрузчику;
-  2. порог — распределение лучшего лосса по цепочкам (той величиной, которую
-     сравнивает загрузчик: `_transition_loss_value`, а НЕ сырое поле reward);
+  2. порог — доля переходов, которую обрезка по порогу отрезает при НАСТОЯЩЕЙ
+     загрузке буфера. Правило, по которому обучались агенты статьи: не больше
+     ~5% (--max-cut-frac). Если порог из реестра режет больше, предлагается
+     наибольший, который режет не больше. Распределение лучшего лосса по
+     цепочкам (величиной загрузчика `_transition_loss_value`, а НЕ сырым
+     полем reward) печатается для справки;
   3. вердикт — сколько успешных терминалов останется в буфере после загрузки
      с этим порогом. Ноль означает, что агенту не на чем учиться успеху,
      и запускать кампанию бессмысленно.
 
 Запуск:
     python experiments/agent_ablation/prepare_pde.py --pde wave1d
-    python experiments/agent_ablation/prepare_pde.py --pde wave1d --target-success-frac 0.75
+    python experiments/agent_ablation/prepare_pde.py --pde wave1d --tolerance 0.0127
 """
 import argparse
+import contextlib
+import io
 import json
 import math
 import os
@@ -168,33 +174,66 @@ def quantile(values, q):
 
 
 def loaded_success_count(spec, tolerance, buffer_dir):
-    """Сколько успешных терминалов останется после НАСТОЯЩЕЙ загрузки буфера."""
+    """Переходы, успешные и провальные терминалы после НАСТОЯЩЕЙ загрузки буфера."""
     from RL.rl_utils.load_buffer.load_exps_from_comet import collect_all_local_transitions
     from RL.rl_utils.per_buffer import PrioritizedReplayBuffer
 
-    buf = collect_all_local_transitions(
-        PrioritizedReplayBuffer(20000),
-        buffer_dir=buffer_dir,
-        max_exps_last=200,
-        tolerance=tolerance,
-        prev_tol=0.0,
-        new_tol=True,
-        use_log_state=False,
-        proj_name=spec.key,
-        recompute_chain_rewards=True,
-        set_reward_from_next_loss=True,
-    )
+    # загрузчик печатает каждую обрезанную цепочку — при подборе порога это
+    # сотни строк на вызов
+    with contextlib.redirect_stdout(io.StringIO()):
+        buf = collect_all_local_transitions(
+            PrioritizedReplayBuffer(10 ** 6),
+            buffer_dir=buffer_dir,
+            max_exps_last=200,
+            tolerance=tolerance,
+            prev_tol=0.0,
+            new_tol=True,
+            use_log_state=False,
+            proj_name=spec.key,
+            recompute_chain_rewards=True,
+            set_reward_from_next_loss=True,
+        )
     dones = [t.done for t in buf.memory]
     return len(buf), dones.count(1), dones.count(-1)
+
+
+def cut_frac(spec, tolerance, buffer_dir, total_untruncated):
+    """Доля переходов, которую отрезает обрезка цепочек-провалов по порогу."""
+    total = loaded_success_count(spec, tolerance, buffer_dir)[0]
+    return 1.0 - total / max(total_untruncated, 1)
+
+
+def largest_tolerance_within(spec, buffer_dir, total_untruncated, max_cut, lo, hi, iters=40):
+    """Наибольший порог из [lo, hi], который отрезает не больше max_cut переходов.
+
+    Доля отрезанного не убывает с порогом, поэтому бисекция в логарифмах.
+    Результат округляется вниз до 4 значащих цифр — в ту сторону, где отрезано
+    не больше. У уравнений с плато лосса (inverse-задачи, Gray-Scott) этого
+    мало, и тогда берётся сам найденный порог.
+    """
+    lo, hi = math.log10(lo), math.log10(hi)
+    for _ in range(iters):
+        mid = (lo + hi) / 2
+        if cut_frac(spec, 10 ** mid, buffer_dir, total_untruncated) <= max_cut:
+            lo = mid
+        else:
+            hi = mid
+    exact = 10 ** lo
+    exponent = math.floor(math.log10(exact)) - 3
+    rounded = math.floor(exact / 10 ** exponent) * 10 ** exponent
+    if cut_frac(spec, rounded, buffer_dir, total_untruncated) <= max_cut \
+            and loaded_success_count(spec, rounded, buffer_dir)[1] >= MIN_SUCCESS_TERMINALS:
+        return rounded
+    return exact
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--pde", required=True, help="Ключ уравнения из реестра.")
     parser.add_argument("--hf-repo", default="danil-e/rlpinn-ablation-buffers")
-    parser.add_argument("--target-success-frac", type=float, default=0.75,
-                        help="Доля успешных цепочек, под которую подбирается порог, "
-                             "если в реестре его нет или он непригоден.")
+    parser.add_argument("--max-cut-frac", type=float, default=0.05,
+                        help="Сколько переходов буфера обрезка по порогу может отрезать "
+                             "(правило агентов статьи: не больше ~5%%).")
     parser.add_argument("--tolerance", type=float, default=None,
                         help="Проверить конкретный порог вместо реестрового.")
     args = parser.parse_args()
@@ -247,21 +286,24 @@ def main():
 
     print("\n--- 2. порог ---")
     bests = rep["chain_best"]
+    print("лучший лосс цепочки (для справки):")
     for q in (0.1, 0.25, 0.5, 0.75, 0.9):
         print(f"   p{int(q * 100):02d}: {quantile(bests, q):.6g}")
-    proposed = quantile(bests, args.target_success_frac)
+    total_untruncated = loaded_success_count(spec, 0.0, buffer_dir)[0]
     tolerance = args.tolerance if args.tolerance is not None else spec.tolerance
+    source = "передан флагом" if args.tolerance is not None else "из реестра"
     if tolerance is not None:
-        frac = sum(1 for b in bests if b <= tolerance) / max(len(bests), 1)
-        print(f"порог из реестра {tolerance:.10g}: {frac:.1%} цепочек достигают его")
-        if not (0.05 <= frac <= 0.95):
-            print(f"   не годится (нужно 5–95%), берём калиброванный "
-                  f"{proposed:.10g} под {args.target_success_frac:.0%}")
-            tolerance = proposed
-    else:
-        tolerance = proposed
-        print(f"порога в реестре нет — калиброванный {tolerance:.10g} "
-              f"под {args.target_success_frac:.0%}")
+        frac = cut_frac(spec, tolerance, buffer_dir, total_untruncated)
+        print(f"порог {source} {tolerance:.10g}: отрезает {frac:.1%} переходов "
+              f"из {total_untruncated} (можно не больше {args.max_cut_frac:.0%})")
+    if tolerance is None or frac > args.max_cut_frac:
+        positive = [b for b in bests if b > 0]
+        hi = tolerance if tolerance is not None else max(positive)
+        tolerance = largest_tolerance_within(spec, buffer_dir, total_untruncated,
+                                             args.max_cut_frac, min(positive), hi)
+        frac = cut_frac(spec, tolerance, buffer_dir, total_untruncated)
+        print(f"   берём наибольший порог, который отрезает не больше "
+              f"{args.max_cut_frac:.0%}: {tolerance:.10g} (отрезает {frac:.1%})")
 
     print("\n--- 3. что останется в буфере после загрузки с этим порогом ---")
     total, done1, done_1 = loaded_success_count(spec, tolerance, buffer_dir)
