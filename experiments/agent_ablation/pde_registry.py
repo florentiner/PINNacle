@@ -155,6 +155,7 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         kwargs={"datapath": "ref/poisson_3d.dat"},
         comet_project="rlpinn-poisson3d-complexgeometry-tolerance",
         tolerance=0.824311852455139, peline_l2re=5.67e-2, tier="solvable", campaign="done",
+        note="порог буфера совпадает с коллегиным и отрезает 3.5% — правило <= 5% выполнено",
     ),
     _spec(
         key="ns2d_liddriven", title="NS 2d-C (lid-driven)",
@@ -162,6 +163,7 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         kwargs={"datapath": "ref/lid_driven_a4.dat", "a": 4.0, "nu": 1e-2},
         comet_project="rlpinn-ns2d-liddriven-tolerance",
         tolerance=0.000352056, peline_l2re=4.40e-2, tier="solvable", campaign="done",
+        note="порог буфера совпадает с коллегиным и отрезает 4.8% — правило <= 5% выполнено",
     ),
 
     # --- расширение: уравнения, которые в принципе решаются ---
@@ -271,33 +273,40 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
     _spec(
         key="poisson2d_manyarea", title="Poisson 2d-MS",
         module="src.pde.poisson", cls="Poisson2D_ManyArea",
-        comet_project="rlpinn-poisson-2d-ms-farm-trans",
-        tolerance=7.3, peline_l2re=8.93e-1, tier="unsolvable",
+        comet_project="rlpinn-poisson2d-manyarea-tolerance",
+        tolerance=0.03274, peline_l2re=8.93e-1, tier="unsolvable",
+        note="порог буфера — наибольший, отрезающий <= 5% переходов буфера HF (5.0%); "
+             "прежний 7.3 отрезал 91%. У коллеги 0.028386",
     ),
     _spec(
         key="heat2d_longtime", title="Heat 2d-LT",
         module="src.pde.heat", cls="Heat2D_LongTime",
         comet_project="rlpinn-heat2d-longtime-tolerance",
-        tolerance=1.06494992027684, peline_l2re=9.98e-1, tier="unsolvable",
+        tolerance=0.001834, peline_l2re=9.98e-1, tier="unsolvable",
+        note="порог буфера — наибольший, отрезающий <= 5% (5.0%); прежний 1.065 "
+             "отрезал 78%. У коллеги 0.0019007",
     ),
     _spec(
         key="ns2d_longtime", title="NS 2d-LT",
         module="src.pde.ns", cls="NS2D_LongTime",
         comet_project="rlpinn-ns2d-longtime-tolerance",
-        tolerance=None, peline_l2re=9.98e-1, tier="unsolvable",
+        tolerance=0.5071, peline_l2re=9.98e-1, tier="unsolvable",
+        note="порог буфера посчитан по правилу <= 5% (5.0%); у коллеги 0.50959",
     ),
     _spec(
         key="wave2d_heterogeneous", title="Wave 2d-CG",
         module="src.pde.wave", cls="Wave2D_Heterogeneous",
         comet_project="rlpinn-wave2d-heterogeneous-tolerance",
-        tolerance=None, peline_l2re=8.03e-1, tier="unsolvable",
+        tolerance=0.1329, peline_l2re=8.03e-1, tier="unsolvable",
+        note="порог буфера по правилу <= 5% (4.9%); у коллеги 0.140917",
     ),
     _spec(
         key="wave2d_longtime", title="Wave 2d-MS",
         module="src.pde.wave", cls="Wave2D_LongTime",
         comet_project="rlpinn-wave2d-longtime-tolerance",
-        tolerance=None, peline_l2re=9.37e-1, tier="unsolvable",
-        note="в таблице 1 статьи это строка Wave 2d-MS (класс Wave2D_LongTime, "
+        tolerance=12.98, peline_l2re=9.37e-1, tier="unsolvable",
+        note="порог буфера по правилу <= 5% (5.0%); у коллеги значения нет. "
+             "В таблице 1 статьи это строка Wave 2d-MS (класс Wave2D_LongTime, "
              "t in [0, 100]). Буфер на HF есть, но PELINE даёт L2RE 0.937: "
              "цепочка не решает уравнение, и success rate по eq. (11) вырождается.",
     ),
@@ -305,8 +314,10 @@ PDE_SPECS: Dict[str, PDESpec] = {s.key: s for s in [
         key="kuramoto_sivashinsky", title="KS",
         module="src.pde.chaotic", cls="KuramotoSivashinskyEquation",
         comet_project="rlpinn-ks-farm-transitions",
-        tolerance=1.67, peline_l2re=9.46e-1, tier="unsolvable",
+        tolerance=0.9093, peline_l2re=9.46e-1, tier="unsolvable",
         hidden_layers="50*5",
+        note="порог буфера по правилу <= 5% (4.6%); прежний 1.67 отрезал 85%. "
+             "У коллеги 0.906553",
     ),
 
     # --- вне PINNacle: тест-кейс рецензента GrtJ (высокий коэффициент) ---
