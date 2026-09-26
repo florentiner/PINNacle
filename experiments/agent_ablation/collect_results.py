@@ -195,6 +195,16 @@ REBUTTAL_COLUMNS = [("none", "full"), ("no_per", "no PER"),
 # Отчётная L2RE — комбинация ошибки решения с граничной частью, та же величина,
 # с которой критерий остановки сравнивает порог (см. agent_stats). Подпись в
 # самой таблице, чтобы при переносе в статью её нельзя было прочитать как l2re_op.
+# (уравнение, тег от, тег до) — прогоны отменённых заходов: они остаются на HF,
+# но в таблицы не идут, иначе у одной ячейки оказывается больше бюджета, чем у
+# соседних по строке. heatinv: второй заход на CPU-сессиях Kaggle — провальная
+# цепочка этого уравнения идёт все 10 стадий и в 12-часовую сессию не влезает,
+# поэтому full и no_trust_region отработали, а no_per и no_soft_watkins не
+# завершили ни одной цепочки; заход переделан на GPU (партия r2g_heatinv).
+ОТМЕНЁННЫЕ_ЗАХОДЫ = [
+    ("heatinv", "2026-09-21_18", "2026-09-22_13"),
+]
+
 L2RE_DEFINITION = "l2re=sqrt(l2re_op^2+l2re_bnd^2)"
 L2RE_ROW_LABEL = f"L2RE median ({L2RE_DEFINITION})"
 
@@ -279,6 +289,8 @@ def main():
                         help="Брать только прогоны с этим критерием успеха (читается "
                              "из results/params.json). Под одним префиксом могут лежать "
                              "прогоны разных ревизий протокола.")
+    parser.add_argument("--keep-cancelled", action="store_true",
+                        help="Не выбрасывать прогоны отменённых заходов (список ОТМЕНЁННЫЕ_ЗАХОДЫ).")
     parser.add_argument("--keep-smoke", action="store_true",
                         help="Не выбрасывать строки smoke_test=True.")
     parser.add_argument("--upload", action="store_true",
@@ -299,12 +311,17 @@ def main():
     by_agent = defaultdict(list)
     run_tags = defaultdict(set)
     skipped_metric = collections.Counter()
+    skipped_cancelled = collections.Counter()
     for path in sorted(csv_paths):
         parts = path.split("/")  # prefix / pde / mode / run_tag / results / file
         if len(parts) < 6:
             continue
         pde, mode, run_tag = parts[1], parts[2], parts[3]
         if args.pde and pde not in args.pde:
+            continue
+        if not args.keep_cancelled and any(p_ == pde and a <= run_tag <= b
+                                           for p_, a, b in ОТМЕНЁННЫЕ_ЗАХОДЫ):
+            skipped_cancelled[pde] += 1
             continue
         if args.success_metric:
             got = run_params(args.hf_repo, "/".join(parts[:4])).get("success_metric", "loss")
@@ -326,6 +343,9 @@ def main():
     if skipped_metric:
         print("пропущено прогонов с другим критерием успеха: "
               + ", ".join(f"{k}={v}" for k, v in sorted(skipped_metric.items())))
+    if skipped_cancelled:
+        print("пропущено прогонов отменённых заходов: "
+              + ", ".join(f"{k}={v}" for k, v in sorted(skipped_cancelled.items())))
 
     agent_rows, agg_rows = [], []
     pdes = sorted({k[0] for k in by_agent}, key=lambda p: list(PDE_SPECS).index(p) if p in PDE_SPECS else 99)
