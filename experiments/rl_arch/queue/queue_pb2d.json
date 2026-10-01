@@ -1,0 +1,3371 @@
+{
+ "pde": "poissonboltzmann2d",
+ "prefix": "pb2d",
+ "subdir": "poisson_boltzmann_2d",
+ "budget": 7000,
+ "init_err": 0.811,
+ "placeholders": [
+  "BASE",
+  "BASE_NOVB",
+  "BASE_QR",
+  "BASE_FACT",
+  "BASE_STAT",
+  "GUIDE",
+  "COMMITTEE",
+  "BEST_AGENT",
+  "BUFFERS",
+  "RS_CHAIN_LOSS",
+  "RS_CHAIN_ERR",
+  "FINAL"
+ ],
+ "jobs": [
+  {
+   "id": "pb2d-w0-l1ka",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "цепочка лидера трека 2: L-BFGS 1.0 весь бюджет",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_l1k"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-l1kb",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "цепочка лидера трека 2: L-BFGS 1.0 весь бюджет",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag bl_l1k"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-l05",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:500 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_l05"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-l100",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "короткие всплески L-BFGS: каждое действие заново создаёт оптимизатор",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:100 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_l100"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-a3l",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "классическая эвристика Adam -> L-BFGS",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_a3l"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-a4l",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.0001:2500,LBFGS:0.5:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_a4l"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-rulea",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "правило «всплеск L-BFGS, при застое лосса толчок Adam» — структура DP-политики",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_rule"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-ruleb",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "правило «всплеск L-BFGS, при застое лосса толчок Adam» — структура DP-политики",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag bl_rule"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-rule2",
+   "wave": 0,
+   "group": "G26",
+   "hours": 2.5,
+   "needs": [],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:0.5:500 --rule-kick Adam:0.001:100 --rule-max-kicks 3 --no-state --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_rule2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-f64",
+   "wave": 0,
+   "group": "G25",
+   "hours": 6.0,
+   "needs": [],
+   "note": "диагностика уровня среды: снимает ли двойная точность застой L-BFGS",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w0-f64a",
+   "wave": 0,
+   "group": "G25",
+   "hours": 6.0,
+   "needs": [],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1ref-s42",
+   "wave": 1,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --max-chain-steps 10 --tolerance 0.01 --seed 42 --tag qpb2d_t1ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1ref-s42-ea",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1ref_s42.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1ref_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1ref-s42-eb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1ref_s42.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1ref_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1ref-s43",
+   "wave": 1,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --max-chain-steps 10 --tolerance 0.01 --seed 43 --tag qpb2d_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1ref-s43-ea",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1ref_s43.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1ref_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1ref-s43-eb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1ref_s43.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1ref_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1fixd-s42",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --max-chain-steps 10 --tolerance 0.01 --offline-fix --offline-reward delta --init-err 0.811 --value-bound --seed 42 --tag qpb2d_t1fixd_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1fixd-s42-ea",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1fixd_s42.pt"
+   ],
+   "note": "оценка: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1fixd_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1fixd_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1fixd-s42-eb",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1fixd_s42.pt"
+   ],
+   "note": "оценка: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1fixd_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1fixd_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1fixd-s43",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --max-chain-steps 10 --tolerance 0.01 --offline-fix --offline-reward delta --init-err 0.811 --value-bound --seed 43 --tag qpb2d_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1fixd-s43-ea",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1fixd_s43.pt"
+   ],
+   "note": "оценка: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1fixd_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1fixd-s43-eb",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1fixd_s43.pt"
+   ],
+   "note": "оценка: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1fixd_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1al-s42",
+   "wave": 1,
+   "group": "G03",
+   "hours": 11.8,
+   "needs": [],
+   "note": "то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 42 --tag qpb2d_t1al_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1al-s42-ea",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1al_s42.pt"
+   ],
+   "note": "оценка: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1al_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1al_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1al-s42-eb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1al_s42.pt"
+   ],
+   "note": "оценка: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1al_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1al_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1al-s43",
+   "wave": 1,
+   "group": "G03",
+   "hours": 11.8,
+   "needs": [],
+   "note": "то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 43 --tag qpb2d_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1al-s43-ea",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1al_s43.pt"
+   ],
+   "note": "оценка: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1al_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1al-s43-eb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1al_s43.pt"
+   ],
+   "note": "оценка: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1al_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alnb-s42",
+   "wave": 1,
+   "group": "G27",
+   "hours": 11.8,
+   "needs": [],
+   "note": "абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 42 --tag qpb2d_t1alnb_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alnb-s42-ea",
+   "wave": 1,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1alnb_s42.pt"
+   ],
+   "note": "оценка: абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1alnb_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1alnb_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alnb-s42-eb",
+   "wave": 1,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1alnb_s42.pt"
+   ],
+   "note": "оценка: абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1alnb_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1alnb_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alc-s42",
+   "wave": 1,
+   "group": "G06",
+   "hours": 11.8,
+   "needs": [],
+   "note": "то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag qpb2d_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alc-s42-ea",
+   "wave": 1,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1alc_s42.pt"
+   ],
+   "note": "оценка: то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1alc_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alc-s42-eb",
+   "wave": 1,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1alc_s42.pt"
+   ],
+   "note": "оценка: то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1alc_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alm-s42",
+   "wave": 1,
+   "group": "G02",
+   "hours": 11.8,
+   "needs": [],
+   "note": "то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --mask adam:0.01,pso:0.001,pso:0.0001 --seed 42 --tag qpb2d_t1alm_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alm-s42-ea",
+   "wave": 1,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1alm_s42.pt"
+   ],
+   "note": "оценка: то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1alm_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t1alm_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t1alm-s42-eb",
+   "wave": 1,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t1alm_s42.pt"
+   ],
+   "note": "оценка: то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t1alm_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t1alm_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2ref-s42",
+   "wave": 1,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --wsrl-warmup 20 --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --warm-start convnext_dqn_poisson3d_seed1.pt --max-chain-steps 10 --tolerance 0.01 --seed 42 --tag qpb2d_t2ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2ref-s42-ea",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2ref_s42.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2ref_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t2ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2ref-s42-eb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2ref_s42.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2ref_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t2ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2ref-s43",
+   "wave": 1,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --wsrl-warmup 20 --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --warm-start convnext_dqn_poisson3d_seed1.pt --max-chain-steps 10 --tolerance 0.01 --seed 43 --tag qpb2d_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2ref-s43-ea",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2ref_s43.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2ref_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2ref-s43-eb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2ref_s43.pt"
+   ],
+   "note": "оценка: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2ref_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2al-s42",
+   "wave": 1,
+   "group": "G03",
+   "hours": 11.8,
+   "needs": [],
+   "note": "трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --seeds 1 --chain-fix --reward-form delta --init-err 0.25 --value-bound --gamma 0.99 --save-model"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --wsrl-warmup 20 --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --warm-start /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_seed1.pt --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 42 --tag qpb2d_t2al_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2al-s42-ea",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2al_s42.pt"
+   ],
+   "note": "оценка: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2al_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t2al_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2al-s42-eb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2al_s42.pt"
+   ],
+   "note": "оценка: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2al_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t2al_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2al-s43",
+   "wave": 1,
+   "group": "G03",
+   "hours": 11.8,
+   "needs": [],
+   "note": "трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --seeds 1 --chain-fix --reward-form delta --init-err 0.25 --value-bound --gamma 0.99 --save-model"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --wsrl-warmup 20 --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --warm-start /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_seed1.pt --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 43 --tag qpb2d_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2al-s43-ea",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2al_s43.pt"
+   ],
+   "note": "оценка: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2al_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-t2al-s43-eb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t2al_s43.pt"
+   ],
+   "note": "оценка: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t2al_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-offix-m1",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.0,
+   "needs": [],
+   "note": "чистый офлайн на исправленном буфере (было 0.0774 на прежнем)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag of_fixd_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-offix-m2",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.0,
+   "needs": [],
+   "note": "чистый офлайн на исправленном буфере (было 0.0774 на прежнем)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_seed2.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag of_fixd_m2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-offix-m3",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.0,
+   "needs": [],
+   "note": "чистый офлайн на исправленном буфере (было 0.0774 на прежнем)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 3"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_seed3.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag of_fixd_m3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-ofstat",
+   "wave": 1,
+   "group": "G06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "офлайн: кодировщик на статистиках карт (24 тыс. параметров вместо 250 тыс.)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag of_stat_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w1-offix-mask",
+   "wave": 1,
+   "group": "G02",
+   "hours": 11.0,
+   "needs": [],
+   "note": "тот же офлайновый агент, на оценке запрещены Adam 1e-2 и PSO с шагом",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag of_fixd_m1_mask"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-jsrl-s42",
+   "wave": 2,
+   "group": "G02",
+   "hours": 11.8,
+   "needs": [],
+   "note": "Jump-Start RL: начало цепочки ведёт лучшая открытая цепочка волны 0",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --guide {GUIDE} --guide-mode jsrl --guide-chains 12 --seed 42 --tag qpb2d2_jsrl_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-jsrl-s42-ea",
+   "wave": 2,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_jsrl_s42.pt"
+   ],
+   "note": "оценка: Jump-Start RL: начало цепочки ведёт лучшая открытая цепочка волны 0",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_jsrl_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_jsrl_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-jsrl-s42-eb",
+   "wave": 2,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_jsrl_s42.pt"
+   ],
+   "note": "оценка: Jump-Start RL: начало цепочки ведёт лучшая открытая цепочка волны 0",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_jsrl_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_jsrl_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-bonus-s42",
+   "wave": 2,
+   "group": "G02",
+   "hours": 11.8,
+   "needs": [],
+   "note": "отход от эвристики только при выигрыше по Q (аналог ограничения HEPO)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20 --seed 42 --tag qpb2d2_bonus_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-bonus-s42-ea",
+   "wave": 2,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_bonus_s42.pt"
+   ],
+   "note": "оценка: отход от эвристики только при выигрыше по Q (аналог ограничения HEPO)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_bonus_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_bonus_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-bonus-s42-eb",
+   "wave": 2,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_bonus_s42.pt"
+   ],
+   "note": "оценка: отход от эвристики только при выигрыше по Q (аналог ограничения HEPO)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_bonus_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_bonus_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-geps-s42",
+   "wave": 2,
+   "group": "G14",
+   "hours": 11.8,
+   "needs": [],
+   "note": "разведка по проводнику вместо равномерной (BEQ)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --guide {GUIDE} --guide-mode eps --seed 42 --tag qpb2d2_geps_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-geps-s42-ea",
+   "wave": 2,
+   "group": "G14",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_geps_s42.pt"
+   ],
+   "note": "оценка: разведка по проводнику вместо равномерной (BEQ)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_geps_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_geps_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-geps-s42-eb",
+   "wave": 2,
+   "group": "G14",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_geps_s42.pt"
+   ],
+   "note": "оценка: разведка по проводнику вместо равномерной (BEQ)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_geps_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_geps_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-nstep-s42",
+   "wave": 2,
+   "group": "G15",
+   "hours": 11.8,
+   "needs": [],
+   "note": "трёхшаговые цели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --n-step 3 --seed 42 --tag qpb2d2_nstep_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-nstep-s42-ea",
+   "wave": 2,
+   "group": "G15",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_nstep_s42.pt"
+   ],
+   "note": "оценка: трёхшаговые цели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_nstep_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_nstep_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-nstep-s42-eb",
+   "wave": 2,
+   "group": "G15",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_nstep_s42.pt"
+   ],
+   "note": "оценка: трёхшаговые цели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_nstep_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_nstep_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-utd2-s42",
+   "wave": 2,
+   "group": "G09",
+   "hours": 11.8,
+   "needs": [],
+   "note": "UTD 2 вместо 8",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --rlpd-utd 2 --seed 42 --tag qpb2d2_utd2_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-utd2-s42-ea",
+   "wave": 2,
+   "group": "G09",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_utd2_s42.pt"
+   ],
+   "note": "оценка: UTD 2 вместо 8",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_utd2_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_utd2_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-utd2-s42-eb",
+   "wave": 2,
+   "group": "G09",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_utd2_s42.pt"
+   ],
+   "note": "оценка: UTD 2 вместо 8",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_utd2_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_utd2_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-utd20-s42",
+   "wave": 2,
+   "group": "G09",
+   "hours": 11.8,
+   "needs": [],
+   "note": "UTD 20 вместо 8",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --rlpd-utd 20 --seed 42 --tag qpb2d2_utd20_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-utd20-s42-ea",
+   "wave": 2,
+   "group": "G09",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_utd20_s42.pt"
+   ],
+   "note": "оценка: UTD 20 вместо 8",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_utd20_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_utd20_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-utd20-s42-eb",
+   "wave": 2,
+   "group": "G09",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_utd20_s42.pt"
+   ],
+   "note": "оценка: UTD 20 вместо 8",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_utd20_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_utd20_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-g1-s42",
+   "wave": 2,
+   "group": "G04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "дисконт 1.0: возврат равен итоговому улучшению",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --gamma 1.0 --seed 42 --tag qpb2d2_g1_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-g1-s42-ea",
+   "wave": 2,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_g1_s42.pt"
+   ],
+   "note": "оценка: дисконт 1.0: возврат равен итоговому улучшению",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_g1_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_g1_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-g1-s42-eb",
+   "wave": 2,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_g1_s42.pt"
+   ],
+   "note": "оценка: дисконт 1.0: возврат равен итоговому улучшению",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_g1_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_g1_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-boot-s42",
+   "wave": 2,
+   "group": "G14",
+   "hours": 11.8,
+   "needs": [],
+   "note": "бутстреп-головы для разведки",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_NOVB} --boot-heads 8 --seed 42 --tag qpb2d2_boot_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-boot-s42-ea",
+   "wave": 2,
+   "group": "G14",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_boot_s42.pt"
+   ],
+   "note": "оценка: бутстреп-головы для разведки",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_boot_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_boot_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-boot-s42-eb",
+   "wave": 2,
+   "group": "G14",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_boot_s42.pt"
+   ],
+   "note": "оценка: бутстреп-головы для разведки",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_boot_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_boot_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-full-s42",
+   "wave": 2,
+   "group": "G12",
+   "hours": 11.8,
+   "needs": [],
+   "note": "ансамбль из 10 критиков с LayerNorm (полный RLPD)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_NOVB} --rlpd-full --seed 42 --tag qpb2d2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-full-s42-ea",
+   "wave": 2,
+   "group": "G12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_full_s42.pt"
+   ],
+   "note": "оценка: ансамбль из 10 критиков с LayerNorm (полный RLPD)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_full_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-full-s42-eb",
+   "wave": 2,
+   "group": "G12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_full_s42.pt"
+   ],
+   "note": "оценка: ансамбль из 10 критиков с LayerNorm (полный RLPD)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_full_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-hlg-s42",
+   "wave": 2,
+   "group": "G18",
+   "hours": 11.8,
+   "needs": [],
+   "note": "HL-Gauss поверх исправленного конвейера",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_QR} --hl-gauss --seed 42 --tag qpb2d2_hlg_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-hlg-s42-ea",
+   "wave": 2,
+   "group": "G18",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_hlg_s42.pt"
+   ],
+   "note": "оценка: HL-Gauss поверх исправленного конвейера",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_hlg_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_hlg_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-hlg-s42-eb",
+   "wave": 2,
+   "group": "G18",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_hlg_s42.pt"
+   ],
+   "note": "оценка: HL-Gauss поверх исправленного конвейера",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_hlg_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_hlg_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-fact-s42",
+   "wave": 2,
+   "group": "G16",
+   "hours": 11.8,
+   "needs": [],
+   "note": "голова Q = V + q_o + q_ol + q_oe: слагаемые по оптимизатору, шагу, длительности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_FACT} --seed 42 --tag qpb2d2_fact_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-fact-s42-ea",
+   "wave": 2,
+   "group": "G16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_fact_s42.pt"
+   ],
+   "note": "оценка: голова Q = V + q_o + q_ol + q_oe: слагаемые по оптимизатору, шагу, длительности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_fact_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_fact_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-fact-s42-eb",
+   "wave": 2,
+   "group": "G16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_fact_s42.pt"
+   ],
+   "note": "оценка: голова Q = V + q_o + q_ol + q_oe: слагаемые по оптимизатору, шагу, длительности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_fact_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_fact_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-stat-s42",
+   "wave": 2,
+   "group": "G06",
+   "hours": 11.8,
+   "needs": [],
+   "note": "кодировщик на сводных статистиках карт вместо ConvNeXt",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_STAT} --seed 42 --tag qpb2d2_stat_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-stat-s42-ea",
+   "wave": 2,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_stat_s42.pt"
+   ],
+   "note": "оценка: кодировщик на сводных статистиках карт вместо ConvNeXt",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_stat_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_stat_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-stat-s42-eb",
+   "wave": 2,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_stat_s42.pt"
+   ],
+   "note": "оценка: кодировщик на сводных статистиках карт вместо ConvNeXt",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_stat_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_stat_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-frz-s42",
+   "wave": 2,
+   "group": "G17",
+   "hours": 11.8,
+   "needs": [],
+   "note": "замороженный кодировщик, учится только голова",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --freeze-encoder --seed 42 --tag qpb2d2_frz_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-frz-s42-ea",
+   "wave": 2,
+   "group": "G17",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_frz_s42.pt"
+   ],
+   "note": "оценка: замороженный кодировщик, учится только голова",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_frz_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d2_frz_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-frz-s42-eb",
+   "wave": 2,
+   "group": "G17",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d2_frz_s42.pt"
+   ],
+   "note": "оценка: замороженный кодировщик, учится только голова",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d2_frz_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d2_frz_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-vote-ea",
+   "wave": 2,
+   "group": "G12",
+   "hours": 10.5,
+   "needs": [],
+   "note": "комитет замороженных агентов (голосование)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_vote"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-vote-eb",
+   "wave": 2,
+   "group": "G12",
+   "hours": 10.5,
+   "needs": [],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_vote"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-gbon-ea",
+   "wave": 2,
+   "group": "G22",
+   "hours": 10.5,
+   "needs": [],
+   "note": "при оценке агент отходит от эвристики только при выигрыше по Q больше 0.02",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_gbon"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-gbon-eb",
+   "wave": 2,
+   "group": "G22",
+   "hours": 10.5,
+   "needs": [],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_gbon"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w2-ooo",
+   "wave": 2,
+   "group": "G12",
+   "hours": 11.0,
+   "needs": [],
+   "note": "OOO: итоговая политика переобучается офлайн на буфере + всех онлайновых данных волны 1",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --extra-buffers {BUFFERS} --model-tag ooo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ooo_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_ooo"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-distpbrs-s42",
+   "wave": 3,
+   "group": "G02",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: дистилляция лучших цепочек + PBRS (лидер по обучающей медиане)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_NOVB} --distill 1 --distill-top 3 --pbrs 1.0 --seed 42 --tag qpb2d3_distpbrs_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-distpbrs-s42-ea",
+   "wave": 3,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_distpbrs_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_distpbrs_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_distpbrs_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-distpbrs-s42-eb",
+   "wave": 3,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_distpbrs_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_distpbrs_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_distpbrs_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-rean-s42",
+   "wave": 3,
+   "group": "G23",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: модель по ценности + Reanalyse",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --vem --reanalyse 5 --seed 42 --tag qpb2d3_rean_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-rean-s42-ea",
+   "wave": 3,
+   "group": "G23",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_rean_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_rean_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_rean_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-rean-s42-eb",
+   "wave": 3,
+   "group": "G23",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_rean_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_rean_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_rean_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-per-s42",
+   "wave": 3,
+   "group": "G13",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: приоритетный реплей",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --per --seed 42 --tag qpb2d3_per_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-per-s42-ea",
+   "wave": 3,
+   "group": "G13",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_per_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_per_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_per_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-per-s42-eb",
+   "wave": 3,
+   "group": "G13",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_per_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_per_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_per_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-sil-s42",
+   "wave": 3,
+   "group": "G27",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: self-imitation",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --sil --seed 42 --tag qpb2d3_sil_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-sil-s42-ea",
+   "wave": 3,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_sil_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_sil_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_sil_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-sil-s42-eb",
+   "wave": 3,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_sil_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_sil_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_sil_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-goexp-s42",
+   "wave": 3,
+   "group": "G10",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: Go-Explore",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --go-explore --seed 42 --tag qpb2d3_goexp_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-goexp-s42-ea",
+   "wave": 3,
+   "group": "G10",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_goexp_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_goexp_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_goexp_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-goexp-s42-eb",
+   "wave": 3,
+   "group": "G10",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_goexp_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_goexp_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_goexp_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-reset-s42",
+   "wave": 3,
+   "group": "G24",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: периодические сбросы",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --reset-every 200 --seed 42 --tag qpb2d3_reset_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-reset-s42-ea",
+   "wave": 3,
+   "group": "G24",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_reset_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_reset_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_reset_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-reset-s42-eb",
+   "wave": 3,
+   "group": "G24",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_reset_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_reset_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_reset_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-redo-s42",
+   "wave": 3,
+   "group": "G24",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: ReDo",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --redo-every 200 --seed 42 --tag qpb2d3_redo_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-redo-s42-ea",
+   "wave": 3,
+   "group": "G24",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_redo_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_redo_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_redo_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-redo-s42-eb",
+   "wave": 3,
+   "group": "G24",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_redo_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_redo_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_redo_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-aug-s42",
+   "wave": 3,
+   "group": "G29",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: диэдральные аугментации",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --aug --seed 42 --tag qpb2d3_aug_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-aug-s42-ea",
+   "wave": 3,
+   "group": "G29",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_aug_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_aug_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_aug_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-aug-s42-eb",
+   "wave": 3,
+   "group": "G29",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_aug_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_aug_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_aug_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-spr-s42",
+   "wave": 3,
+   "group": "G28",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: SPR",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --spr 1 --seed 42 --tag qpb2d3_spr_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-spr-s42-ea",
+   "wave": 3,
+   "group": "G28",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_spr_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_spr_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_spr_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-spr-s42-eb",
+   "wave": 3,
+   "group": "G28",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_spr_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_spr_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_spr_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-munch-s42",
+   "wave": 3,
+   "group": "G18",
+   "hours": 11.8,
+   "needs": [],
+   "note": "повтор на исправленном конвейере: Munchausen",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE_NOVB} --munchausen --seed 42 --tag qpb2d3_munch_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-munch-s42-ea",
+   "wave": 3,
+   "group": "G18",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_munch_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_munch_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d3_munch_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w3-munch-s42-eb",
+   "wave": 3,
+   "group": "G18",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d3_munch_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d3_munch_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d3_munch_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "объединённая база волны 1: все флаги с индивидуальным выигрышем вместе",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --seed 42 --tag qpb2d4_base_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d4_base_s42.pt"
+   ],
+   "note": "оценка объединённой базы",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d4_base_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d4_base_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d4_base_s42.pt"
+   ],
+   "note": "оценка объединённой базы",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d4_base_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d4_base_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s43",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "объединённая база волны 1: все флаги с индивидуальным выигрышем вместе",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --seed 43 --tag qpb2d4_base_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s43-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d4_base_s43.pt"
+   ],
+   "note": "оценка объединённой базы",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d4_base_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d4_base_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s43-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d4_base_s43.pt"
+   ],
+   "note": "оценка объединённой базы",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d4_base_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d4_base_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w4-base-s42-ec",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d4_base_s42.pt"
+   ],
+   "note": "сиды 52-61: двадцать сидов у финалиста волны 1",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d4_base_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag e_qpb2d4_base_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s42",
+   "wave": 5,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "итоговая конфигурация: база плюс победители волн 2, 3, 12, 13",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{FINAL} --seed 42 --tag qpb2d5_final_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s42-ea",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s42.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d5_final_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s42-eb",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s42.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d5_final_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s42-ec",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s42.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_qpb2d5_final_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s42-ed",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s42.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_qpb2d5_final_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s43",
+   "wave": 5,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "итоговая конфигурация: база плюс победители волн 2, 3, 12, 13",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{FINAL} --seed 43 --tag qpb2d5_final_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s43-ea",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s43.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d5_final_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s43-eb",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s43.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d5_final_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s43-ec",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s43.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_qpb2d5_final_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-s43-ed",
+   "wave": 5,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s43.pt"
+   ],
+   "note": "оценка итоговой конфигурации, 20 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s43.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_qpb2d5_final_s43"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-guard",
+   "wave": 5,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s42.pt"
+   ],
+   "note": "итоговая конфигурация со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s42.pt --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d5_final_guard"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w5-final-gbon",
+   "wave": 5,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d5_final_s42.pt"
+   ],
+   "note": "итоговая конфигурация с порогом по Q для отхода от проводника",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d5_final_gbon"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rs-a",
+   "wave": 11,
+   "group": "H15",
+   "hours": 8.0,
+   "needs": [],
+   "note": "случайный поиск: 8 случайных цепочек из действий Adam и L-BFGS, сид задаёт цепочку",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy random --mask pso --no-state --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 1000,1001,1002,1003,1004,1005,1006,1007 --tag t3m_rs"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rs-b",
+   "wave": 11,
+   "group": "H15",
+   "hours": 8.0,
+   "needs": [],
+   "note": "случайный поиск: 8 случайных цепочек из действий Adam и L-BFGS, сид задаёт цепочку",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy random --mask pso --no-state --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 1008,1009,1010,1011,1012,1013,1014,1015 --tag t3m_rs"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rs-c",
+   "wave": 11,
+   "group": "H15",
+   "hours": 8.0,
+   "needs": [],
+   "note": "случайный поиск: 8 случайных цепочек из действий Adam и L-BFGS, сид задаёт цепочку",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy random --mask pso --no-state --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 1016,1017,1018,1019,1020,1021,1022,1023 --tag t3m_rs"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rsl",
+   "wave": 11,
+   "group": "H15",
+   "hours": 6.0,
+   "needs": [],
+   "note": "победитель случайного поиска по обучающему лоссу",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {RS_CHAIN_LOSS} --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rsl"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rse",
+   "wave": 11,
+   "group": "H15",
+   "hours": 6.0,
+   "needs": [],
+   "note": "победитель случайного поиска по истинной ошибке (тот же сигнал, что награда агента)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {RS_CHAIN_ERR} --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rse"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log1",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "цепочка №1 из лучших в офлайновом буфере poisson_boltzmann_2d (ошибка 0.0044 по одному прогону): проверка на 10 сидах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,Adam:0.0001:100,LBFGS:0.5:1000 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log2",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "цепочка №2 из лучших в офлайновом буфере poisson_boltzmann_2d (ошибка 0.0044 по одному прогону): проверка на 10 сидах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:300,Adam:0.01:2500,PSO:0:300,PSO:0:100,Adam:0.001:100,Adam:0.0001:100,PSO:0.001:300,PSO:0.0001:100,LBFGS:0.1:500,PSO:0.001:300,LBFGS:1:1000,PSO:0.001:300 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log3",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "цепочка №3 из лучших в офлайновом буфере poisson_boltzmann_2d (ошибка 0.0054 по одному прогону): проверка на 10 сидах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0.001:300,Adam:0.01:1000,Adam:0.0001:100,LBFGS:0.1:100,Adam:0.001:1000,PSO:0:100,PSO:0.0001:200,LBFGS:1:1000,LBFGS:1:500,Adam:0.001:2500,LBFGS:0.1:1000 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log4",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "цепочка №4 из лучших в офлайновом буфере poisson_boltzmann_2d (ошибка 0.0056 по одному прогону): проверка на 10 сидах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:100,PSO:0.0001:100,LBFGS:0.5:100,LBFGS:0.5:500,Adam:0.01:2500,PSO:0.001:300,LBFGS:0.1:100,LBFGS:0.1:500,PSO:0:300,Adam:0.0001:100,LBFGS:1:1000,LBFGS:0.1:100 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log4"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log5",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "цепочка №5 из лучших в офлайновом буфере poisson_boltzmann_2d (ошибка 0.0057 по одному прогону): проверка на 10 сидах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,PSO:0:300,PSO:0.001:200,Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:1000,LBFGS:1:100,PSO:0.0001:300,Adam:0.0001:1000 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log5"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-sk1",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "каркас лучших цепочек буфера: Adam 1e-2, Adam 1e-4, затем L-BFGS до конца бюджета",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-sk2",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "тот же каркас с коротким первым этапом",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-sk3",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "Adam 1e-3 на 2500 эпох, затем L-BFGS",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rand6",
+   "wave": 11,
+   "group": "H14",
+   "hours": 6.0,
+   "needs": [],
+   "note": "универсальная цепочка rand6 в действиях среды: лучшая по остальным 14 УрЧП, выбрана без ns2d",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rand6"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-rand6n",
+   "wave": 11,
+   "group": "H14",
+   "hours": 6.0,
+   "needs": [],
+   "note": "то же без шагов PSO",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rand6n"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-scout",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "разведка: три коротких пробы из общей точки, победившая продолжается (ROR)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scout"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-scout2",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "разведка с длинными исполняемыми действиями",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.0001:100,LBFGS:1:100,LBFGS:0.5:100 --scout-commit Adam:0.0001:1000,LBFGS:1:1000,LBFGS:0.5:1000 --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scout2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-bandit",
+   "wave": 11,
+   "group": "H08",
+   "hours": 6.0,
+   "needs": [],
+   "note": "UCB-бандит по пяти действиям, учится внутри прогона по убыли обучающего лосса",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_bandit"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-bandit2",
+   "wave": 11,
+   "group": "H08",
+   "hours": 6.0,
+   "needs": [],
+   "note": "бандит с длинными действиями и слабым забыванием",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --bandit-arms Adam:0.001:1000,Adam:0.0001:1000,LBFGS:1:500,LBFGS:0.5:500,LBFGS:1:1000 --bandit-c 0.5 --bandit-discount 0.9 --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_bandit2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-soap",
+   "wave": 11,
+   "group": "H12",
+   "hours": 6.0,
+   "needs": [],
+   "note": "SOAP весь бюджет 7000 эпох",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_soap"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-asoap",
+   "wave": 11,
+   "group": "H12",
+   "hours": 6.0,
+   "needs": [],
+   "note": "Adam 1000 эпох, затем SOAP",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,SOAP:0.003:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_asoap"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-soapl",
+   "wave": 11,
+   "group": "H12",
+   "hours": 6.0,
+   "needs": [],
+   "note": "SOAP 5000 эпох, затем L-BFGS: взаимодополняемость оптимизаторов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:2500,SOAP:0.003:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_soapl"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-scouts",
+   "wave": 11,
+   "group": "H12",
+   "hours": 6.0,
+   "needs": [],
+   "note": "разведка с SOAP среди кандидатов: выбор между цепочкой и SOAP без обучения",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --no-state --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scouts"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-soap31k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 11.0,
+   "needs": [],
+   "note": "SOAP в штатном режиме chain_eval (31 000 эпох): сравнение при равном времени, а не эпохах",
+   "steps": [
+    {
+     "script": "experiments/chain_eval/run_chain_pde.py",
+     "args": "--pde-name poissonboltzmann2d --chain-json experiments/chain_eval/chain_soap.json --chain-key soap --value-type soap --hf-dir csv_soap --csv-name poissonboltzmann2d --n-seeds 10 --seed-base 42 --save-dir runs_chain_eval/t3_soap"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-full-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "контроль: полные карты, без контекста",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --seeds 1 --model-tag full"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_full_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_full_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-full-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "контроль: полные карты, без контекста",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --seeds 2 --model-tag full"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_full_seed2.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_full_m2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-ctx-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "полные карты и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 1 --model-tag ctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ctx_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_ctx_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-ctx-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "полные карты и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 2 --model-tag ctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ctx_seed2.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_ctx_m2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-lvl-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только уровень потерь и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 1 --model-tag lvl"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_lvl_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_lvl_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-lvl-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только уровень потерь и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 2 --model-tag lvl"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_lvl_seed2.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_lvl_m2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-shape",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только форма карт (уровень убран) и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shape --seeds 1 --model-tag shape"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_shape_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_shape_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-shuf-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "перемешанные пиксели и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shuffle --seeds 1 --model-tag shuf"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_shuf_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_shuf_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-shuf-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "перемешанные пиксели и контекст времени",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shuffle --seeds 2 --model-tag shuf"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_shuf_seed2.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_shuf_m2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-blind-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, только время: политика без обратной связи (выученная статическая цепочка)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 1 --model-tag blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_blind_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_blind_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-blind-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, только время: политика без обратной связи (выученная статическая цепочка)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 2 --model-tag blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_blind_seed2.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_blind_m2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-blinde",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, время и истинная ошибка (привилегированный верхний ориентир дешёвого состояния)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --ctx-err --state-mode blind --seeds 1 --model-tag blinde"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_blinde_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_blinde_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-slvl",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "малая сеть на скалярах: уровень потерь и время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 1 --model-tag slvl"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_slvl_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_slvl_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-of-sblind",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "малая сеть на скалярах: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 1 --model-tag sblind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_sblind_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_sblind_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-blind",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.8,
+   "needs": [],
+   "note": "онлайн, протокол трека 1: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode blind --seed 42 --tag qpb2d_t3on_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-blind-ea",
+   "wave": 12,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on_blind_s42.pt"
+   ],
+   "note": "оценка: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on_blind_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t3on_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-blind-eb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on_blind_s42.pt"
+   ],
+   "note": "оценка: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on_blind_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t3on_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-lvl",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.8,
+   "needs": [],
+   "note": "онлайн, протокол трека 1: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode level --seed 42 --tag qpb2d_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-lvl-ea",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on_lvl_s42.pt"
+   ],
+   "note": "оценка: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on_lvl_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-lvl-eb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on_lvl_s42.pt"
+   ],
+   "note": "оценка: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on_lvl_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-shuf",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.8,
+   "needs": [],
+   "note": "онлайн, протокол трека 1: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode shuffle --seed 42 --tag qpb2d_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-shuf-ea",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on_shuf_s42.pt"
+   ],
+   "note": "оценка: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on_shuf_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on-shuf-eb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on_shuf_s42.pt"
+   ],
+   "note": "оценка: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on_shuf_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qpb2d_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on2-full",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag qpb2d_t3on2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on2-full-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on2_full_s42.pt"
+   ],
+   "note": "оценка: контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on2_full_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d_t3on2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on2-loss",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --seed 42 --tag qpb2d_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on2-loss-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on2_loss_s42.pt"
+   ],
+   "note": "оценка: обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on2_loss_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on2-blind",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode blind --seed 42 --tag qpb2d_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w12-on2-blind-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3on2_blind_s42.pt"
+   ],
+   "note": "оценка: только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3on2_blind_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-of-g0",
+   "wave": 13,
+   "group": "H08",
+   "hours": 11.0,
+   "needs": [],
+   "note": "близорукий офлайновый агент (дисконт 0): регрессия награды шага, как классический выбор алгоритма",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --gamma 0 --seeds 1 --model-tag g0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_g0_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_g0_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-on-g0",
+   "wave": 13,
+   "group": "H08",
+   "hours": 11.8,
+   "needs": [],
+   "note": "близорукий онлайновый агент: контекстный бандит вместо RL",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --gamma 0 --seed 42 --tag qpb2d_t3g0_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-on-g0-e",
+   "wave": 13,
+   "group": "H08",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3g0_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3g0_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d_t3g0_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-h2",
+   "wave": 13,
+   "group": "H01",
+   "hours": 11.5,
+   "needs": [],
+   "note": "онлайновое обучение 2 ч вместо 11, оценка в том же кернеле",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 2 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 42 --tag qpb2d_t3h2_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_qpb2d_t3h2_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 8.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t3h2_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-h5",
+   "wave": 13,
+   "group": "H01",
+   "hours": 11.5,
+   "needs": [],
+   "note": "онлайновое обучение 5 ч вместо 11, оценка в том же кернеле",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 5 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --seed 42 --tag qpb2d_t3h5_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_qpb2d_t3h5_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 5.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qpb2d_t3h5_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-buf9",
+   "wave": 13,
+   "group": "H01",
+   "hours": 11.0,
+   "needs": [],
+   "note": "офлайновый агент на 9 файлах буфера из 93",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --per-pde-files 9 --seeds 1 --model-tag buf9"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_buf9_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_buf9_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-buf28",
+   "wave": 13,
+   "group": "H01",
+   "hours": 11.0,
+   "needs": [],
+   "note": "офлайновый агент на 28 файлах буфера из 93",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --per-pde-files 28 --seeds 1 --model-tag buf28"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_buf28_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_buf28_m1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-b35-ch",
+   "wave": 13,
+   "group": "H13",
+   "hours": 8.0,
+   "needs": [],
+   "note": "статические цепочки и разведка при том же сдвиге: --budget 3500",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 3500 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b35_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 3500 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b35_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 3500 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b35_sk1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --no-state --pde poissonboltzmann2d --budget 3500 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b35_scout"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-b140-ch",
+   "wave": 13,
+   "group": "H13",
+   "hours": 8.0,
+   "needs": [],
+   "note": "статические цепочки и разведка при том же сдвиге: --budget 14000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 14000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b140_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 14000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b140_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 14000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b140_sk1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --no-state --pde poissonboltzmann2d --budget 14000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_b140_scout"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-w64-ch",
+   "wave": 13,
+   "group": "H13",
+   "hours": 8.0,
+   "needs": [],
+   "note": "статические цепочки и разведка при том же сдвиге: --budget 7000 --hidden-layers 64*3",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 64*3 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w64_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 64*3 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w64_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 64*3 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w64_sk1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 64*3 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w64_scout"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-w200-ch",
+   "wave": 13,
+   "group": "H13",
+   "hours": 8.0,
+   "needs": [],
+   "note": "статические цепочки и разведка при том же сдвиге: --budget 7000 --hidden-layers 200*5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 200*5 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w200_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 200*5 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w200_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 200*5 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w200_sk1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --no-state --pde poissonboltzmann2d --budget 7000 --hidden-layers 200*5 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_w200_scout"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-lofi",
+   "wave": 13,
+   "group": "H03",
+   "hours": 11.8,
+   "needs": [],
+   "note": "обучение на эпизодах 3500 эпох (вдвое дешевле), контекст нормирован на 7000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 3500 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --budget 7000 --seed 42 --tag qpb2d_t3lofi_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w13-lofi-e",
+   "wave": 13,
+   "group": "H03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_t3lofi_s42.pt"
+   ],
+   "note": "",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_t3lofi_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qpb2d_t3lofi_s42"
+    }
+   ]
+  }
+ ]
+}

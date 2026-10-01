@@ -60,6 +60,12 @@ for _opt, _lrs, _eps in [
         for _ep in _eps:
             ACTION_TABLE.append((_opt, _lr, _ep))
 assert len(ACTION_TABLE) == 27
+# Действия вне пространства агента (трек 3, потолок среды): доступны открытым цепочкам,
+# разведке и бандиту, агенту и маскам — нет. SOAP с теми же настройками, что в
+# experiments/chain_eval (betas 0.95/0.95, пересчёт базиса каждые 2 шага)
+EXTRA_ACTIONS = [("SOAP", 3e-3, 100), ("SOAP", 3e-3, 500), ("SOAP", 3e-3, 1000),
+                 ("SOAP", 3e-3, 2500), ("SOAP", 1e-3, 1000), ("SOAP", 1e-2, 1000)]
+ALL_ACTIONS = ACTION_TABLE + EXTRA_ACTIONS
 
 AE_MODEL_PARAMS = dict(
     mode="NN", num_of_layers=3, layers_AE=[991, 125, 15], num_models=None,
@@ -82,6 +88,10 @@ def build_optimizer(opt_name, lr, net):
     if opt_name == "PSO":
         set_PSO_options(lr=lr)
         return "PSO"
+    if opt_name == "SOAP":
+        from experiments.chain_eval.vendor.soap import SOAP
+        return SOAP(net.parameters(), lr=lr, betas=(0.95, 0.95), weight_decay=0.0,
+                    precondition_frequency=2)
     raise ValueError(opt_name)
 
 
@@ -99,7 +109,7 @@ def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
         ep_i = (last_action % 3) / 2.0
     vals = [min(1.0, step / max(1, k_max)), min(1.0, spent / max(1, budget)),
             opt_i, ep_i,
-            float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1))]
+            0.0 if err is None else float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1))]
     planes = np.stack([np.full((h, w), v, dtype=np.float32) for v in vals])
     return np.concatenate([state, planes], axis=0)
 
@@ -126,6 +136,9 @@ def load_agent(model_file):
             if hasattr(v, "dim") and v.dim() == 4 and v.shape[2] <= 7:
                 in_ch = v.shape[1]
                 break
+        if ckpt["variant"] == "stat_dqn":
+            # у кодировщика на статистиках свёрток нет: 8 признаков на канал
+            in_ch = ckpt["state_dict"]["0.mlp.0.weight"].shape[1] // 8
         # число квантилей/бинов тоже выводим из чекпоинта: у HL-Gauss их 51,
         # у квантильных вариантов 32 — иначе голова не совпадёт по форме
         nq = 32
@@ -140,10 +153,100 @@ def load_agent(model_file):
         from advanced_agents import HLGauss
         net._hlg = HLGauss(v_min=hg[0], v_max=hg[1], n_bins=int(hg[2]))
         print(f"агент обучен с HL-Gauss: скаляр Q по центрам {int(hg[2])} бинов", flush=True)
+    # условия обучения, которые оценка обязана воспроизвести (новые чекпоинты);
+    # у старых чекпоинтов meta нет — действуют прежние константы
+    net._meta = ckpt.get("meta") or {}
     return net, ckpt["mean"], ckpt["std"], ckpt["variant"]
 
 
+def parse_action_spec(tok):
+    """'LBFGS:0.5:1000' -> индекс действия в ACTION_TABLE."""
+    o, lr, ep = tok.strip().split(":")
+    for i, (on, l, e) in enumerate(ALL_ACTIONS):
+        if on.lower() == o.lower() and abs(l - float(lr)) < 1e-12 and e == int(ep):
+            return i
+    raise ValueError(f"нет действия {tok!r}: в таблице 27 действий агента и "
+                     f"{len(EXTRA_ACTIONS)} дополнительных (SOAP)")
+
+
+def parse_chain(spec):
+    return [parse_action_spec(t) for t in spec.split(",") if t.strip()] if spec else []
+
+
+def parse_mask(spec):
+    """True = действие разрешено. Токены: 'pso', 'adam:0.01', 'pso:0:300', номер."""
+    allowed = np.ones(27, dtype=bool)
+    for tok in (spec or "").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if tok.isdigit():
+            allowed[int(tok)] = False
+            continue
+        parts = tok.split(":")
+        hit = False
+        for i, (on, l, e) in enumerate(ACTION_TABLE):
+            if on.lower() != parts[0].lower():
+                continue
+            if len(parts) > 1 and abs(l - float(parts[1])) > 1e-12:
+                continue
+            if len(parts) > 2 and e != int(parts[2]):
+                continue
+            allowed[i] = False
+            hit = True
+        if not hit:
+            raise ValueError(f"маска: токен {tok!r} не совпал ни с одним действием")
+    if not allowed.any():
+        raise ValueError("маска запретила все 27 действий")
+    return allowed
+
+
+NOOP_ACTIONS = (18, 19, 20)     # PSO с lr=0: в 39-85% применений ошибку не меняет
+
+
 Q_POLICY = "auto"   # auto | mean | cvar — как сводить квантили к скаляру
+
+
+def q_values(agent, state, mean, std, variant):
+    """Вектор Q по 27 действиям (numpy) — для маски, ансамбля и надбавки проводника."""
+    dev = next(agent.model.parameters()).device
+    x = torch.as_tensor((state[None] - mean) / std, device=dev).float()
+    with torch.no_grad():
+        hlg = getattr(agent, "_hlg", None)
+        if hlg is not None:
+            q = hlg.to_scalar(agent.q_online(x))
+        elif Q_POLICY == "cvar":
+            q = agent.q_cvar(x)
+        elif Q_POLICY == "mean":
+            q = agent.q_scalar(x)
+        else:
+            q = (agent.q_cvar(x) if variant in ("cnn_qrdqn", "cnx_cql_qr")
+                 else agent.q_scalar(x))
+    return q[0].detach().float().cpu().numpy()
+
+
+def ensemble_action(agents, state, allowed, how="vote"):
+    """Решение комитета замороженных агентов. vote — большинство голосов argmax
+    (ничья в пользу более раннего в списке); mean — argmax среднего Q после
+    стандартизации каждого агента (шкалы Q у агентов разные)."""
+    qs = []
+    for ag, mean, std, variant in agents:
+        q = q_values(ag, state, mean, std, variant).astype(np.float64)
+        q[~allowed] = -np.inf
+        qs.append(q)
+    if how == "mean":
+        z = []
+        for q in qs:
+            f = q[np.isfinite(q)]
+            z.append(np.where(np.isfinite(q), (q - f.mean()) / (f.std() + 1e-8), -np.inf))
+        return int(np.argmax(np.mean(z, axis=0)))
+    votes = [int(np.argmax(q)) for q in qs]
+    best, cnt = votes[0], 0
+    for v in votes:                      # порядок списка разрешает ничьи
+        c = votes.count(v)
+        if c > cnt:
+            best, cnt = v, c
+    return best
 
 
 def pick_action(agent, state, mean, std, variant):
@@ -259,8 +362,14 @@ def run_seed(seed, args, progress_cb=None):
     from landscape_visualization._aux.early_stopping_plot import EarlyStopping
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    dde.config.set_default_float("float32")
-    torch.set_default_dtype(torch.float32)
+    if getattr(args, "float64", False):
+        # диагностика уровня среды: застой L-BFGS в float32 часто артефакт точности
+        # линейного поиска (в контроле 1D float64 давал ошибку на 1-2 порядка ниже)
+        dde.config.set_default_float("float64")
+        torch.set_default_dtype(torch.float64)
+    else:
+        dde.config.set_default_float("float32")
+        torch.set_default_dtype(torch.float32)
     dde.config.set_random_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -277,13 +386,78 @@ def run_seed(seed, args, progress_cb=None):
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)
     model.net.apply(reinit)
+    if getattr(args, "float64", False):
+        model.net.double()       # реестр приводит сеть к float32 — возвращаем двойную точность
 
     agent = mean = std = variant = None
-    if args.policy == "agent":
-        agent, mean, std, variant = load_agent(args.model_file)
+    agents = []
+    needs_agent = (args.policy == "agent"
+                   or (args.policy == "script" and args.script_tail == "agent"))
+    if needs_agent:
+        files = [f.strip() for f in (args.model_files or args.model_file or "").split(",") if f.strip()]
+        if not files:
+            sys.exit("нужен --model-file (или --model-files для комитета)")
+        for f in files:
+            agents.append(load_agent(f))
+        agent, mean, std, variant = agents[0]
         if Q_POLICY == "cvar" and variant not in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
             sys.exit(f"--q-policy cvar требует квантильного варианта, а в чекпоинте "
                      f"{variant}: у него один выход на действие, брать хвост распределения не из чего")
+    meta = getattr(agent, "_meta", {}) if agent is not None else {}
+    allowed = parse_mask(args.mask)
+    for i in meta.get("mask", []):
+        allowed[int(i)] = False          # маска обучения действует и на оценке
+    script = parse_chain(args.script)
+    guide = parse_chain(args.guide)
+    ctx_kmax = int(meta.get("ctx_kmax", 10))
+    ctx_budget = int(meta.get("ctx_budget", 31000))
+    ctx_err = meta.get("ctx_err", "l2re")   # старые чекпоинты: прежнее поведение оценки
+    stop_reason = "budget"
+    # ---- трек 3: режим состояния, учёт времени, история по шагам ----
+    from offline_rl import apply_state_mode, loss_state, pde_desc, pde_meta
+    state_mode = meta.get("state_mode", "full") if args.state_mode == "auto" else args.state_mode
+    mapless = state_mode in ("blind", "loss")
+    if args.no_state and needs_agent and not mapless:
+        sys.exit(f"--no-state: агент обучен в режиме состояния {state_mode!r}, ему нужны карты")
+    if args.state_compare and state_mode == "loss":
+        sys.exit("--state-compare не определён для режима loss: агент обучен на лоссах, не на картах")
+    if state_mode == "rebuild" and not args.state_compare:
+        sys.exit("--state-mode rebuild имеет смысл только с --state-compare: агент действует по первой "
+                 "сборке карт, а записывается, что он выбрал бы по второй")
+    build_maps = (not args.no_state) and (not mapless or args.state_compare or not needs_agent)
+    guard_fb = parse_action_spec(args.guard_fallback) if args.guard_rollback else None
+    guard_log, guard_spent = [], 0
+    prev_raw2 = None                 # режим rebuild: предыдущая карта второй сборки
+    stale_maps = None                # --state-every: последняя построенная карта
+    # перенос между УрЧП: описатель задачи и масштаб ошибки — как при обучении
+    desc_vals = pde_desc(args.pde) if meta.get("pde_ctx") else None
+    err_scale = float(pde_meta()[args.pde]["init_err"]) if meta.get("err_norm") == "init" else 1.0
+    prev_loss_tot = None
+
+    def add_desc(st):
+        if desc_vals is None:
+            return st
+        return np.concatenate([st, np.stack([np.full(st.shape[1:], v, dtype=np.float32)
+                                             for v in desc_vals])], axis=0)
+    agree, hist = [], []
+    true_state = None
+    t_ae_tot = t_srf_tot = t_opt_tot = 0.0
+    bandit_arms = parse_chain(args.bandit_arms) if args.policy == "bandit" else []
+    bd = dict(n=np.zeros(len(ALL_ACTIONS)), x=np.zeros(len(ALL_ACTIONS)), prev_loss=None)
+    scout_set = parse_chain(args.scout_set) if args.policy == "scout" else []
+    scout_commit = parse_chain(args.scout_commit) if args.policy == "scout" else []
+    scout_log, scout_spent = [], 0
+
+    def train_loss_now():
+        return float(np.asarray(model.train_state.loss_train, dtype=float).sum())
+
+    def greedy_on(st):
+        """Жадное действие агента (или комитета) по состоянию st с учётом маски."""
+        if len(agents) > 1:
+            return ensemble_action(agents, st, allowed, args.ensemble)
+        q = q_values(agent, st, mean, std, variant).astype(np.float64)
+        q[~allowed] = -np.inf
+        return int(np.argmax(q))
 
     vm = VisualizationModel(device=dev, path_to_plot_model=None,
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
@@ -295,10 +469,13 @@ def run_seed(seed, args, progress_cb=None):
     # initial state: zero maps (rl_trainer.zero_state)
     state = np.zeros((4, 26, 26), dtype=np.float32)
     want_ctx = bool(agent is not None and
-                    next(agent.model.parameters()).shape[1] > 4)
+                    (next(agent.model.parameters()).shape[1] > 4
+                     if variant != "stat_dqn" else
+                     next(agent.model.parameters()).shape[1] > 32))
     last_a = None
     if want_ctx:
-        state = add_scalar_ctx(state, 0, 10, 0, 31000, None, 1.0)  # нормировки обучения
+        state = add_desc(add_scalar_ctx(state, 0, ctx_kmax, 0, ctx_budget, None,
+                                        None if ctx_err == "none" else 1.0))  # нормировки обучения
     prev_raw = None
     trig = (json.load(open(os.path.join(SCRIPT_DIR, "landscape_trigger.json")))
             if args.boost_trigger.startswith("landscape") else None)
@@ -322,6 +499,15 @@ def run_seed(seed, args, progress_cb=None):
         prev_raw = ck["prev_raw"]
         loss_hist, p_hist = ck["loss_hist"], ck["p_hist"]
         rmse, brmse, l2re_op, l2re_bnd = ck["metrics"]
+        t3 = ck.get("t3") or {}
+        prev_loss_tot = t3.get("prev_loss_tot")
+        guard_log, guard_spent = t3.get("guard_log", []), t3.get("guard_spent", 0)
+        prev_raw2, stale_maps = t3.get("prev_raw2"), t3.get("stale_maps")
+        agree, hist = t3.get("agree", []), t3.get("hist", [])
+        true_state = t3.get("true_state")
+        t_ae_tot, t_srf_tot, t_opt_tot = t3.get("times", (0.0, 0.0, 0.0))
+        bd = t3.get("bd", bd)
+        scout_log, scout_spent = t3.get("scout_log", []), t3.get("scout_spent", 0)
         print(f"[seed {seed}] докатка: spent={spent}/{args.budget}, шагов уже {len(chain)}",
               flush=True)
 
@@ -335,26 +521,156 @@ def run_seed(seed, args, progress_cb=None):
                       if prev_raw is not None else None),
             loss_hist=loss_hist, p_hist=p_hist, boosted=boosted,
             boost_layers=boost_layers, boost_eps=boost_eps,
+            rule_st=rule_st,
+            t3=dict(agree=agree, hist=hist, true_state=true_state, prev_loss_tot=prev_loss_tot,
+                    guard_log=guard_log, guard_spent=guard_spent, stale_maps=stale_maps,
+                    prev_raw2=({k: v.detach().cpu() for k, v in prev_raw2.items()}
+                               if prev_raw2 is not None else None),
+                    times=(t_ae_tot, t_srf_tot, t_opt_tot), bd=bd,
+                    scout_log=scout_log, scout_spent=scout_spent),
             metrics=(rmse, brmse, l2re_op, l2re_bnd)))
 
+    rule_st = dict(kicks=0, stalled=False, last_loss=None)
+    if ck is not None and ck.get("rule_st"):
+        rule_st = ck["rule_st"]
     while spent < args.budget:
-        if args.policy == "agent":
-            a = pick_action(agent, state, mean, std, variant)
+        use_agent = args.policy == "agent"
+        if args.policy == "script":
+            if len(chain) < len(script):
+                a = script[len(chain)]
+            elif args.script_tail == "repeat":
+                a = script[-1]
+            elif args.script_tail == "agent":
+                use_agent = True
+            else:
+                stop_reason = "script_end"
+                break
+        elif args.policy == "rule":
+            # эвристика «всплески L-BFGS, при застое — толчок Adam»: наблюдает только
+            # обучающий лосс (истинной ошибки на оценке нет). Застой = лосс после
+            # всплеска изменился меньше чем на rule_tol относительно
+            if rule_st["stalled"]:
+                if rule_st["kicks"] >= args.rule_max_kicks:
+                    stop_reason = "rule_stop"
+                    break
+                a = parse_action_spec(args.rule_kick)
+                rule_st["kicks"] += 1
+            else:
+                a = parse_action_spec(args.rule_burst)
         elif args.policy == "fixed":
             a = args.fixed_action
-        else:
-            a = int(rng.integers(0, 27))
-        opt_name, lr, epochs = ACTION_TABLE[a]
-        epochs = min(epochs, args.budget - spent)
-        optimizer = build_optimizer(opt_name, lr, model.net)
-        model.compile(optimizer, loss_weights=loss_weights)
-        tester = TesterCallback(log_every=args.display_every)
-        saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
-        model.train(iterations=epochs, display_every=args.display_every,
-                    callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
-        spent += epochs
+        elif args.policy == "random":
+            # без маски — прежний поток случайных чисел (воспроизводимость старых прогонов);
+            # с маской выбор идёт только среди разрешённых действий
+            a = (int(rng.integers(0, 27)) if allowed.all()
+                 else int(rng.choice(np.where(allowed)[0])))
+        elif args.policy == "bandit":
+            # UCB с забыванием по рукам-действиям: награда руки — убыль логарифма
+            # обучающего лосса на тысячу эпох. Учится внутри одного прогона, без
+            # предобучения и без карт: наблюдается только обучающий лосс
+            untried = [x for x in bandit_arms if bd["n"][x] == 0]
+            if untried:
+                a = untried[0]
+            else:
+                tot = max(1e-9, float(sum(bd["n"][x] for x in bandit_arms)))
+                ucb = {x: bd["x"][x] / bd["n"][x]
+                          + args.bandit_c * math.sqrt(math.log(max(tot, 1.0 + 1e-9)) / bd["n"][x])
+                       for x in bandit_arms}
+                a = max(bandit_arms, key=lambda x: ucb[x])
+        elif args.policy == "scout":
+            # разведка: каждое действие из набора пробуется коротко из одной и той же
+            # точки, веса откатываются; побеждает проба с наименьшим обучающим лоссом,
+            # затем исполняется её «длинное» действие. Эпохи проб идут в счёт бюджета
+            need = sum(ALL_ACTIONS[x][2] for x in scout_set)
+            if args.budget - spent <= need:
+                a = scout_commit[scout_log[-1]["win"]] if scout_log else scout_commit[0]
+            else:
+                snap = {k: v.detach().clone() for k, v in model.net.state_dict().items()}
+                losses = []
+                for x in scout_set:
+                    on_, lr_, ep_ = ALL_ACTIONS[x]
+                    model.net.load_state_dict(snap)
+                    model.compile(build_optimizer(on_, lr_, model.net), loss_weights=loss_weights)
+                    t_op = time.time()
+                    model.train(iterations=ep_, display_every=max(ep_, 1), callbacks=[],
+                                model_save_path=save_dir, save_model=False)
+                    t_opt_tot += time.time() - t_op
+                    lv = train_loss_now()
+                    losses.append(lv if np.isfinite(lv) else float("inf"))
+                    spent += ep_
+                    scout_spent += ep_
+                model.net.load_state_dict(snap)
+                win = int(np.argmin(losses))
+                scout_log.append(dict(step=len(chain) + 1, losses=[float(v) for v in losses], win=win))
+                a = scout_commit[win]
+                print(f"[seed {seed}] разведка: лоссы {['%.3e' % v for v in losses]} -> "
+                      f"{ALL_ACTIONS[a][0]} lr={ALL_ACTIONS[a][1]} ep={ALL_ACTIONS[a][2]}", flush=True)
+        if use_agent:
+            if len(agents) > 1:
+                a = ensemble_action(agents, state, allowed, args.ensemble)
+            elif allowed.all() and not guide:
+                a = pick_action(agent, state, mean, std, variant)     # прежний путь
+            else:
+                q = q_values(agent, state, mean, std, variant).astype(np.float64)
+                q[~allowed] = -np.inf
+                a = int(np.argmax(q))
+                g = guide[len(chain)] if len(chain) < len(guide) else None
+                if g is not None and a != g and q[g] + args.guide_bonus >= q[a]:
+                    a = g       # от эвристики отходим только при явном выигрыше по Q
+            if args.state_compare and true_state is not None:
+                agree.append([len(chain) + 1, int(a), int(greedy_on(true_state))])
+            if (args.stop_on_noop and a in NOOP_ACTIONS
+                    and any(c[0] != "PSO" for c in chain)):
+                # «стоп» засчитываем только после настоящего обучения: лидер трека 1
+                # начинает цепочку с пустого шага PSO, и остановка на нём оставила бы
+                # необученную сеть
+                stop_reason = "noop"
+                break
+        loss_before = bd["prev_loss"]
+        snap = None
+        if args.guard_rollback and use_agent and loss_before is not None:
+            # страж: снимок весов до действия агента
+            snap = {k: v.detach().clone() for k, v in model.net.state_dict().items()}
+        while True:
+            opt_name, lr, epochs = ALL_ACTIONS[a]
+            epochs = min(epochs, args.budget - spent)
+            optimizer = build_optimizer(opt_name, lr, model.net)
+            model.compile(optimizer, loss_weights=loss_weights)
+            tester = TesterCallback(log_every=args.display_every)
+            saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
+            t_op = time.time()
+            model.train(iterations=epochs, display_every=args.display_every,
+                        callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
+            t_opt_tot += time.time() - t_op
+            spent += epochs
+            cur_loss = train_loss_now()
+            worse = (not np.isfinite(cur_loss)) or (loss_before is not None
+                                                     and cur_loss > args.guard_rollback * loss_before)
+            if snap is not None and worse and spent < args.budget and a != guard_fb:
+                # действие агента ухудшило обучающий лосс: веса откатываются, вместо него
+                # исполняется запасное действие. Потраченные эпохи остаются в счёте бюджета
+                model.net.load_state_dict(snap)
+                guard_log.append([len(chain) + 1, int(a), float(loss_before),
+                                  float(cur_loss) if np.isfinite(cur_loss) else None])
+                guard_spent += epochs
+                print(f"[seed {seed}] страж: {opt_name} lr={lr} ep={epochs} поднял лосс "
+                      f"{loss_before:.3e} -> {cur_loss:.3e}, откат и запасное действие", flush=True)
+                a, snap = guard_fb, None
+                continue
+            break
         chain.append([opt_name, lr, epochs])
-        last_a = a
+        last_a = a if a < 27 else -1      # действие вне пространства агента в контексте неизвестно
+        if args.policy == "bandit":
+            if loss_before is not None and np.isfinite(cur_loss) and cur_loss > 0 and loss_before > 0:
+                r_b = float(np.clip((math.log10(loss_before) - math.log10(cur_loss))
+                                    / max(1, epochs) * 1000.0, -5.0, 5.0))
+                bd["n"] *= args.bandit_discount
+                bd["x"] *= args.bandit_discount
+                bd["n"][a] += 1.0
+                bd["x"][a] += r_b
+            elif loss_before is None:
+                bd["n"][a] += 1e-3        # первая проба: базы для награды ещё нет
+        bd["prev_loss"] = cur_loss if np.isfinite(cur_loss) else bd["prev_loss"]
 
         rmse = float(getattr(tester, "rmse", float("inf")))
         brmse = float(getattr(tester, "brmse", float("inf")))
@@ -362,6 +678,10 @@ def run_seed(seed, args, progress_cb=None):
         l2re_bnd = float(getattr(tester, "bc_l2re", float("inf")))
         print(f"[seed {seed}] step {len(chain)}: {opt_name} lr={lr} ep={epochs} "
               f"spent={spent}/{args.budget} l2re={math.hypot(l2re_op, l2re_bnd):.4e}", flush=True)
+        # история по шагам: нужна для выбора «лучшего из k» по обучающему лоссу и для
+        # имитации гонок между инициализациями без новых запусков
+        hist.append([int(spent), float(cur_loss) if np.isfinite(cur_loss) else None,
+                     float(math.hypot(l2re_op, l2re_bnd)), round(time.time() - t0, 1)])
         # строку прогресса шлём не чаще, чем раз в progress_every секунд: она нужна
         # только чтобы не потерять результат при срезе сессии, а десятки кернелов
         # пишут в один репозиторий с лимитом 128 коммитов в час
@@ -384,6 +704,19 @@ def run_seed(seed, args, progress_cb=None):
 
         # ---- решение о бустинге: проверка идеи статьи с ландшафтным триггером ----
         loss_hist.append(float(np.asarray(model.train_state.loss_train, dtype=float).sum()))
+        if args.policy == "rule":
+            cur_loss = loss_hist[-1]
+            was_kick = rule_st["stalled"]
+            prev_loss = rule_st["last_loss"]
+            if was_kick:
+                rule_st["stalled"] = False            # после толчка снова всплеск L-BFGS
+            else:
+                moved = (prev_loss is None
+                         or abs(cur_loss - prev_loss) > args.rule_tol * max(abs(prev_loss), 1e-12))
+                if moved and prev_loss is not None and cur_loss < prev_loss:
+                    rule_st["kicks"] = 0              # прогресс есть — счётчик толчков сброшен
+                rule_st["stalled"] = not moved
+                rule_st["last_loss"] = cur_loss
         if args.boost_trigger != "none" and not boosted and spent < args.budget:
             fire = False
             if trig is not None and len(chain) > 1:
@@ -420,29 +753,91 @@ def run_seed(seed, args, progress_cb=None):
         # смотрит на историю лосса или на счётчик эпох. Обучение PINN от этого не
         # зависит (проверено: l2re совпадает до последнего знака), а построение
         # карт — это ~90% времени прогона
-        if not args.no_state:
-            t_ae = time.time()
-            ae = vm.train(args.ae_lr, args.ae_cosine_patience, args.ae_epochs, 100,
-                          args.ae_batch, True, finetune_AE_model=False,
-                          callbacks=[EarlyStopping(patience=args.ae_es_patience)],
-                          solver_models=saver.saved_models)
-            t_ae = time.time() - t_ae
-            t_srf = time.time()
-            pls = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae,
-                                  dde_pde_model=get_model_rec, x_range=GRID_RANGE,
-                                  batch_size=args.ae_batch, loss_types=LOSS_TYPES,
-                                  loss_name="loss_total", path_to_plot_model=None,
-                                  path_to_trajectories=None, img_dir="")
-            raw = pls.save_equation_loss_surface(log_key=True)
-            t_srf = time.time() - t_srf
+        def build_raw():
+            """Одна сборка карт: автокодировщик по траектории последнего действия и
+            поверхность потерь в его латентной плоскости. Возвращает (raw, с_AE, с_поверхн)."""
+            t_a = time.time()
+            ae_ = vm.train(args.ae_lr, args.ae_cosine_patience, args.ae_epochs, 100,
+                           args.ae_batch, True, finetune_AE_model=False,
+                           callbacks=[EarlyStopping(patience=args.ae_es_patience)],
+                           solver_models=saver.saved_models)
+            t_a = time.time() - t_a
+            t_s = time.time()
+            pls_ = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae_,
+                                   dde_pde_model=get_model_rec, x_range=GRID_RANGE,
+                                   batch_size=args.ae_batch, loss_types=LOSS_TYPES,
+                                   loss_name="loss_total", path_to_plot_model=None,
+                                   path_to_trajectories=None, img_dir="")
+            raw_ = pls_.save_equation_loss_surface(log_key=True)
+            t_s = time.time() - t_s
+            del pls_, ae_
+            return raw_, t_a, t_s
+
+        # --state-every K: карты строятся после действий 1, 1+K, 1+2K, ...; между ними
+        # агент видит последнюю построенную карту (цена наблюдения делится на K)
+        due = (len(chain) - 1) % max(1, args.state_every) == 0
+        alt_maps = None
+        if build_maps and due:
+            raw, t_ae, t_srf = build_raw()
+            t_ae_tot += t_ae
+            t_srf_tot += t_srf
             print(f"[seed {seed}] state built: AE {t_ae:.1f}s (epochs={args.ae_epochs}), "
                   f"surface {t_srf:.1f}s", flush=True)
-            state = build_state(raw, prev_raw)
-            if want_ctx:
-                state = add_scalar_ctx(state, len(chain), 10, spent, 31000,
-                                       last_a, math.hypot(l2re_op, l2re_bnd))
+            true_maps = build_state(raw, prev_raw)
             prev_raw = raw
-            del pls, ae
+            stale_maps = true_maps
+            if state_mode == "rebuild":
+                # вторая сборка тех же карт с другой случайностью автокодировщика: насколько
+                # наблюдение воспроизводимо. Состояние генераторов возвращается, поэтому
+                # сам прогон совпадает с обычным
+                rs_t, rs_n = torch.random.get_rng_state(), np.random.get_state()
+                rs_c = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+                torch.manual_seed(seed * 9973 + 17 * len(chain))
+                np.random.seed((seed * 9973 + 17 * len(chain)) % (2 ** 31 - 1))
+                raw2, t_ae2, t_srf2 = build_raw()
+                torch.random.set_rng_state(rs_t); np.random.set_state(rs_n)
+                if rs_c is not None:
+                    torch.cuda.set_rng_state_all(rs_c)
+                t_ae_tot += t_ae2
+                t_srf_tot += t_srf2
+                alt_maps = build_state(raw2, prev_raw2)
+                prev_raw2 = raw2
+        elif build_maps and stale_maps is not None:
+            true_maps = stale_maps
+        else:
+            true_maps = np.zeros((4, 26, 26), dtype=np.float32)
+        if build_maps or needs_agent:
+            # вмешательство в состояние: агент получает искажённые карты, истинные
+            # сохраняются для сравнения выбранных действий
+            if state_mode == "loss":
+                # дешёвое состояние: обучающие лоссы в текущей точке вместо карт
+                lv = np.asarray(model.train_state.loss_train, dtype=float).ravel()
+                n_pde = int(getattr(getattr(model, "pde", None), "num_pde", len(lv)))
+                l3 = (float(lv.sum()), float(lv[:n_pde].sum()), float(lv[n_pde:].sum()))
+                if all(np.isfinite(l3)):
+                    maps = loss_state(l3[0], l3[1], l3[2], prev_loss_tot)
+                    prev_loss_tot = l3[0]
+                else:
+                    maps = np.zeros((4, 26, 26), dtype=np.float32)
+            elif state_mode == "rebuild":
+                maps = true_maps          # агент действует по первой сборке
+            else:
+                maps = apply_state_mode(true_maps, state_mode, seed=seed * 7919 + len(chain), pde=args.pde)
+            state = maps
+            # с чем сравнивать при --state-compare: истинные карты либо вторая сборка
+            ref_maps = true_maps if state_mode != "rebuild" else alt_maps
+            if want_ctx:
+                e_ctx = (None if ctx_err == "none" else
+                         (rmse + brmse) / err_scale if ctx_err == "err"
+                         else math.hypot(l2re_op, l2re_bnd))
+                state = add_desc(add_scalar_ctx(maps, len(chain), ctx_kmax, spent, ctx_budget,
+                                                last_a, e_ctx))
+                if args.state_compare:
+                    true_state = (None if ref_maps is None else
+                                  add_desc(add_scalar_ctx(ref_maps, len(chain), ctx_kmax, spent,
+                                                          ctx_budget, last_a, e_ctx)))
+            elif args.state_compare:
+                true_state = ref_maps
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -462,9 +857,20 @@ def run_seed(seed, args, progress_cb=None):
 
     l2re = math.hypot(l2re_op, l2re_bnd)
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
+                stop_reason=stop_reason, spent=spent,
                 boost_trigger=args.boost_trigger, boosted=boosted, rmse=rmse,
                 brmse=brmse, l2re_op=l2re_op, l2re_bnd=l2re_bnd, budget=args.budget,
                 n_steps=len(chain), chain=chain, ae_epochs=args.ae_epochs,
+                state_mode=(state_mode if needs_agent else ("none" if args.no_state else "unused")),
+                t_ae_s=round(t_ae_tot, 1), t_surface_s=round(t_srf_tot, 1),
+                t_opt_s=round(t_opt_tot, 1),
+                loss_final=(hist[-1][1] if hist else None), hist=hist,
+                agree=agree,
+                agree_rate=(round(float(np.mean([x[1] == x[2] for x in agree])), 4)
+                            if agree else None),
+                scout_spent=int(scout_spent), scout_log=scout_log,
+                guard_spent=int(guard_spent), guard_log=guard_log,
+                state_every=int(args.state_every),
                 elapsed_s=round(time.time() - t0, 1))
 
 
@@ -493,7 +899,71 @@ def upload(row, name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--policy", required=True, choices=["agent", "random", "fixed"])
+    ap.add_argument("--policy", required=True,
+                    choices=["agent", "random", "fixed", "script", "rule", "bandit", "scout"])
+    ap.add_argument("--state-every", type=int, default=1,
+                    help="Трек 3, цена наблюдения: строить карты после каждого K-го действия, "
+                         "между ними агент видит последнюю построенную карту")
+    ap.add_argument("--guard-rollback", type=float, default=0.0,
+                    help="Трек 3, страж: если после действия агента обучающий лосс вырос более чем в "
+                         "столько раз (например 1.0 — любой рост), веса откатываются и исполняется "
+                         "--guard-fallback. Потраченные эпохи остаются в счёте бюджета. 0 = выключено")
+    ap.add_argument("--guard-fallback", default="LBFGS:1:500",
+                    help="запасное действие стража")
+    ap.add_argument("--state-mode", default="auto",
+                    choices=["auto", "full", "blind", "level", "shape", "shuffle", "loss", "rebuild", "tasknorm"],
+                    help="Трек 3: что видит агент. auto — как при обучении (из чекпоинта); "
+                         "blind — карты не строятся; level — только уровень потерь; shape — только "
+                         "форма; shuffle — перемешанные пиксели; loss — обучающие лоссы вместо карт "
+                         "(карты не строятся); rebuild — вторая сборка карт с другой случайностью "
+                         "автокодировщика (с --state-compare). Явное значение — вмешательство на оценке")
+    ap.add_argument("--state-compare", action="store_true",
+                    help="Вместе с вмешательством: строить истинные карты и записывать, какое "
+                         "действие агент выбрал бы по ним (доля совпадений в итоговой строке)")
+    ap.add_argument("--bandit-arms", default="Adam:0.001:100,Adam:0.0001:100,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:500",
+                    help="--policy bandit: набор действий-рук")
+    ap.add_argument("--bandit-c", type=float, default=1.0, help="ширина доверительной надбавки UCB")
+    ap.add_argument("--bandit-discount", type=float, default=0.8,
+                    help="забывание статистик рук (награды нестационарны: лосс выходит на плато)")
+    ap.add_argument("--scout-set", default="Adam:0.001:100,LBFGS:1:100,LBFGS:0.1:100",
+                    help="--policy scout: короткие пробные запуски из общей точки")
+    ap.add_argument("--scout-commit", default="Adam:0.001:1000,LBFGS:1:500,LBFGS:0.1:500",
+                    help="--policy scout: действие, исполняемое после победы одноимённой пробы")
+    ap.add_argument("--script", default="",
+                    help="--policy script: цепочка действий без обратной связи, напр. "
+                         "'LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500'")
+    ap.add_argument("--script-tail", default="stop", choices=["stop", "repeat", "agent"],
+                    help="что делать, когда цепочка кончилась, а бюджет нет: stop — "
+                         "остановиться, repeat — повторять последнее действие, agent — "
+                         "передать управление агенту (--model-file)")
+    ap.add_argument("--rule-burst", default="LBFGS:1:100",
+                    help="--policy rule: основное действие (всплеск L-BFGS)")
+    ap.add_argument("--rule-kick", default="Adam:0.0001:100",
+                    help="--policy rule: действие-толчок при застое лосса")
+    ap.add_argument("--rule-max-kicks", type=int, default=3,
+                    help="--policy rule: сколько толчков подряд без улучшения лосса до остановки")
+    ap.add_argument("--rule-tol", type=float, default=1e-4,
+                    help="--policy rule: относительное изменение лосса, ниже которого застой")
+    ap.add_argument("--model-files", default=None,
+                    help="комитет агентов: несколько чекпоинтов через запятую")
+    ap.add_argument("--ensemble", default="vote", choices=["vote", "mean"],
+                    help="как комитет выбирает действие")
+    ap.add_argument("--mask", default="",
+                    help="запрещённые действия ('pso,adam:0.01'); маска из чекпоинта "
+                         "применяется автоматически")
+    ap.add_argument("--guide", default="",
+                    help="цепочка-эвристика: агент отходит от неё, только если его Q "
+                         "выше Q действия эвристики больше чем на --guide-bonus")
+    ap.add_argument("--guide-bonus", type=float, default=0.0)
+    ap.add_argument("--float64", action="store_true",
+                    help="решать PINN в двойной точности (только с --no-state: конвейер "
+                         "карт рассчитан на float32). Диагностика: снимает ли точность "
+                         "застой L-BFGS")
+    ap.add_argument("--stop-on-noop", action="store_true",
+                    help="выбор PSO с lr=0 после хотя бы одного шага Adam или L-BFGS "
+                         "трактовать как «стоп» и закончить цепочку: "
+                         "лидер трека 1 после 2000 эпох L-BFGS крутит это действие до "
+                         "конца бюджета, 70%% времени оценки уходит на пустые шаги")
     ap.add_argument("--fixed-action", type=int, default=4,
                     help="Индекс повторяемого действия для --policy fixed "
                          "(4 = Adam lr 1e-3 x 1000 эпох)")
@@ -546,10 +1016,33 @@ def main():
     args = ap.parse_args()
     global Q_POLICY
     Q_POLICY = args.q_policy
-    if args.no_state and (args.policy == "agent"
-                          or args.boost_trigger.startswith("landscape")):
-        sys.exit("--no-state несовместим с policy=agent и ландшафтными триггерами: "
-                 "им нужны карты")
+    if args.float64 and not args.no_state:
+        sys.exit("--float64 поддержан только вместе с --no-state")
+    if args.policy == "script" and not args.script:
+        sys.exit("--policy script требует --script")
+    if args.model_files and not args.tag:
+        sys.exit("--model-files (комитет) требует --tag")
+    if args.policy in ("script", "rule") and not args.tag:
+        sys.exit("--policy script/rule требует --tag: иначе результат ляжет под именем random")
+    uses_agent = args.policy == "agent" or (args.policy == "script" and args.script_tail == "agent")
+    if args.no_state and args.boost_trigger.startswith("landscape"):
+        sys.exit("--no-state несовместим с ландшафтными триггерами: им нужны карты")
+    if args.no_state and uses_agent and args.state_mode not in ("auto", "blind", "loss"):
+        sys.exit("--no-state с агентом допустим только при --state-mode blind или loss (или auto "
+                 "для агента, обученного без карт)")
+    if args.state_compare and (args.no_state or not uses_agent):
+        sys.exit("--state-compare требует агента и построения карт (без --no-state)")
+    if args.state_every < 1:
+        sys.exit("--state-every должен быть не меньше 1")
+    if any(g >= 27 for g in parse_chain(args.guide)):
+        sys.exit("--guide: проводник сравнивается по Q агента, поэтому состоит только из 27 действий агента")
+    if args.guard_rollback and not uses_agent:
+        sys.exit("--guard-rollback действует только на действия агента")
+    if args.policy in ("bandit", "scout") and not args.tag:
+        sys.exit("--policy bandit/scout требует --tag")
+    if args.policy == "scout":
+        if len(parse_chain(args.scout_set)) != len(parse_chain(args.scout_commit)):
+            sys.exit("--scout-set и --scout-commit должны быть одной длины")
     if args.smoke:  # только как дефолты — явные флаги не перезаписываем
         given = set(a.split("=")[0] for a in sys.argv[1:] if a.startswith("--"))
         if "--budget" not in given: args.budget = 300

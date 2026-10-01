@@ -41,7 +41,8 @@ import deepxde as dde  # noqa: E402
 
 from online_eval_env import (ACTION_TABLE, AE_MODEL_PARAMS, GRID_RANGE, LOSS_TYPES,  # noqa: E402
                              OUT_REPO, build_optimizer, build_state)
-from offline_rl import QNet  # noqa: E402
+from offline_rl import (QNet, apply_state_mode, chain_ctx, STATE_MODES, PDE_DESC_CH,  # noqa: E402
+                        loss_state, pde_desc, pde_meta, subdir_to_pde)
 
 EPS_START, EPS_END, EPS_DECAY = 0.5, 0.05, 50   # значения авторов (rl_algorithms.py)
 GAMMA = 0.9                                      # их rl_agent_params
@@ -57,14 +58,17 @@ class LocalBuffer:
         self.cap = capacity
         self.per, self.alpha = per, per_alpha
         self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio = ([] for _ in range(7))
+        self.ub = []            # ошибка в s2: потолок ценности s2 при награде-разности
         self.last_idx = None
+        self.last_ub = None
 
-    def push(self, s, a, r, s2, d, gam=None):
+    def push(self, s, a, r, s2, d, gam=None, ub=None):
         if len(self.s) >= self.cap:
-            for arr in (self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio):
+            for arr in (self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio, self.ub):
                 arr.pop(0)
         self.s.append(s); self.a.append(a); self.r.append(r)
         self.s2.append(s2); self.d.append(d)
+        self.ub.append(float("inf") if ub is None else float(ub))
         self.gam.append(GAMMA if gam is None else gam)
         self.prio.append(max(self.prio) if self.prio else 1.0)   # новый переход — макс. приоритет
 
@@ -79,6 +83,8 @@ class LocalBuffer:
         else:
             idx = np.random.randint(0, len(self.s), size=k)
         self.last_idx = idx
+        self.last_ub = torch.as_tensor(np.array([self.ub[i] for i in idx], dtype=np.float32),
+                                       device=device)
         t = lambda arr, dt: torch.as_tensor(np.array([arr[i] for i in idx]), dtype=dt, device=device)
         return (t(self.s, torch.float32), t(self.a, torch.long), t(self.r, torch.float32),
                 t(self.s2, torch.float32), t(self.d, torch.float32), t(self.gam, torch.float32))
@@ -91,7 +97,10 @@ class LocalBuffer:
 
 
 def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0,
-                 munch=False, m_tau=0.03, m_alpha=0.9, l2_init=0.0, init_w=None):
+                 munch=False, m_tau=0.03, m_alpha=0.9, l2_init=0.0, init_w=None, vbound=None):
+    """vbound: None — без границ; число — нижняя граница ценности следующего состояния
+    (0, если агент может остановиться; -inf, если нет). Верхняя граница — ошибка в
+    следующем состоянии: при награде-разности будущие улучшения её не превысят."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
     for _ in range(iters):
@@ -104,6 +113,8 @@ def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0,
                 a2 = net.q_scalar(s2).argmax(1)
                 q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                       else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+                if vbound is not None:
+                    q2 = torch.minimum(q2.clamp_min(vbound), buf.last_ub)
                 tgt = r + gm * (1 - d) * q2
         loss = F.mse_loss(q, tgt)
         if l2_init and init_w is not None:
@@ -135,11 +146,15 @@ def _dihedral_pair(s, s2):
 
 def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
                        max_bellman=False, aug=False, munch=False, m_tau=0.03,
-                       m_alpha=0.9, l2_init=0.0, init_w=None):
+                       m_alpha=0.9, l2_init=0.0, init_w=None, vbound=None):
     """RLPD: симметричная выборка — половина батча офлайн, половина онлайн."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
-    parts = [b.sample(half, dev) for b in (off_buf, on_buf)]
+    parts, ubs = [], []
+    for b in (off_buf, on_buf):
+        parts.append(b.sample(half, dev))
+        ubs.append(b.last_ub)
+    ub = torch.cat(ubs, 0)
     s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     if aug:
         s, s2 = _dihedral_pair(s, s2)
@@ -151,6 +166,8 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
             a2 = net.q_scalar(s2).argmax(1)
             q2 = (net.q_target(s2).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                   else net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+            if vbound is not None:
+                q2 = torch.minimum(q2.clamp_min(vbound), ub)
             tgt = (torch.maximum(r, gm * (1 - d) * q2) if max_bellman
                    else r + gm * (1 - d) * q2)
     loss = F.mse_loss(q, tgt)
@@ -229,6 +246,16 @@ def offline_ctx(od, k_max=10, budget=31000):
     EP, A = od["EP"], od["A"]
     n = len(A)
     out = np.zeros((n, SCALAR_CH), dtype=np.float32)
+    if "STEP" in od:
+        # буфер загружен с --offline-fix: EP — номер цепочки, шаг и расход эпох
+        # посчитаны по цепочке. Канал ошибки по-прежнему нулевой, чтобы офлайн
+        # и онлайн совпадали при --ctx-no-err (там он нулевой везде)
+        for i in range(n):
+            prev = int(A[i - 1]) if od["STEP"][i] > 0 else -1
+            opt_i, ep_i = ((-1.0, -1.0) if prev < 0 else ((prev // 9) / 2.0, (prev % 3) / 2.0))
+            out[i] = [od["STEP"][i] / max(1, k_max),
+                      min(1.0, od["SPENT"][i] / max(1, budget)), opt_i, ep_i, 0.0]
+        return out
     for ei in np.unique(EP):
         idx = np.where(EP == ei)[0]
         spent = 0
@@ -249,7 +276,7 @@ def offline_ctx(od, k_max=10, budget=31000):
 def attach_ctx(S, ctx):
     """Разворачивает скаляры в постоянные каналы и приклеивает к картам."""
     n, _, h, w = S.shape
-    planes = np.broadcast_to(ctx[:, :, None, None], (n, SCALAR_CH, h, w))
+    planes = np.broadcast_to(ctx[:, :, None, None], (n, ctx.shape[1], h, w))
     return np.concatenate([S, planes.astype(np.float32)], axis=1)
 
 
@@ -280,7 +307,8 @@ def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
         step / max(1, k_max),                                   # доля пройденных шагов
         min(1.0, spent / max(1, budget)),                       # доля бюджета
         opt_i, ep_i,
-        float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1)),   # уровень ошибки
+        # уровень ошибки; None = канал выключен (--ctx-no-err), как у офлайновых переходов
+        0.0 if err is None else float(np.clip(np.log10(max(err, 1e-8)) / 3.0 + 1.0, -1, 1)),
     ]
     planes = np.stack([np.full((h, w), v, dtype=np.float32) for v in vals])
     return np.concatenate([state, planes], axis=0)
@@ -504,12 +532,97 @@ def _hlg_meta(hlg):
     return None if hlg is None else (float(hlg.edges[0]), float(hlg.edges[-1]), int(hlg.n_bins))
 
 
-def save_agent(net, mean, std, variant, tag, n_chains, best, hl_gauss=None):
+def parse_action_spec(tok):
+    """'LBFGS:0.5:1000' -> индекс действия в ACTION_TABLE (имя без учёта регистра)."""
+    o, lr, ep = tok.strip().split(":")
+    for i, (on, l, e) in enumerate(ACTION_TABLE):
+        if on.lower() == o.lower() and abs(l - float(lr)) < 1e-12 and e == int(ep):
+            return i
+    raise ValueError(f"нет действия {tok!r} в таблице из 27 действий")
+
+
+def parse_chain(spec):
+    """'LBFGS:0.5:1000,LBFGS:1:500' -> [индексы действий]; пустая строка -> []."""
+    return [parse_action_spec(t) for t in spec.split(",") if t.strip()] if spec else []
+
+
+def parse_mask(spec):
+    """Маска запрещённых действий. Токены через запятую: 'pso' (весь оптимизатор),
+    'adam:0.01' (оптимизатор с данным шагом), 'pso:0:300' (одно действие) или
+    номер 0..26. Возвращает булев массив длины 27: True = действие разрешено."""
+    allowed = np.ones(27, dtype=bool)
+    for tok in (spec or "").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if tok.isdigit():
+            allowed[int(tok)] = False
+            continue
+        parts = tok.split(":")
+        hit = False
+        for i, (on, l, e) in enumerate(ACTION_TABLE):
+            if on.lower() != parts[0].lower():
+                continue
+            if len(parts) > 1 and abs(l - float(parts[1])) > 1e-12:
+                continue
+            if len(parts) > 2 and e != int(parts[2]):
+                continue
+            allowed[i] = False
+            hit = True
+        if not hit:
+            raise ValueError(f"маска: токен {tok!r} не совпал ни с одним действием")
+    if not allowed.any():
+        raise ValueError("маска запретила все 27 действий")
+    return allowed
+
+
+def save_buffer(records, mean, std, tag, meta):
+    """Онлайновые переходы прогона целиком (сырые состояния в float16) — локально и
+    на HF (rl_arch/buffers_online/<tag>.pt). Без этого опыт каждого прогона
+    пропадал: на HF уходили только итоги цепочек."""
+    if not records:
+        return
+    payload = dict(tag=tag, meta=meta, mean=mean, std=std,
+                   S=np.stack([r["s"] for r in records]).astype(np.float16),
+                   S2=np.stack([r["s2"] for r in records]).astype(np.float16),
+                   A=np.array([r["a"] for r in records], dtype=np.int64),
+                   R=np.array([r["r"] for r in records], dtype=np.float32),
+                   D=np.array([r["d"] for r in records], dtype=np.float32),
+                   ERR=np.array([r["err"] for r in records], dtype=np.float32),
+                   L2RE=np.array([r["l2re"] for r in records], dtype=np.float32),
+                   EP=np.array([r["ep"] for r in records], dtype=np.int64),
+                   STEP=np.array([r["step"] for r in records], dtype=np.int64),
+                   SPENT=np.array([r["spent"] for r in records], dtype=np.int64),
+                   EPOCHS=np.array([r["epochs"] for r in records], dtype=np.int64),
+                   LOSS=np.array([r.get("loss", (np.nan, np.nan, np.nan)) for r in records],
+                                 dtype=np.float32),
+                   HOW=[r["how"] for r in records])
+    local = f"buffer_{tag}.pt"
+    torch.save(payload, local)
+    tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
+    if not tok:
+        return
+    from huggingface_hub import upload_file
+    for attempt in range(4):
+        try:
+            upload_file(path_or_fileobj=local, path_in_repo=f"rl_arch/buffers_online/{tag}.pt",
+                        repo_id=OUT_REPO, repo_type="dataset", token=tok,
+                        commit_message=f"online buffer {tag} ({len(records)} переходов)")
+            return
+        except Exception as e:
+            print(f"buffer upload retry {attempt}: {str(e)[:80]}", flush=True)
+            time.sleep(min(300, 20 * 2 ** attempt))
+
+
+def save_agent(net, mean, std, variant, tag, n_chains, best, hl_gauss=None, meta=None):
     """Чекпоинт агента: локально всегда, на HF — если есть токен. Формат тот же,
-    что у офлайновых агентов, чтобы online_eval_env мог его загрузить."""
+    что у офлайновых агентов, чтобы online_eval_env мог его загрузить.
+    meta — условия обучения, которые оценка обязана воспроизвести (нормировки
+    контекста, маска действий, бюджет эпизода)."""
     payload = dict(variant=variant, hl_gauss=hl_gauss, state_dict={k: v.detach().cpu()
                                                 for k, v in net.model.state_dict().items()},
-                   mean=mean, std=std, n_chains=n_chains, l2re_best=best, tag=tag)
+                   mean=mean, std=std, n_chains=n_chains, l2re_best=best, tag=tag,
+                   meta=meta or {})
     local = f"agent_{tag}.pt"
     torch.save(payload, local)
     tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
@@ -727,6 +840,81 @@ def main():
                          "маска поддержки при выборе действия")
     ap.add_argument("--bcq-threshold", type=float, default=0.3,
                     help="порог маски: оставляем действия с p >= threshold * max p")
+    # --- согласование обучения с протоколом оценки и исправление офлайн-данных.
+    # Всё выключено по умолчанию: без флагов поведение прежнее бит-в-бит ---
+    ap.add_argument("--offline-fix", action="store_true",
+                    help="офлайн-буфер через episodes_to_arrays_chains: границы цепочек по "
+                         "done, терминал на конце цепочки (done=-1 давал 1-D=2), s'=state[t+1] "
+                         "в дампах, где next_state записан копией state (57%% ns2d_liddriven)")
+    ap.add_argument("--online-reward", default="delta", choices=["delta", "dlog"],
+                    help="награда онлайновых переходов: delta — разность ошибок (как раньше); "
+                         "dlog — log10(E_до) - log10(E_после), относительное улучшение, не "
+                         "зависящее от масштаба ошибки (перенос между УрЧП)")
+    ap.add_argument("--err-norm", default="none", choices=["none", "init"],
+                    help="init — ошибка делится на ошибку необученной сети этой задачи "
+                         "(track3/pde_meta.json): награды разных УрЧП в одних единицах. "
+                         "--init-err тогда по умолчанию 1")
+    ap.add_argument("--pde-ctx", action="store_true",
+                    help="шесть каналов описателя задачи (размерности, число слагаемых потерь, "
+                         "время, обратная задача); требует --scalar-ctx")
+    ap.add_argument("--offline-reward", default="logged",
+                    choices=["logged", "level", "delta", "model", "dlog"],
+                    help="форма награды офлайновых переходов (нужен --offline-fix). В дампе "
+                         "лежит минус уровень ошибки, онлайн даёт разность; delta делает "
+                         "обе половины батча RLPD одной задачей")
+    ap.add_argument("--init-err", type=float, default=None,
+                    help="ошибка необученной сети (rmse+brmse; для ns2d_liddriven 0.49). "
+                         "Награда первого шага = init_err - E_1 вместо нуля. При нуле возврат "
+                         "цепочки равен E_1 - E_конец: плохое первое действие выгодно, и "
+                         "политики начинают с пустого шага PSO")
+    ap.add_argument("--gamma", type=float, default=None,
+                    help="дисконт (по умолчанию 0.9 авторов). При награде-разности сумма "
+                         "с gamma=1 равна итоговому улучшению — метрике трека")
+    ap.add_argument("--episode-budget", type=int, default=0,
+                    help="бюджет эпох на цепочку как в оценке: цепочка кончается, когда "
+                         "потрачено >= N (последнее действие урезается), конец терминален. "
+                         "0 = прежний режим (только K_max и допуск)")
+    ap.add_argument("--ctx-no-err", action="store_true",
+                    help="скалярный контекст без канала истинной ошибки (на оценке её "
+                         "в реальной задаче нет): остаются шаг, бюджет, прошлое действие")
+    ap.add_argument("--mask", default="",
+                    help="запрещённые действия: 'pso,adam:0.01' или номера; действует на "
+                         "разведку и жадный выбор, сохраняется в чекпоинт для оценки")
+    ap.add_argument("--guide", default="",
+                    help="цепочка-проводник, напр. 'LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500'")
+    ap.add_argument("--guide-mode", default="jsrl", choices=["jsrl", "bonus", "eps"],
+                    help="jsrl: первые h шагов цепочки ведёт проводник, h убывает до 0 "
+                         "(Jump-Start RL); bonus: к Q действия проводника прибавляется "
+                         "убывающая надбавка — агент отходит от эвристики, только когда "
+                         "уверен в выигрыше (у дискретного argmax выбор IBRL «лучшее из "
+                         "двух по Q» вырождается, надбавка его заменяет); eps: разведочное "
+                         "действие берётся у проводника, а не равномерно")
+    ap.add_argument("--guide-chains", type=int, default=12,
+                    help="за сколько цепочек участок проводника (jsrl) или надбавка "
+                         "(bonus) убывают до нуля")
+    ap.add_argument("--guide-bonus", type=float, default=0.05,
+                    help="начальная надбавка к Q действия проводника (режим bonus), в "
+                         "единицах награды")
+    ap.add_argument("--value-bound", action="store_true",
+                    help="ограничить бутстреп-цель физическими пределами: ценность "
+                         "следующего состояния не больше ошибки в нём (улучшить можно не "
+                         "больше, чем до нуля) и не меньше нуля, если разрешён «стоп». "
+                         "Без границ офлайновый DQN на награде-разности завышал Q(s0) "
+                         "втрое выше предела (1.5 при максимуме 0.49)")
+    ap.add_argument("--freeze-encoder", action="store_true",
+                    help="кодировщик заморожен (случайный или из тёплого старта), учится "
+                         "только голова: при сотне онлайновых переходов 250 тыс. весов "
+                         "кодировщика учить не на чем")
+    ap.add_argument("--save-buffer", action="store_true",
+                    help="сохранять онлайновые переходы (состояния, действия, ошибки) "
+                         "локально и на HF rl_arch/buffers_online/ — для дообучения офлайн "
+                         "на всех собранных данных")
+    ap.add_argument("--state-mode", default="full", choices=list(STATE_MODES),
+                    help="Трек 3, лестница состояния: full карты; blind без карт (карты не строятся, "
+                         "шаг среды дешевле); level только уровень потерь; shape только форма; "
+                         "shuffle перемешанные пиксели; loss обучающие лоссы вместо карт (карты не "
+                         "строятся, наблюдение бесплатное); tasknorm карты нормированы статистиками "
+                         "своей задачи (перенос между УрЧП)")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -734,6 +922,88 @@ def main():
     args = ap.parse_args()
     if args.rlpd_full:
         args.rlpd = True        # полному RLPD нужен тот же офлайновый буфер
+    if args.offline_reward != "logged" and not args.offline_fix:
+        ap.error("--offline-reward требует --offline-fix")
+    if args.state_mode != "full":
+        bad = [f for f, on in (("--qwm", args.qwm), ("--vem", args.vem), ("--ssl-pretrain", args.ssl_pretrain),
+                               ("--spr", args.spr), ("--bcq", args.bcq), ("--go-explore", args.go_explore),
+                               ) if on]
+        if bad:
+            ap.error("--state-mode, отличный от full, несовместим с " + ", ".join(bad)
+                     + ": эти режимы опираются на сами карты")
+        if args.state_mode == "loss" and ((args.rlpd and not args.self_prior) or args.preload):
+            ap.error("--state-mode loss несовместим с офлайновыми буферами (--rlpd без "
+                     "--self-prior, --preload): в них нет обучающего лосса")
+    if args.pde_ctx and not args.scalar_ctx:
+        ap.error("--pde-ctx требует --scalar-ctx")
+    err_scale = 1.0
+    if args.err_norm == "init":
+        err_scale = float(pde_meta()[args.pde]["init_err"])
+        if args.init_err is None:
+            args.init_err = 1.0
+    if args.online_reward == "dlog":
+        if args.value_bound:
+            ap.error("--value-bound выведен для награды-разности и несовместим с --online-reward dlog")
+        if args.pbrs:
+            ap.error("--pbrs поверх --online-reward dlog удваивает одно и то же слагаемое")
+        if args.rlpd and not args.self_prior and args.offline_reward != "dlog":
+            ap.error("--online-reward dlog с офлайн-буфером требует --offline-fix --offline-reward dlog")
+    elif args.offline_reward == "dlog":
+        ap.error("--offline-reward dlog требует --online-reward dlog: половины батча должны "
+                 "решать одну задачу")
+        if args.state_mode == "blind" and not args.scalar_ctx:
+            print("ВНИМАНИЕ: --state-mode blind без --scalar-ctx даёт политику одного действия",
+                  flush=True)
+    if args.gamma is not None:
+        if not (0.0 <= args.gamma <= 1.0):
+            ap.error("--gamma должен лежать в [0, 1]")
+        # gamma = 0 — близорукий агент (контекстный бандит): цель равна награде шага
+        GAMMA = args.gamma
+    if args.episode_budget and not any(x.split("=")[0] == "--budget" for x in sys.argv[1:]):
+        args.budget = args.episode_budget     # доля бюджета в контексте — от бюджета эпизода
+    allowed = parse_mask(args.mask)
+    allowed_idx = np.where(allowed)[0]
+    vbound = None
+    if args.value_bound:
+        bad = [f for f, on in (("--pbrs", args.pbrs), ("--munchausen", args.munchausen),
+                               ("--max-bellman", args.max_bellman), ("--hl-gauss", args.hl_gauss),
+                               ("--rlpd-full", args.rlpd_full), ("--boot-heads", args.boot_heads),
+                               ("--risk-tau", args.risk_tau), ("--cvar-alpha", args.cvar_alpha),
+                               ("--preload", args.preload and not args.offline_fix)) if on]
+        if bad:
+            ap.error("--value-bound несовместим с " + ", ".join(bad))
+        if args.rlpd and not args.self_prior and not (args.offline_fix and args.offline_reward == "delta"):
+            ap.error("--value-bound с офлайн-буфером требует --offline-fix --offline-reward delta: "
+                     "граница выведена для награды-разности")
+        # нижняя граница 0 верна, только если агент может ничего не делать (PSO с lr=0)
+        vbound = 0.0 if allowed[18:21].any() else float("-inf")
+    guide = parse_chain(args.guide)
+    if guide and not all(allowed[g] for g in guide):
+        ap.error("--guide содержит действие, запрещённое --mask")
+    run_meta = dict(ctx_kmax=args.max_chain_steps, ctx_budget=args.budget,
+                    ctx_err=("none" if args.ctx_no_err else "err"),
+                    mask=[int(i) for i in np.where(~allowed)[0]],
+                    gamma=float(GAMMA), episode_budget=int(args.episode_budget),
+                    tolerance=float(args.tolerance), offline_fix=bool(args.offline_fix),
+                    offline_reward=args.offline_reward, init_err=args.init_err,
+                    guide=args.guide,
+                    guide_mode=args.guide_mode if args.guide else "",
+                    value_bound=bool(args.value_bound),
+                    freeze_encoder=bool(args.freeze_encoder),
+                    state_mode=args.state_mode, pde_ctx=bool(args.pde_ctx),
+                    err_norm=args.err_norm, online_reward=args.online_reward,
+                    scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
+    n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)
+    desc_vals = pde_desc(args.pde) if args.pde_ctx else None
+
+    def with_ctx(st, step_, spent_, last_a, err_):
+        """Скалярный контекст и (если включён) описатель задачи постоянными каналами."""
+        st = add_scalar_ctx(st, step_, args.max_chain_steps, spent_, max(1, args.budget),
+                            last_a, err_)
+        if desc_vals is not None:
+            st = np.concatenate([st, np.stack([np.full(st.shape[1:], v, dtype=np.float32)
+                                               for v in desc_vals])], axis=0)
+        return st
     if args.smoke:  # только как дефолты — явные флаги не перезаписываем
         given = set(x.split("=")[0] for x in sys.argv[1:] if x.startswith("--"))
         if "--hours" not in given: args.hours = 0.05
@@ -769,7 +1039,7 @@ def main():
               f"таргет по минимуму из {args.rlpd_subset} случайных, "
               f"{net.n_params()/1e6:.2f} млн параметров", flush=True)
     else:
-        net = QNet(args.variant, dev, in_ch=4 + (SCALAR_CH if args.scalar_ctx else 0))
+        net = QNet(args.variant, dev, in_ch=4 + n_ctx)
     mean = std = None
     if args.warm_start and not os.path.exists(args.warm_start):
         # допускаем имя файла в HF-датасете (rl_arch/models/...)
@@ -781,6 +1051,10 @@ def main():
             print(f"тёплый старт: чекпоинт не найден ({e}) — с нуля", flush=True)
     if args.warm_start and os.path.exists(args.warm_start):
         ck = torch.load(args.warm_start, map_location="cpu", weights_only=False)
+        ck_mode = (ck.get("meta") or {}).get("state_mode", "full")
+        if ck_mode != args.state_mode:
+            sys.exit(f"тёплый старт: чекпоинт обучен в режиме состояния {ck_mode!r}, а запрошен "
+                     f"{args.state_mode!r} — состояния несовместимы")
         # голова может не совпасть по форме (ансамбль голов, другое число квантилей) —
         # переносим то, что совпадает: энкодер полезен всегда, голова доучится
         cur = net.model.state_dict()
@@ -793,7 +1067,7 @@ def main():
         print(f"тёплый старт из {args.warm_start}: перенесено {len(ok)} тензоров"
               + (f", пропущено {skipped} (несовпадение формы)" if skipped else ""), flush=True)
     if args.scalar_ctx:
-        mean, std = pad_norm(mean, std, 4 + SCALAR_CH)
+        mean, std = pad_norm(mean, std, 4 + n_ctx)
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
 
     if args.ssl_pretrain:
@@ -828,6 +1102,12 @@ def main():
         print(f"SSL: энкодер предобучен ({args.ssl_pretrain} шагов, лосс {sl:.4f}); "
               f"дальше обычное обучение с этой инициализацией", flush=True)
 
+    if args.freeze_encoder:
+        for p_ in net.enc.parameters():
+            p_.requires_grad_(False)
+        print(f"кодировщик заморожен: обучаемых параметров "
+              f"{sum(p_.numel() for p_ in net.model.parameters() if p_.requires_grad)}", flush=True)
+
     # discrete BCQ: модель поведения по собранным переходам + маска поддержки на
     # выборе действия. Без неё вариант cnx_bcq в онлайне неотличим от обычного
     # DQN — вся суть метода именно в маске
@@ -848,10 +1128,30 @@ def main():
         # офлайновая половина батча: тот же буфер, на котором учатся офлайн-агенты
         from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
         od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
-                                fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"))
+                                fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"),
+                                chain_fix=args.offline_fix, reward_form=args.offline_reward,
+                                init_err=args.init_err if args.offline_fix else None,
+                                budget=args.episode_budget if args.offline_fix else 0,
+                                err_scale=err_scale if args.offline_fix else 1.0)
+        if args.state_mode != "full":
+            od["S"] = apply_state_mode(od["S"], args.state_mode, seed=101, pde=subdir_to_pde(args.rlpd_subdir))
+            od["S2"] = apply_state_mode(od["S2"], args.state_mode, seed=202, pde=subdir_to_pde(args.rlpd_subdir))
         if args.scalar_ctx:
-            c = offline_ctx(od, args.max_chain_steps, args.budget)
-            od["S"], od["S2"] = attach_ctx(od["S"], c), attach_ctx(od["S2"], c)
+            if args.offline_fix:
+                # контекст s' — это контекст СЛЕДУЮЩЕГО шага (шаг+1, потрачено с учётом
+                # действия, прошлое действие = текущее). Раньше s' получал контекст s:
+                # с картами это мелкая несогласованность, без карт (blind) s' совпадал с s
+                # и бутстреп шёл от того же состояния. Канал ошибки заполняется, если он
+                # включён онлайн, — иначе офлайн и онлайн расходились бы
+                c, c2 = chain_ctx(od, args.max_chain_steps, args.budget,
+                                  with_err=not args.ctx_no_err)
+            else:
+                c = offline_ctx(od, args.max_chain_steps, args.budget)
+                c2 = c
+            if desc_vals is not None:
+                dv = np.tile(np.asarray(desc_vals, dtype=np.float32)[None], (len(c), 1))
+                c, c2 = np.concatenate([c, dv], 1), np.concatenate([c2, dv], 1)
+            od["S"], od["S2"] = attach_ctx(od["S"], c), attach_ctx(od["S2"], c2)
             print(f"офлайновым переходам приписан контекст: {od['S'].shape}", flush=True)
         otr, _ = split_by_episode(od)
         oidx = np.where(otr)[0]
@@ -885,15 +1185,17 @@ def main():
                     j += 1
                 off_buf.push(((od["S"][int(i)][None] - om) / os_)[0], int(od["A"][int(i)]), G,
                              ((od["S2"][last][None] - om) / os_)[0], float(Dd[last]),
-                             gam=GAMMA ** k)
+                             gam=GAMMA ** k,
+                             ub=float(od["ERR"][last]) if "ERR" in od else None)
         else:
             for i in oidx:
                 off_buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
-                             ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
+                             ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]),
+                             ub=float(od["ERR"][i]) if "ERR" in od else None)
         if mean is None:
             mean, std = om, os_
         if args.scalar_ctx:
-            mean, std = pad_norm(mean, std, 4 + SCALAR_CH)
+            mean, std = pad_norm(mean, std, 4 + n_ctx)
         print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
               f"UTD={args.rlpd_utd}", flush=True)
     if args.preload:
@@ -902,18 +1204,26 @@ def main():
         # и всегда занимает ровно половину батча
         from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
         od = episodes_to_arrays(load_episodes(None, args.preload),
-                                fix_next_state=(args.preload == "poisson_boltzmann_2d"))
+                                fix_next_state=(args.preload == "poisson_boltzmann_2d"),
+                                chain_fix=args.offline_fix, reward_form=args.offline_reward,
+                                init_err=args.init_err if args.offline_fix else None,
+                                budget=args.episode_budget if args.offline_fix else 0,
+                                err_scale=err_scale if args.offline_fix else 1.0)
+        if args.state_mode != "full":
+            od["S"] = apply_state_mode(od["S"], args.state_mode, seed=101, pde=subdir_to_pde(args.preload))
+            od["S2"] = apply_state_mode(od["S2"], args.state_mode, seed=202, pde=subdir_to_pde(args.preload))
         otr, _ = split_by_episode(od)
         oidx = np.where(otr)[0][-args.preload_max:]
         om = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True)
         os_ = od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
         for i in oidx:
             buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
-                     ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]))
+                     ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]),
+                     ub=float(od["ERR"][i]) if "ERR" in od else None)
         if mean is None:
             mean, std = om, os_
         if args.scalar_ctx:
-            mean, std = pad_norm(mean, std, 4 + SCALAR_CH)
+            mean, std = pad_norm(mean, std, 4 + n_ctx)
         print(f"предзагрузка по схеме авторов: {len(buf)} переходов из {args.preload}", flush=True)
 
     wm = wm_opt = None
@@ -928,6 +1238,7 @@ def main():
               f"итоговый лосс {wl:.4f}), поиск по Eq.9 с D=1", flush=True)
 
     rng = np.random.default_rng(args.seed)
+    t_state_total = t_opt_total = 0.0      # учёт стоимости: состояние и сам оптимизатор
     tag = args.tag or f"{args.variant}_{args.pde}_seed{args.seed}"
     save_dir = os.path.join(args.save_dir, tag)
     os.makedirs(save_dir, exist_ok=True)
@@ -979,6 +1290,7 @@ def main():
               if args.l2_init else None)
     chains = []              # завершённые цепочки: (l2re, шагов, эпох)
     last_partial = None      # оборванная цепочка — отдельно, в итог не идёт
+    buf_records = []         # сырые онлайновые переходы для --save-buffer
 
     traj = 0
     while time.time() < deadline:
@@ -994,13 +1306,15 @@ def main():
 
         state = np.zeros((4, 26, 26), dtype=np.float32)
         if args.scalar_ctx:
-            state = add_scalar_ctx(state, 0, args.max_chain_steps, 0, 1, None, 1.0)
+            state = with_ctx(state, 0, 0, None, None if args.ctx_no_err else 1.0)
         prev_raw = None
+        prev_loss_tot = None      # режим loss: общий обучающий лосс после прошлого действия
         pending = []          # хвост цепочки для n-шаговых возвратов
         spent, chain, done = 0, [], 0
         truncated = False   # True только если ПРЕРВАЛИ цепочку посередине по лимиту
         l2re = float("inf")
         prev_err = None
+        end_reason = ""
         start_step, resumed_from = 0, None
         chain_trans = []    # (s_норм, a, r) текущей цепочки — для self-imitation
 
@@ -1033,9 +1347,24 @@ def main():
             if args.greedy_probe and (traj % args.greedy_probe == 0):
                 eps = 0.0        # проба качества политики: метрика отбора = метрика деплоя
             in_warmup = args.wsrl_warmup and steps_done <= args.wsrl_warmup
-            if rng.random() < eps and not args.boot_heads and not in_warmup:
-                a = int(rng.integers(0, 27))
-                how = "случайно"
+            is_probe = bool(args.greedy_probe and (traj % args.greedy_probe == 0))
+            g_act = guide[step] if (guide and step < len(guide)) else None
+            g_frac = max(0.0, 1.0 - (traj - 1) / max(1, args.guide_chains)) if guide else 0.0
+            guide_h = int(round(len(guide) * g_frac)) if args.guide_mode == "jsrl" else 0
+            if g_act is not None and step < guide_h and not is_probe:
+                # Jump-Start RL: начало цепочки ведёт проводник, агент доигрывает хвост
+                a = g_act
+                how = f"проводник {step + 1}/{guide_h}"
+            elif rng.random() < eps and not args.boot_heads and not in_warmup:
+                if g_act is not None and args.guide_mode == "eps":
+                    a = g_act
+                    how = "разведка по проводнику"
+                elif allowed.all():
+                    a = int(rng.integers(0, 27))
+                    how = "случайно"
+                else:
+                    a = int(rng.choice(allowed_idx))
+                    how = "случайно (маска)"
             else:
                 x = torch.as_tensor(((state[None] - mean) / std) if mean is not None else state[None],
                                     device=dev).float()
@@ -1075,16 +1404,38 @@ def main():
                         p = behaviour(x.flatten(1)).softmax(-1)
                         keep = p >= args.bcq_threshold * p.max(-1, keepdim=True).values
                         q = q.masked_fill(~keep, -1e9)
+                    if not allowed.all():
+                        q = q.masked_fill(~torch.as_tensor(allowed, device=q.device)[None], -1e9)
                     a = int(q.argmax(1).item())
-                  how = "по модели"
+                    how = "по модели"
+                    if (g_act is not None and args.guide_mode == "bonus" and not is_probe
+                            and a != g_act):
+                        bonus = args.guide_bonus * g_frac
+                        if float(q[0, g_act]) + bonus >= float(q[0, a]):
+                            a = g_act
+                            how = f"проводник (надбавка {bonus:.3f})"
+                if not allowed[a]:
+                    # ветки поиска, Гумбеля, бутстреп-голов и квантильные маску не знают:
+                    # запрещённое действие заменяем лучшим разрешённым по среднему Q
+                    with torch.no_grad():
+                        qm = net.q_scalar(x).masked_fill(
+                            ~torch.as_tensor(allowed, device=x.device)[None], -1e9)
+                    a = int(qm.argmax(1).item())
+                    how += " (маска)"
             opt_name, lr, epochs = ACTION_TABLE[a]
+            spent_before = spent
+            if args.episode_budget:
+                # как в оценке: действие не может выйти за остаток бюджета
+                epochs = max(1, min(epochs, args.episode_budget - spent))
 
             optimizer = build_optimizer(opt_name, lr, model.net)
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
+            t_op = time.time()
             model.train(iterations=epochs, display_every=args.display_every,
                         callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
+            t_opt_total += time.time() - t_op
             spent += epochs
             chain.append([opt_name, lr, epochs])
 
@@ -1098,27 +1449,58 @@ def main():
                 break
 
             # награда авторов: absolute, E = rmse + brmse; r = E_t - E_{t+1}
-            err = (rmse if np.isfinite(rmse) else 0.0) + (brmse if np.isfinite(brmse) else 0.0)
-            reward = 0.0 if prev_err is None else (prev_err - err)
+            err = ((rmse if np.isfinite(rmse) else 0.0)
+                   + (brmse if np.isfinite(brmse) else 0.0)) / err_scale
+            base_err = prev_err if prev_err is not None else args.init_err
+            if base_err is None:
+                reward = 0.0
+            elif args.online_reward == "dlog":
+                reward = float(np.clip(math.log10(max(float(base_err), 1e-8))
+                                       - math.log10(max(err, 1e-8)), -3.0, 3.0))
+            else:
+                reward = float(base_err) - err
+            # обучающие лоссы в текущей точке: наблюдаемы бесплатно (режим loss и буфер)
+            lv = np.asarray(model.train_state.loss_train, dtype=float).ravel()
+            n_pde = int(getattr(getattr(model, "pde", None), "num_pde", len(lv)))
+            loss3 = (float(lv.sum()), float(lv[:n_pde].sum()), float(lv[n_pde:].sum()))
             err_before = prev_err          # для PBRS: Phi(s) считается ДО обновления
             prev_err = err
             done = 1 if (args.tolerance > 0 and err < args.tolerance) else 0
+            end_reason = "tolerance" if done == 1 else ""
+            if args.episode_budget and spent >= args.episode_budget:
+                # бюджет исчерпан: для метрики трека это настоящий конец эпизода
+                done, end_reason = 1, (end_reason or "budget")
 
             # следующее состояние — их пайплайном
-            ae = vm.train(5e-4, 1200, args.ae_epochs, 100, args.batch_size, True,
-                          finetune_AE_model=False, callbacks=[EarlyStopping(patience=4000)],
-                          solver_models=saver.saved_models)
-            pls = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae,
-                                  dde_pde_model=get_model_rec, x_range=GRID_RANGE,
-                                  batch_size=args.batch_size, loss_types=LOSS_TYPES,
-                                  loss_name="loss_total", path_to_plot_model=None,
-                                  path_to_trajectories=None, img_dir="")
-            raw = pls.save_equation_loss_surface(log_key=True)
-            next_state = build_state(raw, prev_raw)
+            t_st = time.time()
+            if args.state_mode == "blind":
+                # карты агенту не нужны: автокодировщик и поверхность не строятся вовсе
+                raw, pls, ae = None, None, None
+                next_state = np.zeros((4, 26, 26), dtype=np.float32)
+            elif args.state_mode == "loss":
+                # дешёвое состояние: уровни обучающих лоссов вместо карт
+                raw, pls, ae = None, None, None
+                if all(np.isfinite(loss3)):
+                    next_state = loss_state(loss3[0], loss3[1], loss3[2], prev_loss_tot)
+                    prev_loss_tot = loss3[0]
+                else:
+                    next_state = np.zeros((4, 26, 26), dtype=np.float32)
+            else:
+                ae = vm.train(5e-4, 1200, args.ae_epochs, 100, args.batch_size, True,
+                              finetune_AE_model=False, callbacks=[EarlyStopping(patience=4000)],
+                              solver_models=saver.saved_models)
+                pls = PlotLossSurface(solver_models=saver.saved_models, AE_model=ae,
+                                      dde_pde_model=get_model_rec, x_range=GRID_RANGE,
+                                      batch_size=args.batch_size, loss_types=LOSS_TYPES,
+                                      loss_name="loss_total", path_to_plot_model=None,
+                                      path_to_trajectories=None, img_dir="")
+                raw = pls.save_equation_loss_surface(log_key=True)
+                next_state = apply_state_mode(build_state(raw, prev_raw), args.state_mode,
+                                              seed=int(rng.integers(0, 2 ** 31 - 1)), pde=args.pde)
+            t_state_total += time.time() - t_st
             if args.scalar_ctx:
-                next_state = add_scalar_ctx(next_state, len(chain), args.max_chain_steps,
-                                            spent, args.budget if hasattr(args, "budget") else 31000,
-                                            a, err)
+                next_state = with_ctx(next_state, len(chain), spent, a,
+                                      None if args.ctx_no_err else err)
             prev_raw = raw
             del pls, ae
             gc.collect()
@@ -1128,6 +1510,13 @@ def main():
             if mean is None:      # нормировка по первому состоянию (агент с нуля)
                 mean = next_state.mean(axis=(1, 2), keepdims=True)[None]
                 std = next_state.std(axis=(1, 2), keepdims=True)[None] + 1e-6
+                # канал delta после первого действия тождественно нулевой (prev_raw
+                # ещё нет): разброс 0, и деление на 1e-6 раздувало его на всех
+                # следующих шагах до ~1e6 — Q-потеря уходила в 1e9. Канал уже лежит
+                # в [-1, 1], поэтому каналам с нулевым разбросом нормировка не нужна
+                flat = std[0, :, 0, 0] < 1e-3
+                mean[0, flat] = 0.0
+                std[0, flat] = 1.0
                 if args.scalar_ctx:
                     # контекстные каналы постоянны, их пространственный разброс равен
                     # нулю — деление на 1e-6 раздуло бы вход в миллион раз. Они уже
@@ -1136,15 +1525,21 @@ def main():
                     std[:, 4:] = 1.0
             s_norm = ((state[None] - mean) / std)[0]
             s2_norm = ((next_state[None] - mean) / std)[0]
+            if args.save_buffer:
+                buf_records.append(dict(s=state.copy(), s2=next_state.copy(), a=a,
+                                        r=float(reward), d=float(done == 1), err=float(err),
+                                        l2re=float(l2re), ep=traj, step=len(chain) - 1,
+                                        spent=spent_before, epochs=epochs, how=how,
+                                        loss=loss3))
             if prior_buf is not None and len(prior_buf) < args.self_prior:
-                prior_buf.push(s_norm, a, reward, s2_norm, float(done == 1))
+                prior_buf.push(s_norm, a, reward, s2_norm, float(done == 1), ub=err)
             if args.n_step > 1:
                 pending.append((s_norm, a, float(reward)))
                 if len(pending) >= args.n_step:
                     s0, a0, _ = pending[0]
                     G = sum((GAMMA ** k) * tr[2] for k, tr in enumerate(pending))
                     buf.push(s0, a0, G, s2_norm, float(done == 1),
-                             gam=GAMMA ** len(pending))
+                             gam=GAMMA ** len(pending), ub=err)
                     pending.pop(0)
             else:
                 r_eff = reward
@@ -1157,7 +1552,7 @@ def main():
                     phi = lambda e: -math.log10(max(float(e), 1e-8))
                     if err_before is not None:
                         r_eff = reward + args.pbrs * (g_eff * phi(err) - phi(err_before))
-                buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff)
+                buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff, ub=err)
             if args.sil:
                 chain_trans.append((s_norm.copy(), a, float(reward)))
             if args.distill:
@@ -1280,12 +1675,12 @@ def main():
                                                 max_bellman=args.max_bellman, aug=args.aug,
                                                 munch=args.munchausen, m_tau=args.m_tau,
                                                 m_alpha=args.m_alpha, l2_init=args.l2_init,
-                                                init_w=init_w)
+                                                init_w=init_w, vbound=vbound)
                     else:
                         ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant,
                                           munch=args.munchausen, m_tau=args.m_tau,
                                           m_alpha=args.m_alpha, l2_init=args.l2_init,
-                                          init_w=init_w)
+                                          init_w=init_w, vbound=vbound)
                 if args.sil and sil_buf is not None and sil_buf.chains:
                     from advanced_agents import sil_update
                     sil_update(net, sil_buf, q_opt, args.batch_size, dev)
@@ -1300,7 +1695,8 @@ def main():
             elif len(buf) >= args.min_buffer:
                 ql = agent_update(net, buf, q_opt, args.batch_size, args.update_iters, args.variant,
                                   munch=args.munchausen, m_tau=args.m_tau,
-                                  m_alpha=args.m_alpha, l2_init=args.l2_init, init_w=init_w)
+                                  m_alpha=args.m_alpha, l2_init=args.l2_init, init_w=init_w,
+                                  vbound=vbound)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
                       f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)} q-loss={ql:.4f}", flush=True)
             else:
@@ -1326,6 +1722,8 @@ def main():
             if args.sil and sil_buf is not None and np.isfinite(l2re):
                 sil_buf.add_chain(l2re, chain_trans)
             rec = dict(l2re=l2re, steps=len(chain), epochs=spent, done=done, chain=chain)
+            if args.episode_budget:
+                rec["end"] = end_reason or "kmax"
             if resumed_from is not None:
                 rec["resumed_from"] = resumed_from
             chains.append(rec)
@@ -1342,7 +1740,7 @@ def main():
                     if args.save_agent:
                         save_agent(net, mean, std, args.variant,
                                    args.tag + "_bestprobe", len(chains), best_probe,
-                                   hl_gauss=_hlg_meta(hlg))
+                                   hl_gauss=_hlg_meta(hlg), meta=run_meta)
                     print(f"[проба] новая лучшая жадная цепочка {best_probe:.4f} — "
                           f"чекпоинт сохранён", flush=True)
             row = dict(variant=args.variant, pde=args.pde, seed=args.seed,
@@ -1352,17 +1750,26 @@ def main():
                        l2re_first=chains[0]["l2re"],
                        chains=[{k: v for k, v in c.items() if k != "chain"} for c in chains],
                        last_chain=chains[-1]["chain"], last_partial=last_partial,
+                       state_mode=args.state_mode,
+                       t_state_h=round(t_state_total / 3600, 3),
+                       t_opt_h=round(t_opt_total / 3600, 3),
                        elapsed_h=round((time.time() - t_start) / 3600, 2))
             print(json.dumps({k: v for k, v in row.items() if k not in ("chains", "last_chain")}), flush=True)
             if not args.smoke:
                 upload(row, tag)
             if args.save_agent and (len(chains) % args.save_every == 0):
                 save_agent(net, mean, std, args.variant, tag, len(chains),
-                           min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg))
+                           min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg),
+                           meta=run_meta)
+            if args.save_buffer and (len(chains) % args.save_every == 0) and not args.smoke:
+                save_buffer(buf_records, mean, std, tag, run_meta)
 
     if args.save_agent and chains:
         save_agent(net, mean, std, args.variant, tag, len(chains),
-                   min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg))
+                   min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg), meta=run_meta)
+    if args.save_buffer and buf_records:
+        save_buffer(buf_records, mean, std, tag, run_meta)
+        print(f"буфер сохранён: buffer_{tag}.pt, переходов {len(buf_records)}", flush=True)
         print(f"агент сохранён: agent_{tag}.pt и rl_arch/agents_online/{tag}.pt", flush=True)
 
     print(f"\nИТОГ: завершённых цепочек {len(chains)}, "

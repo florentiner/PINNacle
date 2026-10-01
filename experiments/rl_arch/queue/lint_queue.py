@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+"""
+Проверка очереди без запуска: каждая команда из queue.json прогоняется через
+настоящий разбор аргументов своего скрипта и через его проверки совместимости
+флагов, а тяжёлая часть (данные, среда, обучение) подменена заглушками.
+
+Ловит опечатки во флагах, недопустимые значения и несовместимые сочетания — то,
+что иначе всплыло бы только в логе кернела через несколько минут GPU-времени.
+Не проверяет: наличие файлов в HF, содержимое чекпоинтов, саму среду.
+
+    DDEBACKEND=pytorch python experiments/rl_arch/queue/lint_queue.py            # вся очередь
+    DDEBACKEND=pytorch python experiments/rl_arch/queue/lint_queue.py --wave 10
+    DDEBACKEND=pytorch python experiments/rl_arch/queue/lint_queue.py --queue experiments/rl_arch/queue/queue_pb2d.json
+"""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import io
+import json
+import os
+import re
+import shlex
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+RL = os.path.join(ROOT, "experiments", "rl_arch")
+for p in (ROOT, RL, os.path.join(RL, "tests"), os.path.join(ROOT, "experiments", "chain_eval")):
+    sys.path.insert(0, p)
+os.environ.setdefault("DDEBACKEND", "pytorch")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+# значения подстановок только для разбора аргументов; настоящие берутся из decisions.json
+DUMMY = {
+    "BASE": "--variant convnext_dqn --pde ns2d_liddriven --hours 11 --save-agent --rlpd --rlpd-utd 8 "
+            "--rlpd-subdir ns2d_liddriven --offline-fix --offline-reward delta --init-err 0.49 --value-bound "
+            "--gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70",
+    "GUIDE": "Adam:0.001:1000,LBFGS:1:1000",
+    "COMMITTEE": "rl_arch/agents_online/a.pt,rl_arch/agents_online/b.pt",
+    "BEST_AGENT": "rl_arch/agents_online/a.pt",
+    "BUFFERS": "q_a.pt,q_b.pt",
+    "RS_CHAIN_LOSS": "Adam:0.001:1000,LBFGS:1:1000",
+    "RS_CHAIN_ERR": "Adam:0.0001:2500,LBFGS:0.5:1000",
+}
+DUMMY["BASE_NOVB"] = DUMMY["BASE"].replace(" --value-bound", "")
+DUMMY["FINAL"] = DUMMY["BASE"] + " --scalar-ctx --ctx-no-err"
+DUMMY["BASE_QR"] = DUMMY["BASE_NOVB"].replace("convnext_dqn", "cnx_qrdqn")
+DUMMY["BASE_FACT"] = DUMMY["BASE"].replace("convnext_dqn", "cnx_factored")
+DUMMY["BASE_STAT"] = DUMMY["BASE"].replace("convnext_dqn", "stat_dqn")
+
+
+class Reached(Exception):
+    """Разбор аргументов и проверки пройдены: выполнение дошло до тяжёлой части."""
+
+
+def _stop(*a, **k):
+    raise Reached()
+
+
+def lint_offline(argv):
+    import numpy as np
+    import offline_rl as O
+    from test_chain_loader import make_file
+
+    def fake_episodes(data_dir=None, subdir=None, max_files=0):
+        return [make_file(False, [([0.4, 0.2, 0.1], -1), ([0.3, 0.008], 1), ([0.5, 0.25], 0)]),
+                make_file(True, [([0.4, 0.3, 0.05], -1), ([0.2, 0.1], 0)])]
+
+    def fake_teacher(path, data, device):
+        return np.zeros((len(data["A"]), O.N_ACTIONS), dtype=np.float32), {}
+
+    saved = (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers)
+    O.load_episodes, O.train_variant, O.teacher_q = fake_episodes, _stop, fake_teacher
+    O.merge_online_buffers = lambda data, paths, **k: data
+    try:
+        sys.argv = ["offline_rl.py"] + argv
+        O.main()
+    finally:
+        O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers = saved
+
+
+def lint_train(argv):
+    import online_train_env as T
+    saved = T.dde.config.set_default_float
+    T.dde.config.set_default_float = _stop
+    try:
+        sys.argv = ["online_train_env.py"] + argv
+        T.main()
+    finally:
+        T.dde.config.set_default_float = saved
+
+
+def lint_eval(argv):
+    import online_eval_env as E
+    saved = E.run_seed
+    E.run_seed = _stop
+    try:
+        sys.argv = ["online_eval_env.py"] + argv
+        E.main()
+    finally:
+        E.run_seed = saved
+    # то, что main не проверяет: цепочки и маски должны разбираться
+    ns = dict(zip(argv[::1], argv[1::1]))
+    for flag in ("--script", "--guide", "--scout-set", "--scout-commit", "--bandit-arms", "--guard-fallback"):
+        if flag in argv:
+            E.parse_chain(argv[argv.index(flag) + 1])
+    for flag in ("--rule-burst", "--rule-kick"):
+        if flag in argv:
+            E.parse_action_spec(argv[argv.index(flag) + 1])
+    if "--mask" in argv:
+        E.parse_mask(argv[argv.index("--mask") + 1])
+
+
+def lint_chain(argv):
+    import run_chain_pde as C
+    saved = C.run_orchestrator
+    C.run_orchestrator = _stop
+    try:
+        sys.argv = ["run_chain_pde.py"] + argv
+        C.main()
+    finally:
+        C.run_orchestrator = saved
+    if "--chain-json" in argv:
+        path = os.path.join(ROOT, argv[argv.index("--chain-json") + 1])
+        json.load(open(path))
+
+
+LINTERS = {"offline_rl.py": lint_offline, "online_train_env.py": lint_train,
+           "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain}
+
+
+def check(script, args):
+    for k, v in DUMMY.items():
+        args = args.replace("{" + k + "}", v)
+    left = re.findall(r"\{([A-Z_]+)\}", args)
+    if left:
+        return f"неизвестные подстановки {left}"
+    fn = LINTERS.get(os.path.basename(script))
+    if fn is None:
+        return f"нет проверки для {script}"
+    if not os.path.exists(os.path.join(ROOT, script)):
+        return f"скрипта нет: {script}"
+    out, err = io.StringIO(), io.StringIO()
+    argv0 = list(sys.argv)
+    cwd = os.getcwd()
+    try:
+        os.chdir(ROOT)
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            fn(shlex.split(args))
+        return "скрипт завершился, не дойдя до тяжёлой части"
+    except Reached:
+        return None
+    except SystemExit as e:
+        msg = (err.getvalue().strip().splitlines() or [str(e.code)])[-1]
+        return f"отказ скрипта: {msg[:300]}"
+    except Exception as e:
+        return f"{type(e).__name__}: {str(e)[:300]}"
+    finally:
+        sys.argv = argv0
+        os.chdir(cwd)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--wave", type=int, default=None)
+    ap.add_argument("--only", default=None)
+    ap.add_argument("--queue", default=os.path.join(HERE, "queue.json"),
+                    help="файл очереди (queue.json или queue_<префикс>.json другого УрЧП)")
+    args = ap.parse_args()
+    q = json.load(open(args.queue))
+    jobs = q["jobs"]
+    if args.only:
+        jobs = [j for j in jobs if j["id"] in args.only.split(",")]
+    elif args.wave is not None:
+        jobs = [j for j in jobs if j["wave"] == args.wave]
+    bad = 0
+    for j in jobs:
+        for i, s in enumerate(j["steps"], 1):
+            problem = check(s["script"], s["args"])
+            if problem:
+                bad += 1
+                print(f"ОШИБКА {j['id']} шаг {i} ({os.path.basename(s['script'])}): {problem}")
+                print(f"       {s['args'][:260]}")
+    n_steps = sum(len(j["steps"]) for j in jobs)
+    print(f"проверено задач {len(jobs)}, шагов {n_steps}, ошибок {bad}")
+    sys.exit(1 if bad else 0)
+
+
+if __name__ == "__main__":
+    main()
