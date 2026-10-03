@@ -856,6 +856,9 @@ def main():
                          "собраны со сбросом состояния: с --rlpd нужен --offline-fix, и из буфера берутся "
                          "только переходы, согласованные с такой средой (первый шаг цепочки, смена "
                          "семейства оптимизатора, PSO)")
+    ap.add_argument("--keep-opt-mode", default="all", choices=["all", "safe"],
+                    help="all: состояние любого оптимизатора живёт, пока семейство не меняется; safe: "
+                         "история L-BFGS всегда, Adam и SOAP — только при том же шаге")
     ap.add_argument("--online-reward", default="delta", choices=["delta", "dlog"],
                     help="награда онлайновых переходов: delta — разность ошибок (как раньше); "
                          "dlog — log10(E_до) - log10(E_после), относительное улучшение, не "
@@ -1011,6 +1014,7 @@ def main():
                     value_bound=bool(args.value_bound),
                     freeze_encoder=bool(args.freeze_encoder),
                     state_mode=args.state_mode, pde_ctx=bool(args.pde_ctx), keep_opt=bool(args.keep_opt),
+                    keep_opt_mode=(args.keep_opt_mode if args.keep_opt else None),
                     err_norm=args.err_norm, online_reward=args.online_reward,
                     scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
     n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)
@@ -1179,7 +1183,7 @@ def main():
             # буфер собран со сбросом оптимизатора на каждом действии. В среде без сбросов переход
             # тот же, только если оптимизатор перед действием и так был бы новым: первый шаг
             # цепочки, смена семейства оптимизатора или PSO (у него состояния нет)
-            ok = keep_consistent(od["A"], od["EP"], od["STEP"])
+            ok = keep_consistent(od["A"], od["EP"], od["STEP"], mode=args.keep_opt_mode)
             n0 = len(oidx)
             oidx = oidx[ok[oidx]]
             print(f"--keep-opt: из офлайнового буфера взяты переходы, согласованные со средой без "
@@ -1459,7 +1463,7 @@ def main():
                 # как в оценке: действие не может выйти за остаток бюджета
                 epochs = max(1, min(epochs, args.episode_budget - spent))
 
-            optimizer = reuse_optimizer(opt_cache, opt_name, lr, model.net, args.keep_opt)
+            optimizer = reuse_optimizer(opt_cache, opt_name, lr, model.net, args.keep_opt, args.keep_opt_mode)
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)

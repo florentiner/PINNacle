@@ -77,19 +77,28 @@ AE_MODEL_PARAMS = dict(
 LOSS_TYPES = ["loss_total", "loss_oper", "loss_bnd"]
 
 
-def reuse_optimizer(cache, opt_name, lr, net, keep):
+def reuse_optimizer(cache, opt_name, lr, net, keep, mode="all"):
     """Оптимизатор для очередного действия. При keep и том же семействе оптимизатора на той же
     сети возвращается прежний объект с обновлённым шагом: моменты Adam, история кривизны
     L-BFGS и предобусловливатель SOAP переживают границу действий (переход с сохранением
-    состояния, как в AOS, arXiv 2608.01997). Иначе создаётся новый, как раньше."""
-    if (keep and opt_name != "PSO" and cache.get("name") == opt_name
-            and cache.get("net") is net and cache.get("obj") is not None):
+    состояния, как в AOS, arXiv 2608.01997). Иначе создаётся новый, как раньше.
+
+    mode="safe": история L-BFGS сохраняется всегда, а состояние Adam и SOAP — только при том
+    же шаге. На ns2d (3 октября) сохранённые моменты Adam при смене шага вредили: после 1e-2
+    фаза 1e-4 почти не продвигалась (накопленная дисперсия душит шаги), а переход 1e-4 -> 1e-2
+    взрывался (лосс 31). В AOS для этого служит мост шага; свежий Adam проще и надёжнее."""
+    same = (keep and opt_name != "PSO" and cache.get("name") == opt_name
+            and cache.get("net") is net and cache.get("obj") is not None)
+    if same and mode == "safe" and opt_name != "LBFGS" and cache.get("lr") != lr:
+        same = False
+    if same:
         opt = cache["obj"]
         for g in opt.param_groups:
             g["lr"] = lr
+        cache["lr"] = lr
         return opt
     opt = build_optimizer(opt_name, lr, net)
-    cache.update(name=opt_name, net=net, obj=(opt if opt_name != "PSO" else None))
+    cache.update(name=opt_name, net=net, lr=lr, obj=(opt if opt_name != "PSO" else None))
     return opt
 
 
@@ -447,6 +456,7 @@ def run_seed(seed, args, progress_cb=None):
     opt_cache = {}                   # --keep-opt: оптимизатор прошлого действия
     # агент, обученный в среде без сбросов оптимизатора, оценивается в ней же
     keep_opt = bool(args.keep_opt or meta.get("keep_opt"))
+    keep_mode = meta.get("keep_opt_mode") or args.keep_opt_mode
     if keep_opt and not args.keep_opt:
         print("агент обучен с --keep-opt: состояние оптимизатора сохраняется между действиями", flush=True)
     prev_raw2 = None                 # режим rebuild: предыдущая карта второй сборки
@@ -661,7 +671,7 @@ def run_seed(seed, args, progress_cb=None):
         while True:
             opt_name, lr, epochs = ALL_ACTIONS[a]
             epochs = min(epochs, args.budget - spent)
-            optimizer = reuse_optimizer(opt_cache, opt_name, lr, model.net, keep_opt)
+            optimizer = reuse_optimizer(opt_cache, opt_name, lr, model.net, keep_opt, keep_mode)
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
@@ -901,6 +911,7 @@ def run_seed(seed, args, progress_cb=None):
                 scout_spent=int(scout_spent), scout_log=scout_log,
                 guard_spent=int(guard_spent), guard_log=guard_log,
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
+                keep_opt_mode=(keep_mode if keep_opt else None),
                 elapsed_s=round(time.time() - t0, 1))
 
 
@@ -1051,6 +1062,10 @@ def main():
                     help="продолжить прогон с чекпоинта (локального или с HF)")
     ap.add_argument("--ckpt-every", type=int, default=25,
                     help="как часто страховочно сохранять чекпоинт, в шагах цепочки")
+    ap.add_argument("--keep-opt-mode", default="all", choices=["all", "safe"],
+                    help="all: состояние любого оптимизатора живёт, пока семейство не меняется; safe: "
+                         "история L-BFGS сохраняется всегда, а Adam и SOAP — только при том же шаге "
+                         "(при смене шага сохранённые моменты Adam вредили). Для агента берётся из чекпоинта")
     ap.add_argument("--ckpt-min-interval", type=float, default=1800.0,
                     help="чекпоинт докатки не чаще, чем раз в столько секунд (лимит HF — 128 коммитов в "
                          "час на репозиторий; при политиках с действиями по 100 эпох --ckpt-every 10 давал "

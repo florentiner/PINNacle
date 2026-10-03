@@ -186,6 +186,11 @@ def test_keep_consistent():
     want = np.array([True, False, True, False, True, True, True, True, False, False, False])
     assert (ok == want).all(), ok
     assert O.keep_consistent(np.array([4]), np.array([0]), np.array([0])).tolist() == [True]
+    # safe: Adam со сменой шага получает новый оптимизатор (переход согласован), L-BFGS — нет
+    A2 = np.array([0, 4, 5, 9, 12])        # Adam 1e-2, Adam 1e-3, Adam 1e-3, L-BFGS 1, L-BFGS 0.5
+    E2, S2 = np.zeros(5, int), np.arange(5)
+    assert O.keep_consistent(A2, E2, S2).tolist() == [True, False, False, True, False]
+    assert O.keep_consistent(A2, E2, S2, mode="safe").tolist() == [True, True, False, True, False]
     # на настоящих цепочках загрузчика: один оптимизатор на всю цепочку — согласован только первый шаг
     d = O.episodes_to_arrays([make_file(False, [([0.4, 0.2, 0.1], -1), ([0.3, 0.008], 1)])],
                              chain_fix=True, reward_form="delta", init_err=0.5, verbose=False)

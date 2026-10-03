@@ -46,8 +46,8 @@
    "id": "K3",
    "kind": "train",
    "script": "experiments/rl_arch/online_train_env.py",
-   "args": "{BASE} --scalar-ctx --ctx-no-err --mask adam:0.01,pso:0.001,pso:0.0001 --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
-   "note": "проводник с порогом по Q, контекст и маска: всё, что сужает разведку"
+   "args": "{BASE} --scalar-ctx --ctx-no-err --mask pso:0.001,pso:0.0001 --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "проводник с порогом по Q, контекст и маска PSO с шагом: всё, что сужает разведку"
   },
   {
    "id": "K4",
@@ -3901,6 +3901,118 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy script --script Adam:0.01:1000,PSO:0:300,PSO:0.001:200,Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:1000,LBFGS:1:100,PSO:0.0001:300,Adam:0.0001:1000 --script-tail stop --no-state --keep-opt --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log5k"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-sk1s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас sk1 в безопасном режиме сохранения оптимизатора; пара к w11-sk1 и w11-sk1k",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk1s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-sk2s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас sk2 в безопасном режиме сохранения оптимизатора; пара к w11-sk2 и w11-sk2k",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk2s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-sk3s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас sk3 в безопасном режиме сохранения оптимизатора; пара к w11-sk3 и w11-sk3k",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk3s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log1s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №1 из буфера в безопасном режиме сохранения оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,Adam:0.0001:100,LBFGS:0.5:1000 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log1s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log2s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №2 из буфера в безопасном режиме сохранения оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:300,Adam:0.01:2500,PSO:0:300,PSO:0:100,Adam:0.001:100,Adam:0.0001:100,PSO:0.001:300,PSO:0.0001:100,LBFGS:0.1:500,PSO:0.001:300,LBFGS:1:1000,PSO:0.001:300 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log2s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log3s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №3 из буфера в безопасном режиме сохранения оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0.001:300,Adam:0.01:1000,Adam:0.0001:100,LBFGS:0.1:100,Adam:0.001:1000,PSO:0:100,PSO:0.0001:200,LBFGS:1:1000,LBFGS:1:500,Adam:0.001:2500,LBFGS:0.1:1000 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log3s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log4s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №4 из буфера в безопасном режиме сохранения оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:100,PSO:0.0001:100,LBFGS:0.5:100,LBFGS:0.5:500,Adam:0.01:2500,PSO:0.001:300,LBFGS:0.1:100,LBFGS:0.1:500,PSO:0:300,Adam:0.0001:100,LBFGS:1:1000,LBFGS:0.1:100 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log4s"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w11-log5s",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №5 из буфера в безопасном режиме сохранения оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,PSO:0:300,PSO:0.001:200,Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:1000,LBFGS:1:100,PSO:0.0001:300,Adam:0.0001:1000 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log5s"
     }
    ]
   },

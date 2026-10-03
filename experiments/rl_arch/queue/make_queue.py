@@ -580,6 +580,16 @@ for nm, sc in (("sk2", "Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000"), ("sk3", 
 for i, r in enumerate(MINED, 1):
     t3script(f"w11-log{i}k", f"t3b_log{i}k", r["script"], group="H12", extra=KEEP, hours=8.0,
              note=f"цепочка №{i} из буфера без сбросов оптимизатора; пара к w11-log{i}")
+# безопасный режим (--keep-opt-mode safe): история L-BFGS сохраняется, Adam при смене шага новый.
+# На ns2d перенос моментов Adam при смене шага вредил (каркасы хуже, цепочки буфера расходились)
+KEEPS = f"{KEEP} --keep-opt-mode safe"
+for nm, sc in (("sk1", "Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000"),
+               ("sk2", "Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000"), ("sk3", "Adam:0.001:2500,LBFGS:1:1000")):
+    t3script(f"w11-{nm}s", f"t3b_{nm}s", sc, tail="repeat", group="H12", extra=KEEPS, hours=8.0,
+             note=f"каркас {nm} в безопасном режиме сохранения оптимизатора; пара к w11-{nm} и w11-{nm}k")
+for i, r in enumerate(MINED, 1):
+    t3script(f"w11-log{i}s", f"t3b_log{i}s", r["script"], group="H12", extra=KEEPS, hours=8.0,
+             note=f"цепочка №{i} из буфера в безопасном режиме сохранения оптимизатора")
 # цепочка, которую исполняет лучший агент (подстановка AGENT_CHAIN из decisions_<префикс>.json):
 # если она без агента даёт то же, вклад RL — найденное расписание, а не обратная связь
 for nm, ex, note in (("agch", "", "цепочка лучшего агента как открытая"),
@@ -936,8 +946,9 @@ combos = [
          note="дешёвая по данным база: контекст времени, маска и только уровень карт"),
     dict(id="K2", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {KEEP}",
          note="среда без сбросов и контекст (прошлый оптимизатор виден агенту)"),
-    dict(id="K3", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {MASK} {GUIDE_B}",
-         note="проводник с порогом по Q, контекст и маска: всё, что сужает разведку"),
+    # маска только для PSO с шагом: лучшие каркасы-проводники начинаются с Adam 1e-2
+    dict(id="K3", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} --mask pso:0.001,pso:0.0001 {GUIDE_B}",
+         note="проводник с порогом по Q, контекст и маска PSO с шагом: всё, что сужает разведку"),
     dict(id="K4", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {KEEP} {GUIDE_B}",
          note="среда без сбросов и проводник: проводник задаёт каркас, агент решает, где менять семейство"),
     dict(id="K5", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} --n-step 3 {GUIDE_B}",

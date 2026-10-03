@@ -184,8 +184,8 @@ def main():
     args = ap.parse_args()
     q = json.load(open(args.queue))
     # уже принятые решения проверяются настоящими значениями, остальные подстановки — образцами
-    for dp in (os.path.join(HERE, "decisions.json"),
-               os.path.join(HERE, f"decisions_{q.get('prefix')}.json") if q.get("prefix") else None):
+    for dp in ((os.path.join(HERE, f"decisions_{q['prefix']}.json"),) if q.get("prefix")
+               else (os.path.join(HERE, "decisions.json"),)):
         if dp and os.path.exists(dp):
             dec = json.load(open(dp))
             DUMMY.update({k: str(v) for k, v in dec.items()})

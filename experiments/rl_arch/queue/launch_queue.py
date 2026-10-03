@@ -53,9 +53,10 @@ LIVE = ("running", "queued", "new")
 def load_queue(path=QUEUE):
     with open(path) as f:
         q = json.load(f)
-    # решения общие, но у очереди другого УрЧП могут быть свои: decisions_<префикс>.json
+    # решения у каждого УрЧП свои: у очереди с префиксом — decisions_<префикс>.json, у очереди
+    # ns2d — decisions.json (база, проводник и агенты привязаны к уравнению)
     dec = {}
-    for dp in (DECISIONS, os.path.join(HERE, f"decisions_{q.get('prefix', '')}.json") if q.get("prefix") else None):
+    for dp in ((os.path.join(HERE, f"decisions_{q['prefix']}.json"),) if q.get("prefix") else (DECISIONS,)):
         if dp and os.path.exists(dp):
             with open(dp) as f:
                 dec.update(json.load(f))
