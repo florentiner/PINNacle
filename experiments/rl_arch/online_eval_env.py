@@ -35,6 +35,7 @@ import math
 import os
 import sys
 import time
+import urllib.request
 
 import numpy as np
 
@@ -74,6 +75,22 @@ AE_MODEL_PARAMS = dict(
     polars_weight=0.0, wellspacedtrajectory_weight=0.0, gridscaling_weight=0.0,
 )
 LOSS_TYPES = ["loss_total", "loss_oper", "loss_bnd"]
+
+
+def reuse_optimizer(cache, opt_name, lr, net, keep):
+    """Оптимизатор для очередного действия. При keep и том же семействе оптимизатора на той же
+    сети возвращается прежний объект с обновлённым шагом: моменты Adam, история кривизны
+    L-BFGS и предобусловливатель SOAP переживают границу действий (переход с сохранением
+    состояния, как в AOS, arXiv 2608.01997). Иначе создаётся новый, как раньше."""
+    if (keep and opt_name != "PSO" and cache.get("name") == opt_name
+            and cache.get("net") is net and cache.get("obj") is not None):
+        opt = cache["obj"]
+        for g in opt.param_groups:
+            g["lr"] = lr
+        return opt
+    opt = build_optimizer(opt_name, lr, net)
+    cache.update(name=opt_name, net=net, obj=(opt if opt_name != "PSO" else None))
+    return opt
 
 
 def build_optimizer(opt_name, lr, net):
@@ -427,6 +444,11 @@ def run_seed(seed, args, progress_cb=None):
     build_maps = (not args.no_state) and (not mapless or args.state_compare or not needs_agent)
     guard_fb = parse_action_spec(args.guard_fallback) if args.guard_rollback else None
     guard_log, guard_spent = [], 0
+    opt_cache = {}                   # --keep-opt: оптимизатор прошлого действия
+    # агент, обученный в среде без сбросов оптимизатора, оценивается в ней же
+    keep_opt = bool(args.keep_opt or meta.get("keep_opt"))
+    if keep_opt and not args.keep_opt:
+        print("агент обучен с --keep-opt: состояние оптимизатора сохраняется между действиями", flush=True)
     prev_raw2 = None                 # режим rebuild: предыдущая карта второй сборки
     stale_maps = None                # --state-every: последняя построенная карта
     # перенос между УрЧП: описатель задачи и масштаб ошибки — как при обучении
@@ -599,6 +621,8 @@ def run_seed(seed, args, progress_cb=None):
                     losses.append(lv if np.isfinite(lv) else float("inf"))
                     spent += ep_
                     scout_spent += ep_
+                # пробы шли на своих оптимизаторах, веса вернулись к снимку: оптимизатор прошлого
+                # исполненного действия (opt_cache) по-прежнему соответствует этим весам
                 model.net.load_state_dict(snap)
                 win = int(np.argmin(losses))
                 scout_log.append(dict(step=len(chain) + 1, losses=[float(v) for v in losses], win=win))
@@ -634,7 +658,7 @@ def run_seed(seed, args, progress_cb=None):
         while True:
             opt_name, lr, epochs = ALL_ACTIONS[a]
             epochs = min(epochs, args.budget - spent)
-            optimizer = build_optimizer(opt_name, lr, model.net)
+            optimizer = reuse_optimizer(opt_cache, opt_name, lr, model.net, keep_opt)
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
@@ -650,6 +674,7 @@ def run_seed(seed, args, progress_cb=None):
                 # действие агента ухудшило обучающий лосс: веса откатываются, вместо него
                 # исполняется запасное действие. Потраченные эпохи остаются в счёте бюджета
                 model.net.load_state_dict(snap)
+                opt_cache.clear()        # после отката состояние оптимизатора не соответствует весам
                 guard_log.append([len(chain) + 1, int(a), float(loss_before),
                                   float(cur_loss) if np.isfinite(cur_loss) else None])
                 guard_spent += epochs
@@ -870,8 +895,22 @@ def run_seed(seed, args, progress_cb=None):
                             if agree else None),
                 scout_spent=int(scout_spent), scout_log=scout_log,
                 guard_spent=int(guard_spent), guard_log=guard_log,
-                state_every=int(args.state_every),
+                state_every=int(args.state_every), keep_opt=bool(keep_opt),
                 elapsed_s=round(time.time() - t0, 1))
+
+
+def result_done(name):
+    """Есть ли в HF законченная строка этого сида (не промежуточная и не оборванная). При
+    повторном запуске задачи с --resume такие сиды пропускаются: иначе кернел, перезапущенный
+    ради недосчитанных сидов, заново считал бы готовые (в двойной точности это часы на сид)."""
+    url = f"https://huggingface.co/datasets/{OUT_REPO}/resolve/main/rl_arch/online_env/{name}.json"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read())
+        return not d.get("partial") and not d.get("unfinished")
+    except Exception:
+        return False
 
 
 def upload(row, name):
@@ -904,6 +943,11 @@ def main():
     ap.add_argument("--state-every", type=int, default=1,
                     help="Трек 3, цена наблюдения: строить карты после каждого K-го действия, "
                          "между ними агент видит последнюю построенную карту")
+    ap.add_argument("--keep-opt", action="store_true",
+                    help="Сохранять состояние оптимизатора между действиями, пока семейство оптимизатора "
+                         "не меняется (моменты Adam, история L-BFGS, предобусловливатель SOAP); шаг "
+                         "обновляется на месте. Без флага каждое действие создаёт оптимизатор заново. "
+                         "При докатке с чекпоинта первое действие начинает с чистого состояния")
     ap.add_argument("--guard-rollback", type=float, default=0.0,
                     help="Трек 3, страж: если после действия агента обучающий лосс вырос более чем в "
                          "столько раз (например 1.0 — любой рост), веса откатываются и исполняется "
@@ -1053,6 +1097,9 @@ def main():
                        if args.model_file else "random")
     for seed in [int(s) for s in args.seeds.split(",")]:
         name = f"{args.pde}_{tag}_seed{seed}"
+        if args.resume and not args.smoke and result_done(name):
+            print(f"[seed {seed}] итоговая строка уже в HF — пропуск", flush=True)
+            continue
         args._ckpt_name = name
         cb = None if args.smoke else (lambda r, n=name: upload(r, n))
         row = run_seed(seed, args, progress_cb=cb)

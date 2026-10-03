@@ -40,9 +40,9 @@ import torch  # noqa: E402
 import deepxde as dde  # noqa: E402
 
 from online_eval_env import (ACTION_TABLE, AE_MODEL_PARAMS, GRID_RANGE, LOSS_TYPES,  # noqa: E402
-                             OUT_REPO, build_optimizer, build_state)
+                             OUT_REPO, build_optimizer, build_state, reuse_optimizer)
 from offline_rl import (QNet, apply_state_mode, chain_ctx, STATE_MODES, PDE_DESC_CH,  # noqa: E402
-                        loss_state, pde_desc, pde_meta, subdir_to_pde)
+                        keep_consistent, loss_state, pde_desc, pde_meta, subdir_to_pde)
 
 EPS_START, EPS_END, EPS_DECAY = 0.5, 0.05, 50   # значения авторов (rl_algorithms.py)
 GAMMA = 0.9                                      # их rl_agent_params
@@ -846,6 +846,13 @@ def main():
                     help="офлайн-буфер через episodes_to_arrays_chains: границы цепочек по "
                          "done, терминал на конце цепочки (done=-1 давал 1-D=2), s'=state[t+1] "
                          "в дампах, где next_state записан копией state (57%% ns2d_liddriven)")
+    ap.add_argument("--keep-opt", action="store_true",
+                    help="сохранять состояние оптимизатора между действиями одной цепочки, пока семейство "
+                         "оптимизатора не меняется (см. online_eval_env.py). Меняет смысл действий: "
+                         "десять коротких шагов L-BFGS становятся равны одному длинному. Офлайновые буферы "
+                         "собраны со сбросом состояния: с --rlpd нужен --offline-fix, и из буфера берутся "
+                         "только переходы, согласованные с такой средой (первый шаг цепочки, смена "
+                         "семейства оптимизатора, PSO)")
     ap.add_argument("--online-reward", default="delta", choices=["delta", "dlog"],
                     help="награда онлайновых переходов: delta — разность ошибок (как раньше); "
                          "dlog — log10(E_до) - log10(E_после), относительное улучшение, не "
@@ -936,6 +943,16 @@ def main():
                      "--self-prior, --preload): в них нет обучающего лосса")
     if args.pde_ctx and not args.scalar_ctx:
         ap.error("--pde-ctx требует --scalar-ctx")
+    if args.keep_opt:
+        if args.preload or args.go_explore or (args.qwm and not args.self_prior):
+            ap.error("--keep-opt несовместим с --preload и с --qwm на офлайновом буфере (в них действия "
+                     "исполнялись со сбросом оптимизатора) и с --go-explore (возврат к снимку весов)")
+        if args.rlpd and not args.self_prior and not args.offline_fix:
+            ap.error("--keep-opt с офлайн-буфером требует --offline-fix: согласованные со средой переходы "
+                     "выделяются по структуре цепочек")
+    if args.keep_opt and args.warm_start:
+        print("ВНИМАНИЕ: --keep-opt с --warm-start: чекпоинт обучен на действиях со сбросом оптимизатора, "
+              "первые цепочки пойдут со сдвигом в смысле действий", flush=True)
     err_scale = 1.0
     if args.err_norm == "init":
         err_scale = float(pde_meta()[args.pde]["init_err"])
@@ -951,9 +968,9 @@ def main():
     elif args.offline_reward == "dlog":
         ap.error("--offline-reward dlog требует --online-reward dlog: половины батча должны "
                  "решать одну задачу")
-        if args.state_mode == "blind" and not args.scalar_ctx:
-            print("ВНИМАНИЕ: --state-mode blind без --scalar-ctx даёт политику одного действия",
-                  flush=True)
+    if args.state_mode == "blind" and not args.scalar_ctx:
+        print("ВНИМАНИЕ: --state-mode blind без --scalar-ctx даёт политику одного действия",
+              flush=True)
     if args.gamma is not None:
         if not (0.0 <= args.gamma <= 1.0):
             ap.error("--gamma должен лежать в [0, 1]")
@@ -990,7 +1007,7 @@ def main():
                     guide_mode=args.guide_mode if args.guide else "",
                     value_bound=bool(args.value_bound),
                     freeze_encoder=bool(args.freeze_encoder),
-                    state_mode=args.state_mode, pde_ctx=bool(args.pde_ctx),
+                    state_mode=args.state_mode, pde_ctx=bool(args.pde_ctx), keep_opt=bool(args.keep_opt),
                     err_norm=args.err_norm, online_reward=args.online_reward,
                     scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
     n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)
@@ -1155,6 +1172,15 @@ def main():
             print(f"офлайновым переходам приписан контекст: {od['S'].shape}", flush=True)
         otr, _ = split_by_episode(od)
         oidx = np.where(otr)[0]
+        if args.keep_opt:
+            # буфер собран со сбросом оптимизатора на каждом действии. В среде без сбросов переход
+            # тот же, только если оптимизатор перед действием и так был бы новым: первый шаг
+            # цепочки, смена семейства оптимизатора или PSO (у него состояния нет)
+            ok = keep_consistent(od["A"], od["EP"], od["STEP"])
+            n0 = len(oidx)
+            oidx = oidx[ok[oidx]]
+            print(f"--keep-opt: из офлайнового буфера взяты переходы, согласованные со средой без "
+                  f"сбросов: {len(oidx)} из {n0} ({100.0 * len(oidx) / max(1, n0):.0f}%)", flush=True)
         if args.rlpd_max and len(oidx) > args.rlpd_max:
             # целыми эпизодами и детерминированно — чтобы n-step/эпизодная структура
             # не рвалась и прогон был воспроизводим
@@ -1309,6 +1335,7 @@ def main():
             state = with_ctx(state, 0, 0, None, None if args.ctx_no_err else 1.0)
         prev_raw = None
         prev_loss_tot = None      # режим loss: общий обучающий лосс после прошлого действия
+        opt_cache = {}            # --keep-opt: оптимизатор прошлого действия этой цепочки
         pending = []          # хвост цепочки для n-шаговых возвратов
         spent, chain, done = 0, [], 0
         truncated = False   # True только если ПРЕРВАЛИ цепочку посередине по лимиту
@@ -1428,7 +1455,7 @@ def main():
                 # как в оценке: действие не может выйти за остаток бюджета
                 epochs = max(1, min(epochs, args.episode_budget - spent))
 
-            optimizer = build_optimizer(opt_name, lr, model.net)
+            optimizer = reuse_optimizer(opt_cache, opt_name, lr, model.net, args.keep_opt)
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)

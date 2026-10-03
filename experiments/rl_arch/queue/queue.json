@@ -16,7 +16,115 @@
   "BUFFERS",
   "RS_CHAIN_LOSS",
   "RS_CHAIN_ERR",
-  "FINAL"
+  "FINAL",
+  "RULE_BEST",
+  "COMBO_A",
+  "COMBO_B",
+  "COMBO_C",
+  "COMBO_EVAL_A",
+  "COMBO_EVAL_B",
+  "XFER_FLAGS",
+  "DEPLOY"
+ ],
+ "combos": [
+  {
+   "id": "K1",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --mask adam:0.01,pso:0.001,pso:0.0001 --state-mode level",
+   "note": "дешёвая по данным база: контекст времени, маска и только уровень карт"
+  },
+  {
+   "id": "K2",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --keep-opt",
+   "note": "среда без сбросов и контекст (прошлый оптимизатор виден агенту)"
+  },
+  {
+   "id": "K3",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --mask adam:0.01,pso:0.001,pso:0.0001 --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "проводник с порогом по Q, контекст и маска: всё, что сужает разведку"
+  },
+  {
+   "id": "K4",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --keep-opt --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "среда без сбросов и проводник: проводник задаёт каркас, агент решает, где менять семейство"
+  },
+  {
+   "id": "K5",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --n-step 3 --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "трёхшаговые цели и проводник: длинные эпизоды по 70 шагов"
+  },
+  {
+   "id": "K6",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "--variant stat_dqn --pde ns2d_liddriven --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --mask adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000",
+   "note": "только онлайн: лоссы вместо карт, без сбросов, 70 решений по 100 эпох (арм w12-on2-fine)"
+  },
+  {
+   "id": "K7",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "--variant stat_dqn --pde ns2d_liddriven --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --n-step 3",
+   "note": "только онлайн: лоссы вместо карт, без сбросов, трёхшаговые цели"
+  },
+  {
+   "id": "E1",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "порог по Q и страж вместе"
+  },
+  {
+   "id": "E2",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "комитет агентов со стражем"
+  },
+  {
+   "id": "E3",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --state-every 3 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "карты раз в три действия и страж: дешёвое развёртывание с защитой"
+  },
+  {
+   "id": "E4",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy script --script {GUIDE} --script-tail agent --model-file {BEST_AGENT} --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "проводник как начало цепочки, агент как продолжение (без обучения)"
+  },
+  {
+   "id": "E5",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "готовый агент в среде без сбросов: дешёвая проба до обучения K2"
+  },
+  {
+   "id": "X1",
+   "kind": "xfer",
+   "script": "experiments/rl_arch/offline_rl.py",
+   "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout ns2d_liddriven --seeds 1 --model-tag xcombo --state-mode tasknorm --pde-ctx",
+   "note": "перенос: нормировка по задаче и описатель задачи вместе"
+  },
+  {
+   "id": "X2",
+   "kind": "xfer",
+   "script": "experiments/rl_arch/offline_rl.py",
+   "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout ns2d_liddriven --seeds 1 --model-tag xcombo --state-mode shape --pde-ctx",
+   "note": "перенос: карты без уровня и описатель задачи"
+  }
  ],
  "jobs": [
   {
@@ -226,6 +334,62 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-l1kk",
+   "wave": 0,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "L-BFGS 1.0 весь бюджет без сбросов истории кривизны; пара к w0-l1k",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_l1kk"
+    }
+   ]
+  },
+  {
+   "id": "w0-a3lk",
+   "wave": 0,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "классическая пара Adam -> L-BFGS без сбросов; пара к w0-a3l",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_a3lk"
+    }
+   ]
+  },
+  {
+   "id": "w0-rulek",
+   "wave": 0,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "правило «всплеск L-BFGS, при застое толчок Adam» без сбросов между всплесками; пара к w0-rule",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_rulek"
+    }
+   ]
+  },
+  {
+   "id": "w0-t1k",
+   "wave": 0,
+   "group": "H12",
+   "hours": 4.0,
+   "needs": [],
+   "note": "цепочка лидера трека 1 в среде без сбросов; пара к w0-t1",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:300,LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail stop --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_t1k"
     }
    ]
   },
@@ -1636,6 +1800,52 @@
    ]
   },
   {
+   "id": "w2-keep-s42",
+   "wave": 2,
+   "group": "H12",
+   "hours": 11.8,
+   "needs": [],
+   "note": "среда без сбросов оптимизатора между действиями одного семейства",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --keep-opt --seed 42 --tag q2_keep_s42"
+    }
+   ]
+  },
+  {
+   "id": "w2-keep-s42-ea",
+   "wave": 2,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q2_keep_s42.pt"
+   ],
+   "note": "оценка: среда без сбросов оптимизатора между действиями одного семейства",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_keep_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_keep_s42"
+    }
+   ]
+  },
+  {
+   "id": "w2-keep-s42-eb",
+   "wave": 2,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q2_keep_s42.pt"
+   ],
+   "note": "оценка: среда без сбросов оптимизатора между действиями одного семейства",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_keep_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_keep_s42"
+    }
+   ]
+  },
+  {
    "id": "w2-vote-ea",
    "wave": 2,
    "group": "G12",
@@ -2278,6 +2488,172 @@
    ]
   },
   {
+   "id": "w4-ca-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "комбинация A: набор флагов обучения из decisions.json (COMBO_A)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{COMBO_A} --seed 42 --tag q4_ca_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-ca-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q4_ca_s42.pt"
+   ],
+   "note": "оценка комбинации A",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_ca_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_ca_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-ca-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q4_ca_s42.pt"
+   ],
+   "note": "оценка комбинации A",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_ca_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_ca_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cb-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "комбинация B: набор флагов обучения из decisions.json (COMBO_B)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{COMBO_B} --seed 42 --tag q4_cb_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cb-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q4_cb_s42.pt"
+   ],
+   "note": "оценка комбинации B",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cb_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_cb_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cb-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q4_cb_s42.pt"
+   ],
+   "note": "оценка комбинации B",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cb_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_cb_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cc-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "комбинация C: набор флагов обучения из decisions.json (COMBO_C)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{COMBO_C} --seed 42 --tag q4_cc_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cc-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q4_cc_s42.pt"
+   ],
+   "note": "оценка комбинации C",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cc_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_cc_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cc-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q4_cc_s42.pt"
+   ],
+   "note": "оценка комбинации C",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cc_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_cc_s42"
+    }
+   ]
+  },
+  {
+   "id": "w4-cea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [],
+   "note": "комбинация оценки A: политика и флаги развёртывания из decisions.json (COMBO_EVAL_A), без нового обучения",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "{COMBO_EVAL_A} --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q4_cea"
+    }
+   ]
+  },
+  {
+   "id": "w4-ceb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [],
+   "note": "комбинация оценки B: политика и флаги развёртывания из decisions.json (COMBO_EVAL_B), без нового обучения",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "{COMBO_EVAL_B} --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q4_ceb"
+    }
+   ]
+  },
+  {
    "id": "w5-final-s42",
    "wave": 5,
    "group": "base",
@@ -2462,6 +2838,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_gbon"
+    }
+   ]
+  },
+  {
+   "id": "w5-final-gg",
+   "wave": 5,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q5_final_s42.pt"
+   ],
+   "note": "итоговая конфигурация: порог по Q и страж вместе (гарантия «не хуже проводника» с двух сторон)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_gg"
+    }
+   ]
+  },
+  {
+   "id": "w5-final-ev3",
+   "wave": 5,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q5_final_s42.pt"
+   ],
+   "note": "итоговая конфигурация с картами после каждого третьего действия; не нужна, если состояние без карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --state-every 3 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_ev3"
     }
    ]
   },
@@ -3004,6 +3412,104 @@
    ]
   },
   {
+   "id": "w11-rule3",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:1:500, толчок Adam:0.0001:100, порог застоя 0.001",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:500 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 --rule-tol 0.001 --no-state --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule3"
+    }
+   ]
+  },
+  {
+   "id": "w11-rule4",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:0.5:1000, толчок Adam:0.001:100, порог застоя 0.001",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:0.5:1000 --rule-kick Adam:0.001:100 --rule-max-kicks 3 --rule-tol 0.001 --no-state --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule4"
+    }
+   ]
+  },
+  {
+   "id": "w11-rule5",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:1:100, толчок Adam:0.001:1000, порог застоя 0.01",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.001:1000 --rule-max-kicks 3 --rule-tol 0.01 --no-state --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule5"
+    }
+   ]
+  },
+  {
+   "id": "w11-rule6",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:1:1000, толчок Adam:0.0001:1000, порог застоя 0.01",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:1000 --rule-kick Adam:0.0001:1000 --rule-max-kicks 3 --rule-tol 0.01 --no-state --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule6"
+    }
+   ]
+  },
+  {
+   "id": "w11-rulebest",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "лучший вариант правила (выбран по обучающему лоссу на сидах 42-51) на новых сидах 52-61: поправка на проклятие победителя",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "{RULE_BEST} --no-state --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag t3b_rulebest"
+    }
+   ]
+  },
+  {
+   "id": "w11-sk1k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас лучших цепочек буфера без сбросов: моменты Adam переходят с шага 1e-2 на 1e-4, история L-BFGS копится до конца бюджета; пара к w11-sk1",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk1k"
+    }
+   ]
+  },
+  {
+   "id": "w11-scoutk",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "разведка без сбросов: победившее действие продолжает оптимизатор прошлого победителя того же семейства (ROR с переносом состояния, как в AOS); пара к w11-scout",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --keep-opt --no-state --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scoutk"
+    }
+   ]
+  },
+  {
    "id": "w11-soap",
    "wave": 11,
    "group": "H12",
@@ -3056,6 +3562,34 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --no-state --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scouts"
+    }
+   ]
+  },
+  {
+   "id": "w11-soapk",
+   "wave": 11,
+   "group": "H12",
+   "hours": 6.0,
+   "needs": [],
+   "note": "SOAP весь бюджет без сброса предобусловливателя: штатный SOAP при равных эпохах; пара к w11-soap",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_soapk"
+    }
+   ]
+  },
+  {
+   "id": "w11-scoutsk",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "разведка с SOAP без сбросов: самая сильная политика без обучения, собранная из трёх приёмов (пробы ROR, портфель с SOAP, перенос состояния AOS)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --no-state --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scoutsk"
     }
    ]
   },
@@ -3634,6 +4168,96 @@
    ]
   },
   {
+   "id": "w12-on2-fullk",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_liddriven --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --seed 42 --tag q_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fullk-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fullk_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-lossk",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde ns2d_liddriven --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --seed 42 --tag q_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-lossk-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_lossk_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fine",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde ns2d_liddriven --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --mask adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000 --seed 42 --tag q_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fine-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fine_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
    "id": "w13-of-g0",
    "wave": 13,
    "group": "H08",
@@ -4180,6 +4804,28 @@
    ]
   },
   {
+   "id": "w14-ns2d-keep",
+   "wave": 14,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "ns2d_liddriven: L-BFGS, Adam -> L-BFGS и разведка с SOAP в среде без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_ns2d_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_ns2d_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_ns2d_scoutsk"
+    }
+   ]
+  },
+  {
    "id": "w14-ns2d-ft",
    "wave": 14,
    "group": "H14",
@@ -4328,6 +4974,28 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy bandit --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_pb2d_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w14-pb2d-keep",
+   "wave": 14,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "poissonboltzmann2d: L-BFGS, Adam -> L-BFGS и разведка с SOAP в среде без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_pb2d_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_pb2d_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_pb2d_scoutsk"
     }
    ]
   },
@@ -4500,6 +5168,28 @@
    ]
   },
   {
+   "id": "w14-h2ms-keep",
+   "wave": 14,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "heat2d_multiscale: L-BFGS, Adam -> L-BFGS и разведка с SOAP в среде без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_h2ms_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_h2ms_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_h2ms_scoutsk"
+    }
+   ]
+  },
+  {
    "id": "w14-h2ms-l1",
    "wave": 14,
    "group": "H14",
@@ -4668,6 +5358,28 @@
    ]
   },
   {
+   "id": "w14-wave-keep",
+   "wave": 14,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "wave1d: L-BFGS, Adam -> L-BFGS и разведка с SOAP в среде без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_wave_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_wave_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3x_wave_scoutsk"
+    }
+   ]
+  },
+  {
    "id": "w14-wave-l1",
    "wave": 14,
    "group": "H14",
@@ -4700,6 +5412,1200 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file agent_q_t3ft_wave_s42.pt --stop-on-noop --pde wave1d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_wave_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-ns2d-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, ns2d_liddriven: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout ns2d_liddriven {XFER_FLAGS} --seeds 1 --model-tag xfns2d"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfns2d_seed1.pt --stop-on-noop {DEPLOY} --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_ns2d_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-pb2d-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poissonboltzmann2d: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout poisson_boltzmann_2d {XFER_FLAGS} --seeds 1 --model-tag xfpb2d"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpb2d_seed1.pt --stop-on-noop {DEPLOY} --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pb2d_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2ms-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_multiscale: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout heat2d_multiscale {XFER_FLAGS} --seeds 1 --model-tag xfh2ms"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2ms_seed1.pt --stop-on-noop {DEPLOY} --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2ms_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-wave-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, wave1d: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout wave1d {XFER_FLAGS} --seeds 1 --model-tag xfwave"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfwave_seed1.pt --stop-on-noop {DEPLOY} --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_wave_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-burg-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, burgers_1d: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout burgers1d {XFER_FLAGS} --seeds 1 --model-tag xfburg"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfburg_seed1.pt --stop-on-noop {DEPLOY} --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_burg_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-burg-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, burgers_1d: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-burg-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, burgers_1d: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_burg_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-burg-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfburg_seed1.pt"
+   ],
+   "note": "итоговая таблица, burgers_1d: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde burgers_1d --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfburg_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_burg_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_burg_ft_s42.pt --stop-on-noop {DEPLOY} --pde burgers_1d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_burg_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-gs-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, grayscott: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout grayscott {XFER_FLAGS} --seeds 1 --model-tag xfgs"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfgs_seed1.pt --stop-on-noop {DEPLOY} --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_gs_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-gs-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, grayscott: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-gs-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, grayscott: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_gs_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-gs-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfgs_seed1.pt"
+   ],
+   "note": "итоговая таблица, grayscott: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde grayscott --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfgs_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_gs_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_gs_ft_s42.pt --stop-on-noop {DEPLOY} --pde grayscott --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_gs_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2cg-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_complexgeometry: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout heat2d_complexgeometry {XFER_FLAGS} --seeds 1 --model-tag xfh2cg"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2cg_seed1.pt --stop-on-noop {DEPLOY} --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2cg_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2cg-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_complexgeometry: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2cg-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_complexgeometry: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2cg_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2cg-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfh2cg_seed1.pt"
+   ],
+   "note": "итоговая таблица, heat2d_complexgeometry: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde heat2d_complexgeometry --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfh2cg_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_h2cg_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_h2cg_ft_s42.pt --stop-on-noop {DEPLOY} --pde heat2d_complexgeometry --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_h2cg_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2vc-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_varyingcoef: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout heat2d_varyingcoef {XFER_FLAGS} --seeds 1 --model-tag xfh2vc"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2vc_seed1.pt --stop-on-noop {DEPLOY} --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2vc_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2vc-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_varyingcoef: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2vc-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, heat2d_varyingcoef: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_h2vc_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-h2vc-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfh2vc_seed1.pt"
+   ],
+   "note": "итоговая таблица, heat2d_varyingcoef: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde heat2d_varyingcoef --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfh2vc_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_h2vc_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_h2vc_ft_s42.pt --stop-on-noop {DEPLOY} --pde heat2d_varyingcoef --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_h2vc_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-hinv-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heatinv: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout heatinv {XFER_FLAGS} --seeds 1 --model-tag xfhinv"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfhinv_seed1.pt --stop-on-noop {DEPLOY} --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_hinv_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-hinv-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heatinv: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-hinv-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, heatinv: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hinv_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-hinv-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfhinv_seed1.pt"
+   ],
+   "note": "итоговая таблица, heatinv: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde heatinv --plain-fnn --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfhinv_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_hinv_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_hinv_ft_s42.pt --stop-on-noop {DEPLOY} --pde heatinv --plain-fnn --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_hinv_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-hnd-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heatnd: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout heatnd {XFER_FLAGS} --seeds 1 --model-tag xfhnd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfhnd_seed1.pt --stop-on-noop {DEPLOY} --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_hnd_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-hnd-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, heatnd: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-hnd-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, heatnd: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_hnd_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-hnd-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfhnd_seed1.pt"
+   ],
+   "note": "итоговая таблица, heatnd: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde heatnd --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfhnd_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_hnd_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_hnd_ft_s42.pt --stop-on-noop {DEPLOY} --pde heatnd --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_hnd_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-nsbs-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, ns2d_backstep: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout ns2d_backstep {XFER_FLAGS} --seeds 1 --model-tag xfnsbs"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfnsbs_seed1.pt --stop-on-noop {DEPLOY} --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_nsbs_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-nsbs-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, ns2d_backstep: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-nsbs-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, ns2d_backstep: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_nsbs_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-nsbs-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfnsbs_seed1.pt"
+   ],
+   "note": "итоговая таблица, ns2d_backstep: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_backstep --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfnsbs_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_nsbs_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_nsbs_ft_s42.pt --stop-on-noop {DEPLOY} --pde ns2d_backstep --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_nsbs_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-p2c-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poisson2d_classic: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout poisson2d_classic {XFER_FLAGS} --seeds 1 --model-tag xfp2c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfp2c_seed1.pt --stop-on-noop {DEPLOY} --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_p2c_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-p2c-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poisson2d_classic: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-p2c-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, poisson2d_classic: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p2c_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-p2c-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfp2c_seed1.pt"
+   ],
+   "note": "итоговая таблица, poisson2d_classic: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poisson2d_classic --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfp2c_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_p2c_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_p2c_ft_s42.pt --stop-on-noop {DEPLOY} --pde poisson2d_classic --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_p2c_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-p3d-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poisson3d_complexgeometry: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout poisson3d_complexgeometry {XFER_FLAGS} --seeds 1 --model-tag xfp3d"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfp3d_seed1.pt --stop-on-noop {DEPLOY} --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_p3d_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-p3d-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poisson3d_complexgeometry: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-p3d-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, poisson3d_complexgeometry: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_p3d_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-p3d-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfp3d_seed1.pt"
+   ],
+   "note": "итоговая таблица, poisson3d_complexgeometry: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poisson3d_complexgeometry --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfp3d_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_p3d_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_p3d_ft_s42.pt --stop-on-noop {DEPLOY} --pde poisson3d_complexgeometry --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_p3d_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-pinv-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poissoninv: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout poissoninv {XFER_FLAGS} --seeds 1 --model-tag xfpinv"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpinv_seed1.pt --stop-on-noop {DEPLOY} --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pinv_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-pinv-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poissoninv: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-pinv-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, poissoninv: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pinv_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-pinv-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfpinv_seed1.pt"
+   ],
+   "note": "итоговая таблица, poissoninv: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissoninv --plain-fnn --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfpinv_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_pinv_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_pinv_ft_s42.pt --stop-on-noop {DEPLOY} --pde poissoninv --plain-fnn --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_pinv_ft_s42"
+    }
+   ]
+  },
+  {
+   "id": "w15-pnd-ag",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poissonnd: агент смеси остальных решаемых УрЧП без дообучения, состояние и развёртывание по решениям фаз C и E",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout poissonnd {XFER_FLAGS} --seeds 1 --model-tag xfpnd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpnd_seed1.pt --stop-on-noop {DEPLOY} --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pnd_ag"
+    }
+   ]
+  },
+  {
+   "id": "w15-pnd-base",
+   "wave": 15,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "итоговая таблица, poissonnd: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:200,LBFGS:1:100,Adam:0.0001:2500,LBFGS:0.1:500,LBFGS:1:500,LBFGS:1:1000,LBFGS:0.1:1000,PSO:0:100,PSO:0.0001:300,PSO:0.001:300 --script-tail stop --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_rand6"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_t1c"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_l1k"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_a3l"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_soap"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_scout"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_scouts"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy bandit --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_bandit"
+    }
+   ]
+  },
+  {
+   "id": "w15-pnd-keep",
+   "wave": 15,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "итоговая таблица, poissonnd: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --keep-opt --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_l1kk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --keep-opt --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_a3lk"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --no-state --tag t3f_pnd_scoutsk"
+    }
+   ]
+  },
+  {
+   "id": "w15-pnd-ft",
+   "wave": 15,
+   "group": "H14",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdlog_multi_xfpnd_seed1.pt"
+   ],
+   "note": "итоговая таблица, poissonnd: три часа дообучения агента смеси на целевой задаче",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonnd --hours 3 --save-agent --save-every 2 --wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start convnext_dqn_cfix_rdlog_multi_xfpnd_seed1.pt {XFER_FLAGS} --online-reward dlog --err-norm init --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --seed 42 --tag q_t3f_pnd_ft_s42"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_t3f_pnd_ft_s42.pt --stop-on-noop {DEPLOY} --pde poissonnd --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_pnd_ft_s42"
     }
    ]
   }

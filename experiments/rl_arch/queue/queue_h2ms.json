@@ -16,7 +16,115 @@
   "BUFFERS",
   "RS_CHAIN_LOSS",
   "RS_CHAIN_ERR",
-  "FINAL"
+  "FINAL",
+  "RULE_BEST",
+  "COMBO_A",
+  "COMBO_B",
+  "COMBO_C",
+  "COMBO_EVAL_A",
+  "COMBO_EVAL_B",
+  "XFER_FLAGS",
+  "DEPLOY"
+ ],
+ "combos": [
+  {
+   "id": "K1",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --mask adam:0.01,pso:0.001,pso:0.0001 --state-mode level",
+   "note": "дешёвая по данным база: контекст времени, маска и только уровень карт"
+  },
+  {
+   "id": "K2",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --keep-opt",
+   "note": "среда без сбросов и контекст (прошлый оптимизатор виден агенту)"
+  },
+  {
+   "id": "K3",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --mask adam:0.01,pso:0.001,pso:0.0001 --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "проводник с порогом по Q, контекст и маска: всё, что сужает разведку"
+  },
+  {
+   "id": "K4",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --keep-opt --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "среда без сбросов и проводник: проводник задаёт каркас, агент решает, где менять семейство"
+  },
+  {
+   "id": "K5",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "{BASE} --scalar-ctx --ctx-no-err --n-step 3 --guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20",
+   "note": "трёхшаговые цели и проводник: длинные эпизоды по 70 шагов"
+  },
+  {
+   "id": "K6",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --mask adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000",
+   "note": "только онлайн: лоссы вместо карт, без сбросов, 70 решений по 100 эпох (арм w12-on2-fine)"
+  },
+  {
+   "id": "K7",
+   "kind": "train",
+   "script": "experiments/rl_arch/online_train_env.py",
+   "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --n-step 3",
+   "note": "только онлайн: лоссы вместо карт, без сбросов, трёхшаговые цели"
+  },
+  {
+   "id": "E1",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "порог по Q и страж вместе"
+  },
+  {
+   "id": "E2",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "комитет агентов со стражем"
+  },
+  {
+   "id": "E3",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --state-every 3 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "карты раз в три действия и страж: дешёвое развёртывание с защитой"
+  },
+  {
+   "id": "E4",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy script --script {GUIDE} --script-tail agent --model-file {BEST_AGENT} --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "проводник как начало цепочки, агент как продолжение (без обучения)"
+  },
+  {
+   "id": "E5",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "готовый агент в среде без сбросов: дешёвая проба до обучения K2"
+  },
+  {
+   "id": "X1",
+   "kind": "xfer",
+   "script": "experiments/rl_arch/offline_rl.py",
+   "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout ns2d_liddriven --seeds 1 --model-tag xcombo --state-mode tasknorm --pde-ctx",
+   "note": "перенос: нормировка по задаче и описатель задачи вместе"
+  },
+  {
+   "id": "X2",
+   "kind": "xfer",
+   "script": "experiments/rl_arch/offline_rl.py",
+   "args": "--variant convnext_dqn --subdirs solvable --per-pde-files 30 --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --scalar-ctx --epochs 60 --save-model --holdout ns2d_liddriven --seeds 1 --model-tag xcombo --state-mode shape --pde-ctx",
+   "note": "перенос: карты без уровня и описатель задачи"
+  }
  ],
  "jobs": [
   {
@@ -170,6 +278,48 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w0-l1kk",
+   "wave": 0,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "L-BFGS 1.0 весь бюджет без сбросов истории кривизны; пара к w0-l1k",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_l1kk"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w0-a3lk",
+   "wave": 0,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "классическая пара Adam -> L-BFGS без сбросов; пара к w0-a3l",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_a3lk"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w0-rulek",
+   "wave": 0,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "правило «всплеск L-BFGS, при застое толчок Adam» без сбросов между всплесками; пара к w0-rule",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 --no-state --keep-opt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag bl_rulek"
     }
    ]
   },
@@ -1468,6 +1618,52 @@
    ]
   },
   {
+   "id": "h2ms-w2-keep-s42",
+   "wave": 2,
+   "group": "H12",
+   "hours": 11.8,
+   "needs": [],
+   "note": "среда без сбросов оптимизатора между действиями одного семейства",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{BASE} --keep-opt --seed 42 --tag qh2ms2_keep_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w2-keep-s42-ea",
+   "wave": 2,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms2_keep_s42.pt"
+   ],
+   "note": "оценка: среда без сбросов оптимизатора между действиями одного семейства",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms2_keep_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qh2ms2_keep_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w2-keep-s42-eb",
+   "wave": 2,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms2_keep_s42.pt"
+   ],
+   "note": "оценка: среда без сбросов оптимизатора между действиями одного семейства",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms2_keep_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qh2ms2_keep_s42"
+    }
+   ]
+  },
+  {
    "id": "h2ms-w2-vote-ea",
    "wave": 2,
    "group": "G12",
@@ -2110,6 +2306,172 @@
    ]
   },
   {
+   "id": "h2ms-w4-ca-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "комбинация A: набор флагов обучения из decisions.json (COMBO_A)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{COMBO_A} --seed 42 --tag qh2ms4_ca_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-ca-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms4_ca_s42.pt"
+   ],
+   "note": "оценка комбинации A",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms4_ca_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qh2ms4_ca_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-ca-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms4_ca_s42.pt"
+   ],
+   "note": "оценка комбинации A",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms4_ca_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qh2ms4_ca_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cb-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "комбинация B: набор флагов обучения из decisions.json (COMBO_B)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{COMBO_B} --seed 42 --tag qh2ms4_cb_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cb-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms4_cb_s42.pt"
+   ],
+   "note": "оценка комбинации B",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms4_cb_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qh2ms4_cb_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cb-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms4_cb_s42.pt"
+   ],
+   "note": "оценка комбинации B",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms4_cb_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qh2ms4_cb_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cc-s42",
+   "wave": 4,
+   "group": "base",
+   "hours": 11.8,
+   "needs": [],
+   "note": "комбинация C: набор флагов обучения из decisions.json (COMBO_C)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "{COMBO_C} --seed 42 --tag qh2ms4_cc_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cc-s42-ea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms4_cc_s42.pt"
+   ],
+   "note": "оценка комбинации C",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms4_cc_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qh2ms4_cc_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cc-s42-eb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms4_cc_s42.pt"
+   ],
+   "note": "оценка комбинации C",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms4_cc_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qh2ms4_cc_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-cea",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [],
+   "note": "комбинация оценки A: политика и флаги развёртывания из decisions.json (COMBO_EVAL_A), без нового обучения",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "{COMBO_EVAL_A} --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms4_cea"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w4-ceb",
+   "wave": 4,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [],
+   "note": "комбинация оценки B: политика и флаги развёртывания из decisions.json (COMBO_EVAL_B), без нового обучения",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "{COMBO_EVAL_B} --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms4_ceb"
+    }
+   ]
+  },
+  {
    "id": "h2ms-w5-final-s42",
    "wave": 5,
    "group": "base",
@@ -2294,6 +2656,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qh2ms5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms5_final_gbon"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w5-final-gg",
+   "wave": 5,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms5_final_s42.pt"
+   ],
+   "note": "итоговая конфигурация: порог по Q и страж вместе (гарантия «не хуже проводника» с двух сторон)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms5_final_gg"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w5-final-ev3",
+   "wave": 5,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms5_final_s42.pt"
+   ],
+   "note": "итоговая конфигурация с картами после каждого третьего действия; не нужна, если состояние без карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms5_final_s42.pt --stop-on-noop --state-every 3 --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms5_final_ev3"
     }
    ]
   },
@@ -2564,6 +2958,104 @@
    ]
   },
   {
+   "id": "h2ms-w11-rule3",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:1:500, толчок Adam:0.0001:100, порог застоя 0.001",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:500 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 --rule-tol 0.001 --no-state --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule3"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-rule4",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:0.5:1000, толчок Adam:0.001:100, порог застоя 0.001",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:0.5:1000 --rule-kick Adam:0.001:100 --rule-max-kicks 3 --rule-tol 0.001 --no-state --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule4"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-rule5",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:1:100, толчок Adam:0.001:1000, порог застоя 0.01",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.001:1000 --rule-max-kicks 3 --rule-tol 0.01 --no-state --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule5"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-rule6",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "правило: всплеск LBFGS:1:1000, толчок Adam:0.0001:1000, порог застоя 0.01",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy rule --rule-burst LBFGS:1:1000 --rule-kick Adam:0.0001:1000 --rule-max-kicks 3 --rule-tol 0.01 --no-state --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_rule6"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-rulebest",
+   "wave": 11,
+   "group": "H07",
+   "hours": 6.0,
+   "needs": [],
+   "note": "лучший вариант правила (выбран по обучающему лоссу на сидах 42-51) на новых сидах 52-61: поправка на проклятие победителя",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "{RULE_BEST} --no-state --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag t3b_rulebest"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-sk1k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас лучших цепочек буфера без сбросов: моменты Adam переходят с шага 1e-2 на 1e-4, история L-BFGS копится до конца бюджета; пара к w11-sk1",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde heat2d_multiscale --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk1k"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-scoutk",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "разведка без сбросов: победившее действие продолжает оптимизатор прошлого победителя того же семейства (ROR с переносом состояния, как в AOS); пара к w11-scout",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --keep-opt --no-state --pde heat2d_multiscale --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scoutk"
+    }
+   ]
+  },
+  {
    "id": "h2ms-w11-soap",
    "wave": 11,
    "group": "H12",
@@ -2616,6 +3108,34 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --no-state --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scouts"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-soapk",
+   "wave": 11,
+   "group": "H12",
+   "hours": 6.0,
+   "needs": [],
+   "note": "SOAP весь бюджет без сброса предобусловливателя: штатный SOAP при равных эпохах; пара к w11-soap",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script SOAP:0.003:1000 --script-tail repeat --no-state --keep-opt --pde heat2d_multiscale --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_soapk"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w11-scoutsk",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "разведка с SOAP без сбросов: самая сильная политика без обучения, собранная из трёх приёмов (пробы ROR, портфель с SOAP, перенос состояния AOS)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 --scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --keep-opt --no-state --pde heat2d_multiscale --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_scoutsk"
     }
    ]
   },
@@ -3110,6 +3630,96 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_blind_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w12-on2-fullk",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --seed 42 --tag qh2ms_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w12-on2-fullk-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_fullk_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w12-on2-lossk",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --seed 42 --tag qh2ms_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w12-on2-lossk-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_lossk_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w12-on2-fine",
+   "wave": 12,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode loss --keep-opt --mask adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000 --seed 42 --tag qh2ms_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w12-on2-fine-e",
+   "wave": 12,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_fine_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qh2ms_t3on2_fine_s42"
     }
    ]
   },

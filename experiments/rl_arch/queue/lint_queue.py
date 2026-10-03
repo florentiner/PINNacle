@@ -44,6 +44,18 @@ DUMMY = {
     "RS_CHAIN_ERR": "Adam:0.0001:2500,LBFGS:0.5:1000",
 }
 DUMMY["BASE_NOVB"] = DUMMY["BASE"].replace(" --value-bound", "")
+DUMMY["RULE_BEST"] = ("--policy rule --rule-burst LBFGS:1:500 --rule-kick Adam:0.0001:100 --rule-max-kicks 3 "
+                      "--rule-tol 0.001")
+DUMMY["COMBO_A"] = DUMMY["BASE"] + " --scalar-ctx --ctx-no-err --state-mode level"
+DUMMY["COMBO_B"] = DUMMY["BASE"] + " --scalar-ctx --ctx-no-err --keep-opt"
+DUMMY["COMBO_C"] = DUMMY["BASE"] + " --n-step 3 --guide Adam:0.001:1000,LBFGS:1:1000 --guide-mode bonus"
+DUMMY["COMBO_EVAL_A"] = ("--policy agent --model-file rl_arch/agents_online/a.pt --stop-on-noop "
+                         "--guide Adam:0.001:1000,LBFGS:1:1000 --guide-bonus 0.02 --guard-rollback 1.0 "
+                         "--guard-fallback LBFGS:1:500")
+DUMMY["COMBO_EVAL_B"] = ("--policy agent --model-files rl_arch/agents_online/a.pt,rl_arch/agents_online/b.pt "
+                         "--ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500")
+DUMMY["XFER_FLAGS"] = "--state-mode tasknorm"
+DUMMY["DEPLOY"] = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
 DUMMY["FINAL"] = DUMMY["BASE"] + " --scalar-ctx --ctx-no-err"
 DUMMY["BASE_QR"] = DUMMY["BASE_NOVB"].replace("convnext_dqn", "cnx_qrdqn")
 DUMMY["BASE_FACT"] = DUMMY["BASE"].replace("convnext_dqn", "cnx_factored")
@@ -93,13 +105,14 @@ def lint_train(argv):
 
 def lint_eval(argv):
     import online_eval_env as E
-    saved = E.run_seed
+    saved = E.run_seed, E.result_done
     E.run_seed = _stop
+    E.result_done = lambda name: False        # без обращения к HF при проверке
     try:
         sys.argv = ["online_eval_env.py"] + argv
         E.main()
     finally:
-        E.run_seed = saved
+        E.run_seed, E.result_done = saved
     # то, что main не проверяет: цепочки и маски должны разбираться
     ns = dict(zip(argv[::1], argv[1::1]))
     for flag in ("--script", "--guide", "--scout-set", "--scout-commit", "--bandit-arms", "--guard-fallback"):
@@ -169,6 +182,13 @@ def main():
                     help="файл очереди (queue.json или queue_<префикс>.json другого УрЧП)")
     args = ap.parse_args()
     q = json.load(open(args.queue))
+    # уже принятые решения проверяются настоящими значениями, остальные подстановки — образцами
+    for dp in (os.path.join(HERE, "decisions.json"),
+               os.path.join(HERE, f"decisions_{q.get('prefix')}.json") if q.get("prefix") else None):
+        if dp and os.path.exists(dp):
+            dec = json.load(open(dp))
+            DUMMY.update({k: str(v) for k, v in dec.items()})
+            print(f"подстановки из {os.path.basename(dp)}: {', '.join(sorted(dec))}")
     jobs = q["jobs"]
     if args.only:
         jobs = [j for j in jobs if j["id"] in args.only.split(",")]
@@ -182,8 +202,16 @@ def main():
                 bad += 1
                 print(f"ОШИБКА {j['id']} шаг {i} ({os.path.basename(s['script'])}): {problem}")
                 print(f"       {s['args'][:260]}")
+    # готовые комбинации флагов (слоты волны 4 и {XFER_FLAGS}): те же проверки, что у задач
+    combos = q.get("combos", []) if not (args.only or args.wave is not None) else []
+    for c in combos:
+        problem = check(c["script"], c["args"] + ("" if c["kind"] != "train" else " --seed 42 --tag combo"))
+        if problem:
+            bad += 1
+            print(f"ОШИБКА комбинация {c['id']} ({os.path.basename(c['script'])}): {problem}")
+            print(f"       {c['args'][:260]}")
     n_steps = sum(len(j["steps"]) for j in jobs)
-    print(f"проверено задач {len(jobs)}, шагов {n_steps}, ошибок {bad}")
+    print(f"проверено задач {len(jobs)}, шагов {n_steps}, комбинаций {len(combos)}, ошибок {bad}")
     sys.exit(1 if bad else 0)
 
 

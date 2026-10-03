@@ -147,6 +147,25 @@ baseline("f64", "--policy script --script LBFGS:1:1000 --script-tail repeat", 10
 baseline("f64a", "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat", 10,
          group="G25", extra="--float64", hours=6.0)
 
+# среда без сбросов оптимизатора (--keep-opt): действие продолжает моменты Adam и историю
+# кривизны L-BFGS прошлого действия того же семейства. Прецедент — перенос состояния при
+# переключении в AOS (arXiv 2608.01997). Без флага каждое действие создаёт оптимизатор заново,
+# поэтому «L-BFGS весь бюджет» и «Adam, затем L-BFGS» до сих пор шли со сбросом каждые 1000
+# эпох; эти армы — те же цепочки в обычной практике PINN, какой её ждёт рецензент
+KEEP = "--keep-opt"
+# часы больше, чем у пар со сбросом: если L-BFGS без сброса не встаёт, все 7000 эпох идут в
+# полную цену, а у пар со сбросом больше половины бюджета — быстрые пустые эпохи
+baseline("l1kk", "--policy script --script LBFGS:1:1000 --script-tail repeat", 10, group="H12", extra=KEEP,
+         hours=8.0, note="L-BFGS 1.0 весь бюджет без сбросов истории кривизны; пара к w0-l1k")
+baseline("a3lk", "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat", 10,
+         group="H12", extra=KEEP, hours=8.0, note="классическая пара Adam -> L-BFGS без сбросов; пара к w0-a3l")
+baseline("rulek", "--policy rule --rule-burst LBFGS:1:100 --rule-kick Adam:0.0001:100 --rule-max-kicks 3", 10,
+         group="H12", extra=KEEP, hours=8.0,
+         note="правило «всплеск L-BFGS, при застое толчок Adam» без сбросов между всплесками; пара к w0-rule")
+if NS2D:
+    baseline("t1k", f"--policy script --script {T1_CHAIN} --script-tail stop", 10, group="H12", extra=KEEP,
+             hours=4.0, note="цепочка лидера трека 1 в среде без сбросов; пара к w0-t1")
+
 # замороженная оценка двух обучающих лидеров (прежний протокол, 5 сидов); агенты обучены на ns2d
 for short, tag in ((("lead1", "zero_q1_rean_distill_pbrs_seed42"), ("lead2", "comb_q1_distill_pbrs_seed42"))
                    if NS2D else ()):
@@ -270,6 +289,10 @@ W2 = {
     "fact": ("G16", "{BASE_FACT}", "голова Q = V + q_o + q_ol + q_oe: слагаемые по оптимизатору, шагу, длительности"),
     "stat": ("G06", "{BASE_STAT}", "кодировщик на сводных статистиках карт вместо ConvNeXt"),
     "frz": ("G17", "{BASE} --freeze-encoder", "замороженный кодировщик, учится только голова"),
+    # офлайновая половина батча при этом берётся только из переходов, согласованных со средой
+    # без сбросов (первый шаг цепочки, смена семейства оптимизатора, PSO); оценка включает
+    # --keep-opt сама — по записи в чекпоинте
+    "keep": ("H12", "{BASE} --keep-opt", "среда без сбросов оптимизатора между действиями одного семейства"),
 }
 for name, (group, targs, note) in W2.items():
     tag = f"{Q}2_{name}_s42"
@@ -344,6 +367,23 @@ add("w4-base-s42-ec", 4, "base",
     [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}4_base_s42.pt --stop-on-noop "
             + ev_common(f"e_{Q}4_base_s42", seeds(52, 61)))], 10.5,
     needs=[f"rl_arch/agents_online/{Q}4_base_s42.pt"], note="сиды 52-61: двадцать сидов у финалиста волны 1")
+# слоты комбинаций: до трёх наборов флагов обучения и до двух наборов флагов оценки, собранных
+# из победителей по правилам PLAN.md (раздел 3б). Готовые наборы, прошедшие проверку
+# совместимости, лежат в ключе combos очереди; победитель слота входит в {FINAL}
+for c_ in "abc":
+    tag = f"{Q}4_c{c_}_s42"
+    add(f"w4-c{c_}-s42", 4, "base", [(TRAIN, f"{{COMBO_{c_.upper()}}} --seed 42 --tag {tag}")], 11.8,
+        note=f"комбинация {c_.upper()}: набор флагов обучения из decisions.json (COMBO_{c_.upper()})")
+    for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
+        add(f"w4-c{c_}-s42-e{suf}", 4, "base",
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+                    + ev_common(f"e_{tag}", sd))], 10.5,
+            needs=[f"rl_arch/agents_online/{tag}.pt"], note=f"оценка комбинации {c_.upper()}")
+for c_ in "ab":
+    add(f"w4-ce{c_}", 4, "base",
+        [(EVAL, f"{{COMBO_EVAL_{c_.upper()}}} " + ev_common(f"e_{Q}4_ce{c_}", seeds(42, 51)))], 10.5,
+        note=f"комбинация оценки {c_.upper()}: политика и флаги развёртывания из decisions.json "
+             f"(COMBO_EVAL_{c_.upper()}), без нового обучения")
 for s_ in (42, 43):
     tag = f"{Q}5_final_s{s_}"
     add(f"w5-final-s{s_}", 5, "base", [(TRAIN, f"{{FINAL}} --seed {s_} --tag {tag}")], 11.8,
@@ -361,6 +401,17 @@ add("w5-final-gbon", 5, "H16",
     [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --guide {{GUIDE}} --guide-bonus 0.02 "
             "--stop-on-noop " + ev_common(f"e_{Q}5_final_gbon", seeds(42, 51)))],
     10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"], note="итоговая конфигурация с порогом по Q для отхода от проводника")
+add("w5-final-gg", 5, "H16",
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --guide {{GUIDE}} --guide-bonus 0.02 "
+            "--stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 "
+            + ev_common(f"e_{Q}5_final_gg", seeds(42, 51)))],
+    10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"],
+    note="итоговая конфигурация: порог по Q и страж вместе (гарантия «не хуже проводника» с двух сторон)")
+add("w5-final-ev3", 5, "H04",
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --stop-on-noop --state-every 3 "
+            + ev_common(f"e_{Q}5_final_ev3", seeds(42, 51)))],
+    10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"],
+    note="итоговая конфигурация с картами после каждого третьего действия; не нужна, если состояние без карт")
 
 # ======================================================================= трек 3
 # Ответ на три претензии рецензентов: цена мета-обучения (R1), вклад ландшафтного
@@ -375,8 +426,12 @@ CTX = "--scalar-ctx --ctx-no-err"
 S5, S10 = seeds(42, 46), seeds(42, 51)
 
 
+def plain_of(pde):
+    return " --plain-fnn" if PDE_META[pde].get("inverse") else ""   # обратные задачи: обычная сеть
+
+
 def t3ev(tag, sd, extra="", hours=10.5, pde=PDE, budget=BUDGET):
-    plain = PLAIN if pde == PDE else ""
+    plain = plain_of(pde)
     return (f"{extra} --pde {pde}{plain} --budget {budget} --hours {hours} --resume --ckpt-every 10 "
             f"--seeds {sd} --tag {tag}")
 
@@ -457,6 +512,29 @@ add("w11-bandit2", 11, "H08",
             "LBFGS:1:1000 --bandit-c 0.5 --bandit-discount 0.9 --no-state "
             + t3ev("t3b_bandit2", S10, hours=6.0))], 6.0,
     note="бандит с длинными действиями и слабым забыванием")
+# правило с подобранными параметрами: длина всплеска, толчок и порог застоя перебираются по
+# малой сетке (прецедент: обучаемые параметры простой эвристики, arXiv 2608.27975). Лучший
+# вариант выбирается по обучающему лоссу и переоценивается на сидах 52-61
+for name, burst, kick, tol in (("rule3", "LBFGS:1:500", "Adam:0.0001:100", 1e-3),
+                               ("rule4", "LBFGS:0.5:1000", "Adam:0.001:100", 1e-3),
+                               ("rule5", "LBFGS:1:100", "Adam:0.001:1000", 1e-2),
+                               ("rule6", "LBFGS:1:1000", "Adam:0.0001:1000", 1e-2)):
+    add(f"w11-{name}", 11, "H07",
+        [(EVAL, f"--policy rule --rule-burst {burst} --rule-kick {kick} --rule-max-kicks 3 "
+                f"--rule-tol {tol} --no-state " + t3ev(f"t3b_{name}", S10, hours=6.0))], 6.0,
+        note=f"правило: всплеск {burst}, толчок {kick}, порог застоя {tol}")
+add("w11-rulebest", 11, "H07",
+    [(EVAL, "{RULE_BEST} --no-state " + t3ev("t3b_rulebest", seeds(52, 61), hours=6.0))], 6.0,
+    note="лучший вариант правила (выбран по обучающему лоссу на сидах 42-51) на новых сидах 52-61: "
+         "поправка на проклятие победителя")
+# те же простые политики в среде без сбросов оптимизатора (пары к армам выше)
+t3script("w11-sk1k", "t3b_sk1k", "Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000", tail="repeat", group="H12",
+         extra=KEEP, hours=8.0, note="каркас лучших цепочек буфера без сбросов: моменты Adam переходят с шага 1e-2 на "
+                          "1e-4, история L-BFGS копится до конца бюджета; пара к w11-sk1")
+add("w11-scoutk", 11, "H12",
+    [(EVAL, f"--policy scout {KEEP} --no-state " + t3ev("t3b_scoutk", S10, hours=8.0))], 8.0,
+    note="разведка без сбросов: победившее действие продолжает оптимизатор прошлого победителя того же "
+         "семейства (ROR с переносом состояния, как в AOS); пара к w11-scout")
 # потолок среды: оптимизатор SOAP в тех же эпохах, сидах и метрике
 t3script("w11-soap", "t3b_soap", "SOAP:0.003:1000", tail="repeat", group="H12",
          note="SOAP весь бюджет 7000 эпох")
@@ -469,6 +547,14 @@ add("w11-scouts", 11, "H12",
             "--scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 --no-state "
             + t3ev("t3b_scouts", S10, hours=6.0))], 6.0,
     note="разведка с SOAP среди кандидатов: выбор между цепочкой и SOAP без обучения")
+t3script("w11-soapk", "t3b_soapk", "SOAP:0.003:1000", tail="repeat", group="H12", extra=KEEP,
+         note="SOAP весь бюджет без сброса предобусловливателя: штатный SOAP при равных эпохах; пара к w11-soap")
+add("w11-scoutsk", 11, "H12",
+    [(EVAL, "--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 "
+            f"--scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 {KEEP} --no-state "
+            + t3ev("t3b_scoutsk", S10, hours=8.0))], 8.0,
+    note="разведка с SOAP без сбросов: самая сильная политика без обучения, собранная из трёх приёмов "
+         "(пробы ROR, портфель с SOAP, перенос состояния AOS)")
 add("w11-soap31k", 11, "H12",
     [(CHAIN, f"--pde-name {PDE} --chain-json experiments/chain_eval/chain_soap.json "
              f"--chain-key soap --value-type soap --hf-dir csv_soap --csv-name {PDE} "
@@ -540,17 +626,28 @@ for name, flags, note in (("blind", "--state-mode blind", "без карт: то
 T3_ON2 = (f"--pde {PDE}{PLAIN} --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 "
           f"--self-prior 60 --reset-every 200 --init-err {INIT_ERR} --value-bound --gamma 0.99 "
           f"--episode-budget {BUDGET} --tolerance 0 --max-chain-steps 70 {CTX}")
+# мелкий шаг решений: разрешены только действия по 100 эпох (Adam 1e-3 и 1e-4, L-BFGS 1, 0.5, 0.1),
+# 70 решений на эпизод. Имеет смысл только без сбросов оптимизатора (иначе короткий L-BFGS теряет
+# историю) и только с дешёвым состоянием (70 карт на эпизод стоили бы больше часа)
+FINE_MASK = ("adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,"
+             "lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000")
 for name, variant, flags, note in (
         ("full", "convnext_dqn", "", "контроль: полные карты"),
         ("loss", "stat_dqn", "--state-mode loss", "обучающие лоссы вместо карт, карты не строятся"),
-        ("blind", "stat_dqn", "--state-mode blind", "только время, карты не строятся")):
+        ("blind", "stat_dqn", "--state-mode blind", "только время, карты не строятся"),
+        ("fullk", "convnext_dqn", KEEP, "полные карты, среда без сбросов оптимизатора"),
+        ("lossk", "stat_dqn", f"--state-mode loss {KEEP}", "обучающие лоссы, среда без сбросов оптимизатора"),
+        ("fine", "stat_dqn", f"--state-mode loss {KEEP} --mask {FINE_MASK}",
+         "мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора "
+         "(ближайший аналог политики из arXiv 2609.01811)")):
     tag = f"{Q}_t3on2_{name}_s42"
     add(f"w12-on2-{name}", 12, "H04", [(TRAIN, f"--variant {variant} {T3_ON2} {flags} --seed 42 --tag {tag}")],
         11.8, note="чистый онлайн с нуля: " + note)
     add(f"w12-on2-{name}-e", 12, "H04",
         [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
                 + t3ev(f"e_{tag}", S10))],
-        10.5 if name == "full" else 4.0, needs=[f"rl_arch/agents_online/{tag}.pt"], note="оценка: " + note)
+        10.5 if name.startswith("full") else 4.0, needs=[f"rl_arch/agents_online/{tag}.pt"],
+        note="оценка: " + note)
 
 # ---------------------------------------------------------------- волна 13
 # Лестница машинерии, кривая стоимости, страж и сдвиги условий.
@@ -652,6 +749,14 @@ for tk, (pde, sub) in (XFER.items() if NS2D else ()):
                 f"--scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 {common} --tag t3x_{tk}_scouts"),
          (EVAL, f"--policy bandit {common} --tag t3x_{tk}_bandit")],
         11.5, note=f"{pde}: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, разведка, бандит")
+    add(f"w14-{tk}-keep", 14, "H12",
+        [(EVAL, f"--policy script --script LBFGS:1:1000 --script-tail repeat {KEEP} {common} --tag t3x_{tk}_l1kk"),
+         (EVAL, f"--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat {KEEP} {common} "
+                f"--tag t3x_{tk}_a3lk"),
+         (EVAL, f"--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 "
+                f"--scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000 {KEEP} {common} "
+                f"--tag t3x_{tk}_scoutsk")],
+        8.0, note=f"{pde}: L-BFGS, Adam -> L-BFGS и разведка с SOAP в среде без сбросов оптимизатора")
     if tk != "ns2d":
         add(f"w14-{tk}-l1", 14, "H14",
             [(EVAL, f"--policy agent --model-file {LEAD1} --stop-on-noop " + t3ev(f"t3x_{tk}_l1", S5, pde=pde))],
@@ -669,10 +774,115 @@ for tk, (pde, sub) in (XFER.items() if NS2D else ()):
         11.5, needs=[f"rl_arch/models/{warm}"],
         note=f"{pde}: три часа дообучения агента смеси на целевой задаче, затем оценка")
 
+# ---------------------------------------------------------------- волна 15
+# Итоговая таблица веток «метод» и «политика для новых уравнений» на всех 15 решаемых УрЧП:
+# работы июля-сентября 2026 (PINNMorph, PINNForge) отчитываются на 13-25 задачах. Агент смеси
+# учится без целевой задачи в варианте состояния, победившем в волне 14 ({XFER_FLAGS}), и
+# оценивается с флагами развёртывания {DEPLOY} (страж или пусто). Для 11 уравнений, которых нет
+# в волне 14, добавлены простые альтернативы, их пары без сбросов и трёхчасовое дообучение
+REST11 = {"burg": ("burgers_1d", "burgers1d"), "gs": ("grayscott", "grayscott"),
+          "h2cg": ("heat2d_complexgeometry", "heat2d_complexgeometry"),
+          "h2vc": ("heat2d_varyingcoef", "heat2d_varyingcoef"), "hinv": ("heatinv", "heatinv"),
+          "hnd": ("heatnd", "heatnd"), "nsbs": ("ns2d_backstep", "ns2d_backstep"),
+          "p2c": ("poisson2d_classic", "poisson2d_classic"),
+          "p3d": ("poisson3d_complexgeometry", "poisson3d_complexgeometry"),
+          "pinv": ("poissoninv", "poissoninv"), "pnd": ("poissonnd", "poissonnd")}
+SCOUT_SOAP = ("--policy scout --scout-set Adam:0.001:100,LBFGS:1:100,SOAP:0.003:100 "
+              "--scout-commit Adam:0.001:1000,LBFGS:1:500,SOAP:0.003:1000")
+for k, (pde, sub) in ((dict(XFER, **REST11)).items() if NS2D else ()):
+    mtag = f"xf{k}"
+    model = f"/tmp/agent_convnext_dqn_cfix_rdlog_multi_{mtag}_seed1.pt"
+    add(f"w15-{k}-ag", 15, "H14",
+        [(OFFLINE, f"--variant convnext_dqn {T3_MULTI} --holdout {sub} {{XFER_FLAGS}} --seeds 1 --model-tag {mtag}"),
+         (EVAL, f"--policy agent --model-file {model} --stop-on-noop {{DEPLOY}} "
+                + t3ev(f"t3f_{k}_ag", S5, pde=pde))],
+        11.5, note=f"итоговая таблица, {pde}: агент смеси остальных решаемых УрЧП без дообучения, "
+                   f"состояние и развёртывание по решениям фаз C и E")
+    if k not in REST11:
+        continue
+    common = (f"--pde {pde}{plain_of(pde)} --budget {BUDGET} --hours 10.5 --resume --ckpt-every 10 "
+              f"--seeds {S5} --no-state")
+    add(f"w15-{k}-base", 15, "H15",
+        [(EVAL, f"--policy script --script {RAND6} --script-tail stop {common} --tag t3f_{k}_rand6"),
+         (EVAL, f"--policy script --script LBFGS:0.5:1000,LBFGS:0.5:500,LBFGS:1:500 --script-tail repeat "
+                f"{common} --tag t3f_{k}_t1c"),
+         (EVAL, f"--policy script --script LBFGS:1:1000 --script-tail repeat {common} --tag t3f_{k}_l1k"),
+         (EVAL, f"--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat {common} "
+                f"--tag t3f_{k}_a3l"),
+         (EVAL, f"--policy script --script SOAP:0.003:1000 --script-tail repeat {common} --tag t3f_{k}_soap"),
+         (EVAL, f"--policy scout {common} --tag t3f_{k}_scout"),
+         (EVAL, f"{SCOUT_SOAP} {common} --tag t3f_{k}_scouts"),
+         (EVAL, f"--policy bandit {common} --tag t3f_{k}_bandit")],
+        11.5, note=f"итоговая таблица, {pde}: универсальная цепочка, цепочки лидеров, Adam и L-BFGS, SOAP, "
+                   f"разведка, бандит")
+    add(f"w15-{k}-keep", 15, "H12",
+        [(EVAL, f"--policy script --script LBFGS:1:1000 --script-tail repeat {KEEP} {common} --tag t3f_{k}_l1kk"),
+         (EVAL, f"--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat {KEEP} {common} "
+                f"--tag t3f_{k}_a3lk"),
+         (EVAL, f"{SCOUT_SOAP} {KEEP} {common} --tag t3f_{k}_scoutsk")],
+        8.0, note=f"итоговая таблица, {pde}: L-BFGS, Adam -> L-BFGS и разведка с SOAP без сбросов оптимизатора")
+    ftag = f"q_t3f_{k}_ft_s42"
+    warm = f"convnext_dqn_cfix_rdlog_multi_{mtag}_seed1.pt"
+    add(f"w15-{k}-ft", 15, "H14",
+        [(TRAIN, f"--variant convnext_dqn --pde {pde}{plain_of(pde)} --hours 3 --save-agent --save-every 2 "
+                 f"--wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start {warm} {{XFER_FLAGS}} "
+                 f"--online-reward dlog --err-norm init --gamma 0.99 --episode-budget {BUDGET} --tolerance 0 "
+                 f"--max-chain-steps 70 {CTX} --seed 42 --tag {ftag}"),
+         (EVAL, f"--policy agent --model-file agent_{ftag}.pt --stop-on-noop {{DEPLOY}} "
+                + t3ev(f"e_{ftag}", S5, pde=pde, hours=7.5))],
+        11.5, needs=[f"rl_arch/models/{warm}"],
+        note=f"итоговая таблица, {pde}: три часа дообучения агента смеси на целевой задаче")
+
+# ---------------------------------------------------------------- готовые комбинации
+# Наборы флагов для слотов волны 4 ({COMBO_A..C}, {COMBO_EVAL_A..B}) и для {XFER_FLAGS}. Каждый
+# набор lint_queue.py прогоняет через разбор аргументов и проверки совместимости своего скрипта,
+# поэтому в таблицу комбинаций PLAN.md попадают только исполнимые сочетания
+GUIDE_B = "--guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20"
+GUARD = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
+AG = "--policy agent --model-file {BEST_AGENT} --stop-on-noop"
+EVC = ev_common("combo", S10)
+MULTI_NS = f"--variant convnext_dqn {T3_MULTI} --holdout ns2d_liddriven --seeds 1 --model-tag xcombo"
+combos = [
+    dict(id="K1", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {MASK} --state-mode level",
+         note="дешёвая по данным база: контекст времени, маска и только уровень карт"),
+    dict(id="K2", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {KEEP}",
+         note="среда без сбросов и контекст (прошлый оптимизатор виден агенту)"),
+    dict(id="K3", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {MASK} {GUIDE_B}",
+         note="проводник с порогом по Q, контекст и маска: всё, что сужает разведку"),
+    dict(id="K4", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} {KEEP} {GUIDE_B}",
+         note="среда без сбросов и проводник: проводник задаёт каркас, агент решает, где менять семейство"),
+    dict(id="K5", kind="train", script=TRAIN, args=f"{{BASE}} {CTX} --n-step 3 {GUIDE_B}",
+         note="трёхшаговые цели и проводник: длинные эпизоды по 70 шагов"),
+    dict(id="K6", kind="train", script=TRAIN,
+         args=f"--variant stat_dqn {T3_ON2} --state-mode loss {KEEP} --mask {FINE_MASK}",
+         note="только онлайн: лоссы вместо карт, без сбросов, 70 решений по 100 эпох (арм w12-on2-fine)"),
+    dict(id="K7", kind="train", script=TRAIN,
+         args=f"--variant stat_dqn {T3_ON2} --state-mode loss {KEEP} --n-step 3",
+         note="только онлайн: лоссы вместо карт, без сбросов, трёхшаговые цели"),
+    dict(id="E1", kind="eval", script=EVAL, args=f"{AG} --guide {{GUIDE}} --guide-bonus 0.02 {GUARD} {EVC}",
+         note="порог по Q и страж вместе"),
+    dict(id="E2", kind="eval", script=EVAL,
+         args=f"--policy agent --model-files {{COMMITTEE}} --ensemble vote --stop-on-noop {GUARD} {EVC}",
+         note="комитет агентов со стражем"),
+    dict(id="E3", kind="eval", script=EVAL, args=f"{AG} --state-every 3 {GUARD} {EVC}",
+         note="карты раз в три действия и страж: дешёвое развёртывание с защитой"),
+    dict(id="E4", kind="eval", script=EVAL,
+         args=f"--policy script --script {{GUIDE}} --script-tail agent --model-file {{BEST_AGENT}} --stop-on-noop {EVC}",
+         note="проводник как начало цепочки, агент как продолжение (без обучения)"),
+    dict(id="E5", kind="eval", script=EVAL, args=f"{AG} {KEEP} {EVC}",
+         note="готовый агент в среде без сбросов: дешёвая проба до обучения K2"),
+    dict(id="X1", kind="xfer", script=OFFLINE, args=f"{MULTI_NS} --state-mode tasknorm --pde-ctx",
+         note="перенос: нормировка по задаче и описатель задачи вместе"),
+    dict(id="X2", kind="xfer", script=OFFLINE, args=f"{MULTI_NS} --state-mode shape --pde-ctx",
+         note="перенос: карты без уровня и описатель задачи"),
+]
+
 out = dict(pde=PDE, prefix=PREFIX, subdir=SUBDIR, budget=BUDGET, init_err=INIT_ERR,
            placeholders=["BASE", "BASE_NOVB", "BASE_QR", "BASE_FACT", "BASE_STAT", "GUIDE",
-                         "COMMITTEE", "BEST_AGENT", "BUFFERS", "RS_CHAIN_LOSS", "RS_CHAIN_ERR", "FINAL"],
-           jobs=jobs)
+                         "COMMITTEE", "BEST_AGENT", "BUFFERS", "RS_CHAIN_LOSS", "RS_CHAIN_ERR", "FINAL",
+                         "RULE_BEST", "COMBO_A", "COMBO_B", "COMBO_C", "COMBO_EVAL_A", "COMBO_EVAL_B",
+                         "XFER_FLAGS", "DEPLOY"],
+           combos=combos, jobs=jobs)
 with open(OUT_FILE, "w") as f:
     json.dump(out, f, ensure_ascii=False, indent=1)
 print(f"{OUT_FILE}: УрЧП {PDE}, буфер {SUBDIR}, E0 {INIT_ERR}, задач {len(jobs)}")

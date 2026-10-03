@@ -17,6 +17,15 @@
            парное сравнение с опорным армом (--ref)
   pick     победитель случайного поиска статических цепочек: лучшая цепочка по обучающему
            лоссу (честный выбор) и по истинной ошибке (оракул) в формате --script
+  target   «шаги до цели»: сколько эпох и секунд нужно арму, чтобы ошибка впервые опустилась
+           до порога (--target; по умолчанию итоговая медиана опорного арма --ref); недошедшие
+           прогоны цензурируются бюджетом. Нужна история hist (прогоны нового кода)
+  stall    где прогон перестаёт двигаться: эпоха последнего изменения ошибки, доля бюджета до
+           неё и доля пустых действий (ошибка изменилась меньше чем на 0.1%) по номеру шага.
+           Показывает застой L-BFGS после пересоздания оптимизатора; пары армов со сбросом
+           и без (--keep-opt) сравниваются по этим числам
+  shrink   проклятие победителя: значение, по которому арм был отобран (--sel имя=значение или
+           лучший сид арма-источника), против его переоценки на новых сидах
   tree     что выучила политика: дерево решений предсказывает действие арма по дешёвым
            признакам (шаг, доля бюджета, прошлое действие, обучающий лосс); точность с
            проверкой по сидам и сами правила
@@ -291,6 +300,98 @@ def report_ladder(arms, prefix="", ref=""):
               f"{(np.mean(ag) if ag else float('nan')):.2f} | {nch} | {vs}")
 
 
+def report_target(arms, prefix="", ref="", target=0.0):
+    """Эпохи и время до порога ошибки. История hist: [эпох потрачено, лосс, l2re, секунд]."""
+    names = [a for a in sorted(arms) if a.startswith(prefix) or a == ref]
+    if not target:
+        if not (ref and ref in arms):
+            print("нужен --target или опорный арм --ref"); return
+        target = float(np.median([r["l2re"] for r in arms[ref].values()]))
+    print(f"порог l2re = {target:.4f}" + (f" (итоговая медиана {ref})" if ref in arms else ""))
+    print("арм | сидов | дошли до порога | эпох до порога: медиана (недошедшие = бюджет) | "
+          "секунд до порога: медиана по дошедшим | итоговая медиана l2re")
+    for a in names:
+        ep_to, sec_to, n, nohist = [], [], 0, 0
+        for r in arms[a].values():
+            h = r.get("hist") or []
+            if not h:
+                nohist += 1
+                continue
+            n += 1
+            hit = next((x for x in h if x[2] is not None and x[2] <= target), None)
+            ep_to.append(float(hit[0]) if hit else float(r.get("budget") or h[-1][0]))
+            if hit:
+                sec_to.append(float(hit[3]))
+        if not n:
+            print(f"{a:26s} | нет истории hist (прогоны старого кода: {nohist})"); continue
+        fin = np.median([r["l2re"] for r in arms[a].values()])
+        sec = f"{np.median(sec_to):.0f}" if sec_to else "—"
+        print(f"{a:26s} | {n:2d} | {len(sec_to)}/{n} | {np.median(ep_to):.0f} | {sec} | {fin:.4f}")
+
+
+def report_stall(arms, prefix="", tol=1e-3):
+    """Застой по истории hist: [эпох потрачено, лосс, l2re, секунд] на каждое действие."""
+    names = [a for a in sorted(arms) if a.startswith(prefix)]
+    print("арм | сидов | медиана l2re | действий | эпоха последнего изменения ошибки: медиана (мин–макс) | "
+          "доля бюджета до неё | пустых действий | доля сидов с пустым действием №2, №3, №4, №5")
+    for a in names:
+        last, used, nst, empty, by_k = [], [], [], [], defaultdict(list)
+        for r in arms[a].values():
+            h = [x for x in (r.get("hist") or []) if x[2] is not None]
+            if not h:
+                continue
+            e, sp = [x[2] for x in h], [x[0] for x in h]
+            flat = [k > 0 and e[k - 1] > 0 and abs(e[k] - e[k - 1]) / e[k - 1] < tol for k in range(len(e))]
+            k = len(e) - 1
+            while k > 0 and flat[k]:
+                k -= 1
+            # доля считается от бюджета прогона, а не от потраченного: агент может остановиться раньше
+            last.append(sp[k]); used.append(sp[k] / max(1.0, float(r.get("budget") or sp[-1])))
+            nst.append(len(e))
+            empty.append(sum(flat) / max(1, len(e) - 1) if len(e) > 1 else 0.0)
+            for j in range(1, min(len(e), 5)):
+                by_k[j].append(flat[j])
+        if not last:
+            print(f"{a:26s} | нет истории hist"); continue
+        l2 = np.median([r["l2re"] for r in arms[a].values()])
+        ks = ", ".join(f"{100 * np.mean(by_k[j]):.0f}%" for j in sorted(by_k))
+        print(f"{a:26s} | {len(last):2d} | {l2:.4f} | {int(np.median(nst))} | {int(np.median(last))} "
+              f"({int(min(last))}–{int(max(last))}) | {100 * np.median(used):.0f}% | "
+              f"{100 * np.mean(empty):.0f}% | {ks}")
+
+
+def report_shrink(arms, sel):
+    """Проклятие победителя. sel: список «арм=значение при отборе» или «арм=арм-источник» (тогда
+    значение при отборе — лучший сид источника). Для каждого — медиана переоценки и отношение."""
+    if not sel:
+        print("нужен --sel арм=значение[,арм=значение...] или арм=арм-источник"); return
+    print("арм переоценки | значение при отборе | сидов | медиана переоценки | квартили | "
+          "отношение переоценки к отбору")
+    ratios = []
+    for item in sel.split(","):
+        if "=" not in item:
+            continue
+        a, v = [x.strip() for x in item.split("=", 1)]
+        if a not in arms:
+            print(f"{a:26s} | нет прогонов"); continue
+        try:
+            picked, src = float(v), ""
+        except ValueError:
+            src_rows = [r["l2re"] for s_ in sorted(arms) if s_.startswith(v) and s_ != a
+                        for r in arms[s_].values()]
+            if not src_rows:
+                print(f"{a:26s} | нет арма-источника {v}"); continue
+            picked, src = float(min(src_rows)), f" (лучший из {len(src_rows)} прогонов {v})"
+        l2 = np.array([r["l2re"] for r in arms[a].values()])
+        q = np.percentile(l2, [25, 75])
+        ratios.append(np.median(l2) / picked)
+        print(f"{a:26s} | {picked:.4f}{src} | {len(l2)} | {np.median(l2):.4f} | {q[0]:.4f}–{q[1]:.4f} | "
+              f"{np.median(l2) / picked:.2f}")
+    if ratios:
+        print(f"среднее геометрическое отношения: {float(np.exp(np.mean(np.log(ratios)))):.2f} "
+              f"(1.00 — отбор не завышал качество)")
+
+
 def report_pick(arms, prefix):
     rows = [r for a in sorted(arms) if a.startswith(prefix) for r in arms[a].values()]
     if not rows:
@@ -409,6 +510,10 @@ def main():
     ap.add_argument("--even", default="", help="мета_ч,агент_ч,бейзлайн_ч")
     ap.add_argument("--arms", default="", help="префикс имён армов для отчётов ladder и pick")
     ap.add_argument("--ref", default="", help="опорный арм для парных сравнений в отчёте ladder")
+    ap.add_argument("--target", type=float, default=0.0,
+                    help="порог l2re для отчёта target (по умолчанию итоговая медиана --ref)")
+    ap.add_argument("--sel", default="",
+                    help="отчёт shrink: арм=значение_при_отборе или арм=арм-источник, через запятую")
     ap.add_argument("--fetch", action="store_true",
                     help="сначала скачать строки оценки и обучения из HF в --dir")
     args = ap.parse_args()
@@ -429,6 +534,9 @@ def main():
             report_even(*[float(x) for x in args.even.split(",")])
         elif rep == "ladder": report_ladder(arms, args.arms, args.ref)
         elif rep == "pick": report_pick(arms, args.arms)
+        elif rep == "target": report_target(arms, args.arms, args.ref, args.target)
+        elif rep == "shrink": report_shrink(arms, args.sel)
+        elif rep == "stall": report_stall(arms, args.arms)
         elif rep == "tree": report_tree(arms, args.arms)
         else:
             print("неизвестный отчёт", rep)

@@ -176,8 +176,27 @@ def test_multi_local():
     print(f"смесь УрЧП ({', '.join(d['PDE_NAMES'])}; переходов {len(d['A'])}): OK")
 
 
+def test_keep_consistent():
+    # две цепочки: Adam, Adam, LBFGS, LBFGS, PSO, PSO, Adam | LBFGS, LBFGS; хвост обрезанной цепочки
+    A = np.array([0, 3, 9, 12, 18, 21, 5, 9, 10, 9, 9])
+    EP = np.array([0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2])
+    STEP = np.array([0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3])
+    ok = O.keep_consistent(A, EP, STEP)
+    #                 первый  тот же  смена  тот же  PSO   PSO   смена  первый тот же  нет предш. тот же
+    want = np.array([True, False, True, False, True, True, True, True, False, False, False])
+    assert (ok == want).all(), ok
+    assert O.keep_consistent(np.array([4]), np.array([0]), np.array([0])).tolist() == [True]
+    # на настоящих цепочках загрузчика: один оптимизатор на всю цепочку — согласован только первый шаг
+    d = O.episodes_to_arrays([make_file(False, [([0.4, 0.2, 0.1], -1), ([0.3, 0.008], 1)])],
+                             chain_fix=True, reward_form="delta", init_err=0.5, verbose=False)
+    ok = O.keep_consistent(d["A"], d["EP"], d["STEP"])
+    assert (ok == (d["STEP"] == 0)).all()
+    print("переходы, согласованные со средой без сбросов оптимизатора: OK")
+
+
 if __name__ == "__main__":
     test_state_modes()
+    test_keep_consistent()
     test_ctx()
     test_loss_state()
     test_dlog_and_scale()

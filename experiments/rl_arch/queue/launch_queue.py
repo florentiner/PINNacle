@@ -16,7 +16,9 @@
   * код, который склонирует кернел, совпадает с локальным: рабочее дерево
     experiments/rl_arch чистое и HEAD равен origin/<ветка>;
   * у аккаунта меньше двух живых сессий (лимит Kaggle — две);
-  * файлы-зависимости задачи (чекпоинты агентов) уже лежат в HF-датасете;
+  * файлы-зависимости задачи (чекпоинты агентов) уже лежат в HF-датасете, а обучение,
+    которое пишет чекпоинт онлайнового агента, дошло до своего лимита часов (чекпоинт
+    выгружается по ходу обучения, и оценка по нему измерила бы недоученного агента);
   * в аргументах не осталось незаполненных подстановок {BASE} и т.п.
     (значения берутся из decisions.json рядом с этим файлом).
 
@@ -26,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -64,7 +67,7 @@ def load_queue(path=QUEUE):
     return q
 
 
-def hf_exists(path):
+def _hf_head(path):
     """Есть ли файл в публичном HF-датасете результатов (без токена)."""
     url = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main/{path}"
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
@@ -73,6 +76,84 @@ def hf_exists(path):
             return r.status < 400
     except Exception:
         return False
+
+
+def _hf_json(path):
+    url = f"https://huggingface.co/datasets/{HF_REPO}/resolve/main/{path}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read())
+    except Exception:
+        return None
+
+
+_TRAINERS = None
+
+
+def _trainers():
+    """{тег обучения: (id задачи, лимит часов)} по всем файлам очередей рядом. Чекпоинт
+    rl_arch/agents_online/<тег>.pt пишет задача, у которой в шаге обучения стоит --tag <тег>."""
+    global _TRAINERS
+    if _TRAINERS is None:
+        _TRAINERS = {}
+        for f in sorted(glob.glob(os.path.join(HERE, "queue*.json"))):
+            try:
+                with open(f) as fh:
+                    jobs = json.load(fh)["jobs"]
+            except Exception:
+                continue
+            for j in jobs:
+                for s in j["steps"]:
+                    if not s["script"].endswith("online_train_env.py"):
+                        continue
+                    m = re.search(r"--tag (\S+)", s["args"])
+                    h = re.search(r"--hours ([\d.]+)", s["args"])
+                    if m:
+                        _TRAINERS[m.group(1)] = (j["id"], float(h.group(1)) if h else 11.0)
+    return _TRAINERS
+
+
+def need_problem(path, state=None):
+    """Почему зависимость ещё не готова; None — готова. Одного наличия файла в HF мало: чекпоинт
+    онлайнового агента выгружается каждые несколько цепочек, то есть появляется задолго до конца
+    обучения, и оценка по нему измерила бы недоученного агента. Поэтому для
+    rl_arch/agents_online/<тег>.pt, который пишет задача одной из очередей, дополнительно
+    требуется, чтобы обучение дошло до своего лимита часов: по времени пуша из pushed.json и по
+    elapsed_h в строке обучения в HF. Переменная LQ_ALLOW_PARTIAL=1 снимает это требование."""
+    m = re.match(r"rl_arch/agents_online/(.+)\.pt$", path)
+    tr = _trainers().get(m.group(1)) if m else None
+    if os.environ.get("LQ_ALLOW_PARTIAL"):
+        tr = None
+    if tr:
+        # сначала локальная проверка без сети: обучение запущено отсюда и его лимит ещё не вышел
+        jid, hours = tr
+        state = LK.load_state() if state is None else state
+        t = (state.get(jid) or {}).get("time")
+        if t:
+            try:
+                left = time.mktime(time.strptime(t, "%Y-%m-%d %H:%M")) + hours * 3600 - time.time()
+            except ValueError:
+                left = 0.0
+            if left > 0:
+                return (f"обучение {jid} ещё идёт: запущено {t}, лимит {hours:g} ч, "
+                        f"до конца не меньше {left / 3600:.1f} ч")
+    if not _hf_head(path):
+        return "файла ещё нет в HF"
+    if not tr:
+        return None
+    row = _hf_json(f"rl_arch/online_train/{m.group(1)}.json")
+    el = float(row.get("elapsed_h") or 0) if row else 0.0
+    if el < hours - min(1.5, 0.25 * hours):
+        return (f"обучение {jid} не дошло до лимита: в строке обучения {el:g} ч из {hours:g} "
+                f"(идёт или оборвалось; оценить неполный чекпоинт можно с LQ_ALLOW_PARTIAL=1)")
+    return None
+
+
+def hf_exists(path):
+    """Готова ли зависимость задачи: файл есть в HF, а для чекпоинта онлайнового агента
+    закончено и обучение, которое его пишет (см. need_problem)."""
+    return need_problem(path) is None
 
 
 def git_preflight(branch):
@@ -234,9 +315,9 @@ def cmd_launch(q, args, state, go):
         if j["unresolved"]:
             print(f"{j['id']}: пропуск — не заданы {j['unresolved']} (decisions.json)")
             continue
-        miss = [n for n in j["needs"] if not hf_exists(n)]
+        miss = [f"{n}: {p}" for n, p in ((n, need_problem(n, state)) for n in j["needs"]) if p]
         if miss:
-            print(f"{j['id']}: пропуск — в HF ещё нет {miss}")
+            print(f"{j['id']}: пропуск — зависимости не готовы: " + "; ".join(miss))
             continue
         acc = next((a for a in accounts if a["live"] < 2), None)
         if acc is None:
