@@ -5771,6 +5771,70 @@
    ]
   },
   {
+   "id": "w16-l1-keep",
+   "wave": 16,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/convnext_dqn_ns2d_rlpdtol_seed42.pt"
+   ],
+   "note": "лидер трека 1 на ns2d без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/convnext_dqn_ns2d_rlpdtol_seed42.pt --stop-on-noop --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3d_l1_keep"
+    }
+   ]
+  },
+  {
+   "id": "w16-l1-kg",
+   "wave": 16,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/convnext_dqn_ns2d_rlpdtol_seed42.pt"
+   ],
+   "note": "лидер трека 1 на ns2d без сбросов и со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/convnext_dqn_ns2d_rlpdtol_seed42.pt --stop-on-noop --keep-opt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3d_l1_kg"
+    }
+   ]
+  },
+  {
+   "id": "w16-l2-keep",
+   "wave": 16,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/convnext_dqn_ns2d_wsrlreset_seed42.pt"
+   ],
+   "note": "лидер трека 2 на ns2d без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/convnext_dqn_ns2d_wsrlreset_seed42.pt --stop-on-noop --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3d_l2_keep"
+    }
+   ]
+  },
+  {
+   "id": "w16-l2-kg",
+   "wave": 16,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/convnext_dqn_ns2d_wsrlreset_seed42.pt"
+   ],
+   "note": "лидер трека 2 на ns2d без сбросов и со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/convnext_dqn_ns2d_wsrlreset_seed42.pt --stop-on-noop --keep-opt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3d_l2_kg"
+    }
+   ]
+  },
+  {
    "id": "w13-of-g0",
    "wave": 13,
    "group": "H08",

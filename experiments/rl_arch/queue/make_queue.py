@@ -723,6 +723,21 @@ for name, variant, flags, note in (
             10.5, needs=[f"rl_arch/agents_online/{tag}.pt"],
             note="оценка без остановки на пустом действии: " + note)
 
+# ---------------------------------------------------------------- развёртывание лидеров
+# Лидеры треков 1-2 на ns2d в среде без сбросов оптимизатора и со стражем, без нового обучения:
+# в их цепочках идут подряд действия L-BFGS, а на pb2d и ns2d L-BFGS без сброса истории на 20-30%
+# лучше. Протокол оценки лидера прежний (с остановкой на пустом действии), чтобы сравнение с
+# w0-t1more было парным; простые цепочки той же среды — w0-l1kk, w0-a3lk, w0-t1k
+if NS2D:
+    for short, model, tagm in (("l1", LEAD1, "ns2drlpdtol"), ("l2", LEAD2, "onreset")):
+        for nm, ex, note in (("keep", KEEP, "без сбросов оптимизатора"),
+                             ("kg", f"{KEEP} --guard-rollback 1.0 --guard-fallback LBFGS:1:500",
+                              "без сбросов и со стражем")):
+            add(f"w16-{short}-{nm}", 16, "H16",
+                [(EVAL, f"--policy agent --model-file {model} --stop-on-noop {ex} "
+                        + ev_common(f"t3d_{short}_{nm}", seeds(42, 51)))],
+                10.5, needs=[model], note=f"лидер трека {short[1]} на ns2d {note}")
+
 # ---------------------------------------------------------------- волна 13
 # Лестница машинерии, кривая стоимости, страж и сдвиги условий.
 t3off("w13-of-g0", "convnext_dqn", "--gamma 0", "g0", stop=False, note=
