@@ -603,7 +603,7 @@ def save_buffer(records, mean, std, tag, meta):
     if not tok:
         return
     from huggingface_hub import upload_file
-    for attempt in range(4):
+    for attempt in range(8):
         try:
             upload_file(path_or_fileobj=local, path_in_repo=f"rl_arch/buffers_online/{tag}.pt",
                         repo_id=OUT_REPO, repo_type="dataset", token=tok,
@@ -611,7 +611,7 @@ def save_buffer(records, mean, std, tag, meta):
             return
         except Exception as e:
             print(f"buffer upload retry {attempt}: {str(e)[:80]}", flush=True)
-            time.sleep(min(300, 20 * 2 ** attempt))
+            time.sleep(min(600, 20 * 2 ** attempt))
 
 
 def save_agent(net, mean, std, variant, tag, n_chains, best, hl_gauss=None, meta=None):
@@ -629,7 +629,7 @@ def save_agent(net, mean, std, variant, tag, n_chains, best, hl_gauss=None, meta
     if not tok:
         return
     from huggingface_hub import upload_file
-    for attempt in range(4):
+    for attempt in range(8):
         try:
             upload_file(path_or_fileobj=local, path_in_repo=f"rl_arch/agents_online/{tag}.pt",
                         repo_id=OUT_REPO, repo_type="dataset", token=tok,
@@ -637,16 +637,19 @@ def save_agent(net, mean, std, variant, tag, n_chains, best, hl_gauss=None, meta
             return
         except Exception as e:
             print(f"agent upload retry {attempt}: {str(e)[:80]}", flush=True)
-            time.sleep(min(300, 20 * 2 ** attempt))
+            time.sleep(min(600, 20 * 2 ** attempt))
 
 
-def upload(row, name):
+def upload(row, name, final=False):
     tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     if not tok:
         return
     import io
     from huggingface_hub import upload_file
-    for attempt in range(3):
+    # промежуточную строку не ждём (следующая её заменит), итоговую ждём долго: лимит HF
+    # (128 коммитов в час на репозиторий) держится до часа
+    tries = 9 if final else 3
+    for attempt in range(tries):
         try:
             upload_file(path_or_fileobj=io.BytesIO(json.dumps(row, indent=1).encode()),
                         path_in_repo=f"rl_arch/online_train/{name}.json",
@@ -655,7 +658,7 @@ def upload(row, name):
             return
         except Exception as e:
             print(f"upload retry {attempt}: {e}", flush=True)
-            time.sleep(8 * (attempt + 1))
+            time.sleep(min(600, 20 * 2 ** attempt) if final else 8 * (attempt + 1))
 
 
 def main():
@@ -1283,6 +1286,7 @@ def main():
     archive = []          # Go-Explore: [(dict E, err, w, state, raw, spent, steps)]
 
     t_start = time.time()
+    last_row, last_row_up = None, 0.0     # строка обучения в HF: не чаще раза в 30 минут
     deadline = t_start + args.hours * 3600
     steps_done = 0
     n_updates_total, last_reset, last_redo = 0, 0, 0
@@ -1782,8 +1786,10 @@ def main():
                        t_opt_h=round(t_opt_total / 3600, 3),
                        elapsed_h=round((time.time() - t_start) / 3600, 2))
             print(json.dumps({k: v for k, v in row.items() if k not in ("chains", "last_chain")}), flush=True)
-            if not args.smoke:
+            last_row = row
+            if not args.smoke and time.time() - last_row_up >= 1800:
                 upload(row, tag)
+                last_row_up = time.time()
             if args.save_agent and (len(chains) % args.save_every == 0):
                 save_agent(net, mean, std, args.variant, tag, len(chains),
                            min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg),
@@ -1791,6 +1797,9 @@ def main():
             if args.save_buffer and (len(chains) % args.save_every == 0) and not args.smoke:
                 save_buffer(buf_records, mean, std, tag, run_meta)
 
+    if last_row is not None and not args.smoke:
+        # итоговая строка: по ней launch_queue.py решает, что обучение закончено (elapsed_h)
+        upload(last_row, tag, final=True)
     if args.save_agent and chains:
         save_agent(net, mean, std, args.variant, tag, len(chains),
                    min(c["l2re"] for c in chains), hl_gauss=_hlg_meta(hlg), meta=run_meta)

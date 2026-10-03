@@ -504,7 +504,10 @@ def run_seed(seed, args, progress_cb=None):
     boosted, loss_hist, p_hist = False, [], []
     boost_layers, boost_eps = None, None
     spent, chain, t0 = 0, [], time.time()
-    last_prog = 0.0
+    # первая строка прогресса — через progress_every секунд, а не на первом действии: короткие
+    # сиды (десятки минут) иначе дают три коммита вместо одного, а лимит HF — 128 в час
+    last_prog = t0
+    last_ckpt_up = t0
     rmse = brmse = l2re_op = l2re_bnd = float("inf")
 
     ckpt_name = getattr(args, "_ckpt_name", None)
@@ -710,8 +713,8 @@ def run_seed(seed, args, progress_cb=None):
         # строку прогресса шлём не чаще, чем раз в progress_every секунд: она нужна
         # только чтобы не потерять результат при срезе сессии, а десятки кернелов
         # пишут в один репозиторий с лимитом 128 коммитов в час
-        want_prog = (spent >= args.budget
-                     or time.time() - last_prog >= args.progress_every)
+        want_prog = (spent < args.budget
+                     and time.time() - last_prog >= args.progress_every)
         if progress_cb is not None and want_prog:
             last_prog = time.time()
             progress_cb(dict(seed=seed, policy=args.policy, pde=args.pde, partial=True,
@@ -869,8 +872,10 @@ def run_seed(seed, args, progress_cb=None):
 
         # чекпоинт ставим ПОСЛЕ построения состояния: веса PINN и карты должны
         # соответствовать друг другу, иначе докатка стартует с рассогласования
-        if ckpt_name and args.ckpt_every and len(chain) % args.ckpt_every == 0:
+        if (ckpt_name and args.ckpt_every and len(chain) % args.ckpt_every == 0
+                and time.time() - last_ckpt_up >= args.ckpt_min_interval):
             dump_ckpt()
+            last_ckpt_up = time.time()
         if args.hours and (time.time() - t0) / 3600.0 >= args.hours:
             dump_ckpt()
             print(f"[seed {seed}] лимит времени ({args.hours} ч): чекпоинт на "
@@ -1046,6 +1051,10 @@ def main():
                     help="продолжить прогон с чекпоинта (локального или с HF)")
     ap.add_argument("--ckpt-every", type=int, default=25,
                     help="как часто страховочно сохранять чекпоинт, в шагах цепочки")
+    ap.add_argument("--ckpt-min-interval", type=float, default=1800.0,
+                    help="чекпоинт докатки не чаще, чем раз в столько секунд (лимит HF — 128 коммитов в "
+                         "час на репозиторий; при политиках с действиями по 100 эпох --ckpt-every 10 давал "
+                         "семь коммитов на сид). Чекпоинт по лимиту времени кернела пишется всегда")
     ap.add_argument("--progress-every", type=float, default=1800.0,
                     help="минимальный интервал между строками прогресса, секунд "
                          "(лимит HF — 128 коммитов в час на репозиторий)")
