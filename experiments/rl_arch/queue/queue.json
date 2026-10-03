@@ -80,35 +80,35 @@
    "id": "E1",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "порог по Q и страж вместе"
   },
   {
    "id": "E2",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "комитет агентов со стражем"
   },
   {
    "id": "E3",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --state-every 3 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-file {BEST_AGENT} --state-every 3 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "карты раз в три действия и страж: дешёвое развёртывание с защитой"
   },
   {
    "id": "E4",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy script --script {GUIDE} --script-tail agent --model-file {BEST_AGENT} --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy script --script {GUIDE} --script-tail agent --model-file {BEST_AGENT} --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "проводник как начало цепочки, агент как продолжение (без обучения)"
   },
   {
    "id": "E5",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-file {BEST_AGENT} --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "готовый агент в среде без сбросов: дешёвая проба до обучения K2"
   },
   {
@@ -536,6 +536,38 @@
    ]
   },
   {
+   "id": "w1-t1ref-s42-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1ref_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1ref-s42-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1ref_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1ref_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t1ref-s43",
    "wave": 1,
    "group": "base",
@@ -578,6 +610,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t1ref_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1ref-s43-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1ref_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1ref-s43-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1ref_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1ref_s43"
     }
    ]
   },
@@ -628,6 +692,38 @@
    ]
   },
   {
+   "id": "w1-t1fixd-s42-na",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1fixd_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1fixd_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1fixd_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1fixd-s42-nb",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1fixd_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1fixd_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1fixd_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t1fixd-s43",
    "wave": 1,
    "group": "G04",
@@ -670,6 +766,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t1fixd_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1fixd-s43-na",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1fixd_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1fixd_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1fixd-s43-nb",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1fixd_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1fixd_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1fixd_s43"
     }
    ]
   },
@@ -720,6 +848,38 @@
    ]
   },
   {
+   "id": "w1-t1al-s42-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1al_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1al_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1al-s42-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1al_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1al_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t1al-s43",
    "wave": 1,
    "group": "G03",
@@ -762,6 +922,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t1al_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1al-s43-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1al_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1al-s43-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1al_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1al_s43"
     }
    ]
   },
@@ -812,6 +1004,38 @@
    ]
   },
   {
+   "id": "w1-t1alnb-s42-na",
+   "wave": 1,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1alnb_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1alnb_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1alnb_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1alnb-s42-nb",
+   "wave": 1,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1alnb_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1alnb_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1alnb_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t1alc-s42",
    "wave": 1,
    "group": "G06",
@@ -854,6 +1078,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t1alc_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1alc-s42-na",
+   "wave": 1,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1alc_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1alc_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1alc-s42-nb",
+   "wave": 1,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1alc_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1alc_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1alc_s42"
     }
    ]
   },
@@ -904,6 +1160,38 @@
    ]
   },
   {
+   "id": "w1-t1alm-s42-na",
+   "wave": 1,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1alm_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1alm_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t1alm_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t1alm-s42-nb",
+   "wave": 1,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t1alm_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t1alm_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t1alm_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t2ref-s42",
    "wave": 1,
    "group": "base",
@@ -950,6 +1238,38 @@
    ]
   },
   {
+   "id": "w1-t2ref-s42-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2ref_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t2ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t2ref-s42-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2ref_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t2ref_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t2ref-s43",
    "wave": 1,
    "group": "base",
@@ -992,6 +1312,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t2ref_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t2ref-s43-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2ref_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t2ref-s43-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2ref_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t2ref_s43"
     }
    ]
   },
@@ -1046,6 +1398,38 @@
    ]
   },
   {
+   "id": "w1-t2al-s42-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2al_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t2al_s42"
+    }
+   ]
+  },
+  {
+   "id": "w1-t2al-s42-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2al_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t2al_s42"
+    }
+   ]
+  },
+  {
    "id": "w1-t2al-s43",
    "wave": 1,
    "group": "G03",
@@ -1092,6 +1476,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t2al_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t2al-s43-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2al_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "w1-t2al-s43-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t2al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t2al_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t2al_s43"
     }
    ]
   },
@@ -1186,6 +1602,60 @@
    ]
   },
   {
+   "id": "w1-offixn-m1",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.0,
+   "needs": [],
+   "note": "чистый офлайн на исправленном буфере, оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --model-tag n"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_n_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag ofn_fixd_m1"
+    }
+   ]
+  },
+  {
+   "id": "w1-offixn-mask",
+   "wave": 1,
+   "group": "G02",
+   "hours": 11.0,
+   "needs": [],
+   "note": "то же с маской на оценке, без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --model-tag n"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_n_seed1.pt --mask adam:0.01,pso:0.001,pso:0.0001 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag ofn_fixd_m1_mask"
+    }
+   ]
+  },
+  {
+   "id": "w1-ofstatn",
+   "wave": 1,
+   "group": "G06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "кодировщик на статистиках карт, без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --model-tag n"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_ns2d_n_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag ofn_stat_m1"
+    }
+   ]
+  },
+  {
    "id": "w1-ofref-more",
    "wave": 1,
    "group": "base",
@@ -1227,7 +1697,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_jsrl_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_jsrl_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_jsrl_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_jsrl_s42"
     }
    ]
   },
@@ -1243,7 +1713,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_jsrl_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_jsrl_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_jsrl_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_jsrl_s42"
     }
    ]
   },
@@ -1273,7 +1743,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_bonus_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_bonus_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_bonus_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_bonus_s42"
     }
    ]
   },
@@ -1289,7 +1759,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_bonus_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_bonus_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_bonus_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_bonus_s42"
     }
    ]
   },
@@ -1319,7 +1789,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_geps_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_geps_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_geps_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_geps_s42"
     }
    ]
   },
@@ -1335,7 +1805,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_geps_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_geps_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_geps_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_geps_s42"
     }
    ]
   },
@@ -1365,7 +1835,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_nstep_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_nstep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_nstep_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_nstep_s42"
     }
    ]
   },
@@ -1381,7 +1851,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_nstep_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_nstep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_nstep_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_nstep_s42"
     }
    ]
   },
@@ -1411,7 +1881,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd2_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_utd2_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd2_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_utd2_s42"
     }
    ]
   },
@@ -1427,7 +1897,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd2_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_utd2_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd2_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_utd2_s42"
     }
    ]
   },
@@ -1457,7 +1927,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd20_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_utd20_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd20_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_utd20_s42"
     }
    ]
   },
@@ -1473,7 +1943,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd20_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_utd20_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_utd20_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_utd20_s42"
     }
    ]
   },
@@ -1503,7 +1973,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_g1_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_g1_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_g1_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_g1_s42"
     }
    ]
   },
@@ -1519,7 +1989,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_g1_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_g1_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_g1_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_g1_s42"
     }
    ]
   },
@@ -1549,7 +2019,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_boot_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_boot_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_boot_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_boot_s42"
     }
    ]
   },
@@ -1565,7 +2035,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_boot_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_boot_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_boot_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_boot_s42"
     }
    ]
   },
@@ -1595,7 +2065,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_full_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_full_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_full_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_full_s42"
     }
    ]
   },
@@ -1611,7 +2081,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_full_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_full_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_full_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_full_s42"
     }
    ]
   },
@@ -1641,7 +2111,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_hlg_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_hlg_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_hlg_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_hlg_s42"
     }
    ]
   },
@@ -1657,7 +2127,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_hlg_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_hlg_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_hlg_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_hlg_s42"
     }
    ]
   },
@@ -1687,7 +2157,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_fact_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_fact_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_fact_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_fact_s42"
     }
    ]
   },
@@ -1703,7 +2173,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_fact_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_fact_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_fact_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_fact_s42"
     }
    ]
   },
@@ -1733,7 +2203,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_stat_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_stat_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_stat_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_stat_s42"
     }
    ]
   },
@@ -1749,7 +2219,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_stat_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_stat_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_stat_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_stat_s42"
     }
    ]
   },
@@ -1779,7 +2249,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_frz_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_frz_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_frz_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_frz_s42"
     }
    ]
   },
@@ -1795,7 +2265,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_frz_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_frz_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_frz_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_frz_s42"
     }
    ]
   },
@@ -1825,7 +2295,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_keep_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_keep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_keep_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q2_keep_s42"
     }
    ]
   },
@@ -1841,7 +2311,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q2_keep_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_keep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q2_keep_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q2_keep_s42"
     }
    ]
   },
@@ -1855,7 +2325,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_vote"
+     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_vote"
     }
    ]
   },
@@ -1869,7 +2339,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_vote"
+     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_vote"
     }
    ]
   },
@@ -1883,7 +2353,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_gbon"
+     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_gbon"
     }
    ]
   },
@@ -1897,7 +2367,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_gbon"
+     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_gbon"
     }
    ]
   },
@@ -1915,7 +2385,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ooo_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_ooo"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ooo_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_ooo"
     }
    ]
   },
@@ -1945,7 +2415,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_distpbrs_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_distpbrs_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_distpbrs_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_distpbrs_s42"
     }
    ]
   },
@@ -1961,7 +2431,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_distpbrs_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_distpbrs_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_distpbrs_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_distpbrs_s42"
     }
    ]
   },
@@ -1991,7 +2461,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_rean_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_rean_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_rean_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_rean_s42"
     }
    ]
   },
@@ -2007,7 +2477,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_rean_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_rean_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_rean_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_rean_s42"
     }
    ]
   },
@@ -2037,7 +2507,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_per_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_per_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_per_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_per_s42"
     }
    ]
   },
@@ -2053,7 +2523,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_per_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_per_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_per_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_per_s42"
     }
    ]
   },
@@ -2083,7 +2553,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_sil_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_sil_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_sil_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_sil_s42"
     }
    ]
   },
@@ -2099,7 +2569,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_sil_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_sil_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_sil_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_sil_s42"
     }
    ]
   },
@@ -2129,7 +2599,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_goexp_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_goexp_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_goexp_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_goexp_s42"
     }
    ]
   },
@@ -2145,7 +2615,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_goexp_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_goexp_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_goexp_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_goexp_s42"
     }
    ]
   },
@@ -2175,7 +2645,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_reset_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_reset_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_reset_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_reset_s42"
     }
    ]
   },
@@ -2191,7 +2661,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_reset_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_reset_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_reset_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_reset_s42"
     }
    ]
   },
@@ -2221,7 +2691,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_redo_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_redo_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_redo_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_redo_s42"
     }
    ]
   },
@@ -2237,7 +2707,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_redo_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_redo_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_redo_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_redo_s42"
     }
    ]
   },
@@ -2267,7 +2737,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_aug_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_aug_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_aug_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_aug_s42"
     }
    ]
   },
@@ -2283,7 +2753,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_aug_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_aug_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_aug_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_aug_s42"
     }
    ]
   },
@@ -2313,7 +2783,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_spr_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_spr_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_spr_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_spr_s42"
     }
    ]
   },
@@ -2329,7 +2799,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_spr_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_spr_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_spr_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_spr_s42"
     }
    ]
   },
@@ -2359,7 +2829,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_munch_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_munch_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_munch_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q3_munch_s42"
     }
    ]
   },
@@ -2375,7 +2845,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q3_munch_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_munch_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q3_munch_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q3_munch_s42"
     }
    ]
   },
@@ -2405,7 +2875,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_base_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_base_s42"
     }
    ]
   },
@@ -2421,7 +2891,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_base_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_base_s42"
     }
    ]
   },
@@ -2451,7 +2921,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_base_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_base_s43"
     }
    ]
   },
@@ -2467,7 +2937,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_base_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_base_s43"
     }
    ]
   },
@@ -2483,7 +2953,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag e_q4_base_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_base_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag e_q4_base_s42"
     }
    ]
   },
@@ -2513,7 +2983,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_ca_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_ca_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_ca_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_ca_s42"
     }
    ]
   },
@@ -2529,7 +2999,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_ca_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_ca_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_ca_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_ca_s42"
     }
    ]
   },
@@ -2559,7 +3029,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_cb_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_cb_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cb_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_cb_s42"
     }
    ]
   },
@@ -2575,7 +3045,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_cb_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_cb_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cb_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_cb_s42"
     }
    ]
   },
@@ -2605,7 +3075,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_cc_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_cc_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cc_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q4_cc_s42"
     }
    ]
   },
@@ -2621,7 +3091,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q4_cc_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_cc_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q4_cc_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q4_cc_s42"
     }
    ]
   },
@@ -2679,7 +3149,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q5_final_s42"
     }
    ]
   },
@@ -2695,7 +3165,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q5_final_s42"
     }
    ]
   },
@@ -2711,7 +3181,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_q5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_q5_final_s42"
     }
    ]
   },
@@ -2727,7 +3197,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_q5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_q5_final_s42"
     }
    ]
   },
@@ -2757,7 +3227,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q5_final_s43"
     }
    ]
   },
@@ -2773,7 +3243,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q5_final_s43"
     }
    ]
   },
@@ -2789,7 +3259,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_q5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_q5_final_s43"
     }
    ]
   },
@@ -2805,7 +3275,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_q5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s43.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_q5_final_s43"
     }
    ]
   },
@@ -2821,7 +3291,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_guard"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_guard"
     }
    ]
   },
@@ -2837,7 +3307,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_gbon"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_gbon"
     }
    ]
   },
@@ -2853,7 +3323,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_gg"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_gg"
     }
    ]
   },
@@ -2869,7 +3339,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --stop-on-noop --state-every 3 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_ev3"
+     "args": "--policy agent --model-file rl_arch/agents_online/q5_final_s42.pt --state-every 3 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q5_final_ev3"
     }
    ]
   },
@@ -3644,6 +4114,42 @@
    ]
   },
   {
+   "id": "w12-ofn-full-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "контроль: полные карты, без контекста; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --seeds 1 --model-tag fulln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_fulln_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_fulln_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-full-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "контроль: полные карты, без контекста; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --seeds 2 --model-tag fulln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_fulln_seed2.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_fulln_m2"
+    }
+   ]
+  },
+  {
    "id": "w12-of-ctx-m1",
    "wave": 12,
    "group": "H06",
@@ -3676,6 +4182,42 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ctx_seed2.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_ctx_m2"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-ctx-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "полные карты и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 1 --model-tag ctxn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ctxn_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_ctxn_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-ctx-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "полные карты и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 2 --model-tag ctxn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ctxn_seed2.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_ctxn_m2"
     }
    ]
   },
@@ -3716,6 +4258,42 @@
    ]
   },
   {
+   "id": "w12-ofn-lvl-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только уровень потерь и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 1 --model-tag lvln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_lvln_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_lvln_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-lvl-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только уровень потерь и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 2 --model-tag lvln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_lvln_seed2.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_lvln_m2"
+    }
+   ]
+  },
+  {
    "id": "w12-of-shape",
    "wave": 12,
    "group": "H06",
@@ -3730,6 +4308,24 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_shape_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_shape_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-shape",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только форма карт (уровень убран) и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shape --seeds 1 --model-tag shapen"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_shapen_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_shapen_m1"
     }
    ]
   },
@@ -3770,6 +4366,42 @@
    ]
   },
   {
+   "id": "w12-ofn-shuf-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "перемешанные пиксели и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shuffle --seeds 1 --model-tag shufn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_shufn_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_shufn_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-shuf-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "перемешанные пиксели и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shuffle --seeds 2 --model-tag shufn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_shufn_seed2.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_shufn_m2"
+    }
+   ]
+  },
+  {
    "id": "w12-of-blind-m1",
    "wave": 12,
    "group": "H06",
@@ -3806,6 +4438,42 @@
    ]
   },
   {
+   "id": "w12-ofn-blind-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, только время: политика без обратной связи (выученная статическая цепочка); оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 1 --model-tag blindn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_blindn_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_blindn_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-blind-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, только время: политика без обратной связи (выученная статическая цепочка); оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 2 --model-tag blindn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_blindn_seed2.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_blindn_m2"
+    }
+   ]
+  },
+  {
    "id": "w12-of-blinde",
    "wave": 12,
    "group": "H06",
@@ -3820,6 +4488,24 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_blinde_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_blinde_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-blinde",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, время и истинная ошибка (привилегированный верхний ориентир дешёвого состояния); оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --ctx-err --state-mode blind --seeds 1 --model-tag blinden"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_blinden_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_blinden_m1"
     }
    ]
   },
@@ -3842,6 +4528,24 @@
    ]
   },
   {
+   "id": "w12-ofn-slvl",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "малая сеть на скалярах: уровень потерь и время; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 1 --model-tag slvln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_ns2d_slvln_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_slvln_m1"
+    }
+   ]
+  },
+  {
    "id": "w12-of-sblind",
    "wave": 12,
    "group": "H06",
@@ -3856,6 +4560,24 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_ns2d_sblind_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_sblind_m1"
+    }
+   ]
+  },
+  {
+   "id": "w12-ofn-sblind",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "малая сеть на скалярах: только время; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 1 --model-tag sblindn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_ns2d_sblindn_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_sblindn_m1"
     }
    ]
   },
@@ -3986,6 +4708,38 @@
    ]
   },
   {
+   "id": "w12-on-blind-na",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_blind_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on-blind-nb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_blind_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on_blind_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on-lvl",
    "wave": 12,
    "group": "H06",
@@ -4028,6 +4782,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_lvl_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_q_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on-lvl-na",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on_lvl_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_lvl_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on-lvl-nb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on_lvl_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_lvl_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on_lvl_s42"
     }
    ]
   },
@@ -4078,6 +4864,38 @@
    ]
   },
   {
+   "id": "w12-on-shuf-na",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on_shuf_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_shuf_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on-shuf-nb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on_shuf_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on_shuf_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on2-full",
    "wave": 12,
    "group": "H04",
@@ -4104,6 +4922,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_full_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-full-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_full_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_full_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-full-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_full_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_full_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on2_full_s42"
     }
    ]
   },
@@ -4138,6 +4988,38 @@
    ]
   },
   {
+   "id": "w12-on2-loss-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_loss_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_loss_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-loss-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_loss_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_loss_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on2-blind",
    "wave": 12,
    "group": "H04",
@@ -4164,6 +5046,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_blind_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-blind-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_blind_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-blind-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_blind_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on2_blind_s42"
     }
    ]
   },
@@ -4198,6 +5112,38 @@
    ]
   },
   {
+   "id": "w12-on2-fullk-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fullk_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fullk-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fullk_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on2-lossk",
    "wave": 12,
    "group": "H04",
@@ -4224,6 +5170,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_lossk_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-lossk-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_lossk_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-lossk-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_lossk_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on2_lossk_s42"
     }
    ]
   },
@@ -4258,6 +5236,38 @@
    ]
   },
   {
+   "id": "w12-on2-fine-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fine_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fine-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fine_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
    "id": "w13-of-g0",
    "wave": 13,
    "group": "H08",
@@ -4271,7 +5281,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_g0_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_g0_m1"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_g0_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_g0_m1"
     }
    ]
   },
@@ -4301,7 +5311,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q_t3g0_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3g0_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3g0_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3g0_s42"
     }
    ]
   },
@@ -4319,7 +5329,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3h2_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 8.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3h2_s42"
+     "args": "--policy agent --model-file agent_q_t3h2_s42.pt --pde ns2d_liddriven --budget 7000 --hours 8.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3h2_s42"
     }
    ]
   },
@@ -4337,7 +5347,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3h5_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 5.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3h5_s42"
+     "args": "--policy agent --model-file agent_q_t3h5_s42.pt --pde ns2d_liddriven --budget 7000 --hours 5.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3h5_s42"
     }
    ]
   },
@@ -4355,7 +5365,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_buf9_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_buf9_m1"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_buf9_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_buf9_m1"
     }
    ]
   },
@@ -4373,7 +5383,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_buf28_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_buf28_m1"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_buf28_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_buf28_m1"
     }
    ]
   },
@@ -4667,7 +5677,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/q_t3lofi_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3lofi_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3lofi_s42.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3lofi_s42"
     }
    ]
   },
@@ -4685,7 +5695,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dfull_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dfull"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dfull_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dfull"
     }
    ]
   },
@@ -4703,7 +5713,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dshape_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dshape"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dshape_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dshape"
     }
    ]
   },
@@ -4721,7 +5731,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dnorm_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dnorm"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dnorm_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dnorm"
     }
    ]
   },
@@ -4739,7 +5749,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dblind_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dblind"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2dblind_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2dblind"
     }
    ]
   },
@@ -4757,7 +5767,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2ddesc_seed1.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2ddesc"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xns2ddesc_seed1.pt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xns2ddesc"
     }
    ]
   },
@@ -4841,7 +5851,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3ft_ns2d_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_ns2d_s42"
+     "args": "--policy agent --model-file agent_q_t3ft_ns2d_s42.pt --pde ns2d_liddriven --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_ns2d_s42"
     }
    ]
   },
@@ -4859,7 +5869,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dfull_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dfull"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dfull_seed1.pt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dfull"
     }
    ]
   },
@@ -4877,7 +5887,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dshape_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dshape"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dshape_seed1.pt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dshape"
     }
    ]
   },
@@ -4895,7 +5905,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dnorm_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dnorm"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dnorm_seed1.pt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dnorm"
     }
    ]
   },
@@ -4913,7 +5923,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dblind_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dblind"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2dblind_seed1.pt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2dblind"
     }
    ]
   },
@@ -4931,7 +5941,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2ddesc_seed1.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2ddesc"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xpb2ddesc_seed1.pt --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xpb2ddesc"
     }
    ]
   },
@@ -5031,7 +6041,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3ft_pb2d_s42.pt --stop-on-noop --pde poissonboltzmann2d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_pb2d_s42"
+     "args": "--policy agent --model-file agent_q_t3ft_pb2d_s42.pt --pde poissonboltzmann2d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_pb2d_s42"
     }
    ]
   },
@@ -5049,7 +6059,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msfull_seed1.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msfull"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msfull_seed1.pt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msfull"
     }
    ]
   },
@@ -5067,7 +6077,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msshape_seed1.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msshape"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msshape_seed1.pt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msshape"
     }
    ]
   },
@@ -5085,7 +6095,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msnorm_seed1.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msnorm"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msnorm_seed1.pt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msnorm"
     }
    ]
   },
@@ -5103,7 +6113,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msblind_seed1.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msblind"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msblind_seed1.pt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msblind"
     }
    ]
   },
@@ -5121,7 +6131,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msdesc_seed1.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msdesc"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xh2msdesc_seed1.pt --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xh2msdesc"
     }
    ]
   },
@@ -5221,7 +6231,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3ft_h2ms_s42.pt --stop-on-noop --pde heat2d_multiscale --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_h2ms_s42"
+     "args": "--policy agent --model-file agent_q_t3ft_h2ms_s42.pt --pde heat2d_multiscale --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_h2ms_s42"
     }
    ]
   },
@@ -5239,7 +6249,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwavefull_seed1.pt --stop-on-noop --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwavefull"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwavefull_seed1.pt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwavefull"
     }
    ]
   },
@@ -5257,7 +6267,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwaveshape_seed1.pt --stop-on-noop --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwaveshape"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwaveshape_seed1.pt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwaveshape"
     }
    ]
   },
@@ -5275,7 +6285,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwavenorm_seed1.pt --stop-on-noop --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwavenorm"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwavenorm_seed1.pt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwavenorm"
     }
    ]
   },
@@ -5293,7 +6303,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwaveblind_seed1.pt --stop-on-noop --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwaveblind"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwaveblind_seed1.pt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwaveblind"
     }
    ]
   },
@@ -5311,7 +6321,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwavedesc_seed1.pt --stop-on-noop --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwavedesc"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xwavedesc_seed1.pt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3x_xwavedesc"
     }
    ]
   },
@@ -5411,7 +6421,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3ft_wave_s42.pt --stop-on-noop --pde wave1d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_wave_s42"
+     "args": "--policy agent --model-file agent_q_t3ft_wave_s42.pt --pde wave1d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3ft_wave_s42"
     }
    ]
   },
@@ -5429,7 +6439,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfns2d_seed1.pt --stop-on-noop {DEPLOY} --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_ns2d_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfns2d_seed1.pt {DEPLOY} --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_ns2d_ag"
     }
    ]
   },
@@ -5447,7 +6457,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpb2d_seed1.pt --stop-on-noop {DEPLOY} --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pb2d_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpb2d_seed1.pt {DEPLOY} --pde poissonboltzmann2d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pb2d_ag"
     }
    ]
   },
@@ -5465,7 +6475,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2ms_seed1.pt --stop-on-noop {DEPLOY} --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2ms_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2ms_seed1.pt {DEPLOY} --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2ms_ag"
     }
    ]
   },
@@ -5483,7 +6493,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfwave_seed1.pt --stop-on-noop {DEPLOY} --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_wave_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfwave_seed1.pt {DEPLOY} --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_wave_ag"
     }
    ]
   },
@@ -5501,7 +6511,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfburg_seed1.pt --stop-on-noop {DEPLOY} --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_burg_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfburg_seed1.pt {DEPLOY} --pde burgers_1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_burg_ag"
     }
    ]
   },
@@ -5585,7 +6595,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_burg_ft_s42.pt --stop-on-noop {DEPLOY} --pde burgers_1d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_burg_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_burg_ft_s42.pt {DEPLOY} --pde burgers_1d --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_burg_ft_s42"
     }
    ]
   },
@@ -5603,7 +6613,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfgs_seed1.pt --stop-on-noop {DEPLOY} --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_gs_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfgs_seed1.pt {DEPLOY} --pde grayscott --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_gs_ag"
     }
    ]
   },
@@ -5687,7 +6697,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_gs_ft_s42.pt --stop-on-noop {DEPLOY} --pde grayscott --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_gs_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_gs_ft_s42.pt {DEPLOY} --pde grayscott --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_gs_ft_s42"
     }
    ]
   },
@@ -5705,7 +6715,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2cg_seed1.pt --stop-on-noop {DEPLOY} --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2cg_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2cg_seed1.pt {DEPLOY} --pde heat2d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2cg_ag"
     }
    ]
   },
@@ -5789,7 +6799,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_h2cg_ft_s42.pt --stop-on-noop {DEPLOY} --pde heat2d_complexgeometry --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_h2cg_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_h2cg_ft_s42.pt {DEPLOY} --pde heat2d_complexgeometry --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_h2cg_ft_s42"
     }
    ]
   },
@@ -5807,7 +6817,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2vc_seed1.pt --stop-on-noop {DEPLOY} --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2vc_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfh2vc_seed1.pt {DEPLOY} --pde heat2d_varyingcoef --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_h2vc_ag"
     }
    ]
   },
@@ -5891,7 +6901,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_h2vc_ft_s42.pt --stop-on-noop {DEPLOY} --pde heat2d_varyingcoef --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_h2vc_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_h2vc_ft_s42.pt {DEPLOY} --pde heat2d_varyingcoef --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_h2vc_ft_s42"
     }
    ]
   },
@@ -5909,7 +6919,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfhinv_seed1.pt --stop-on-noop {DEPLOY} --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_hinv_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfhinv_seed1.pt {DEPLOY} --pde heatinv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_hinv_ag"
     }
    ]
   },
@@ -5993,7 +7003,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_hinv_ft_s42.pt --stop-on-noop {DEPLOY} --pde heatinv --plain-fnn --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_hinv_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_hinv_ft_s42.pt {DEPLOY} --pde heatinv --plain-fnn --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_hinv_ft_s42"
     }
    ]
   },
@@ -6011,7 +7021,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfhnd_seed1.pt --stop-on-noop {DEPLOY} --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_hnd_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfhnd_seed1.pt {DEPLOY} --pde heatnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_hnd_ag"
     }
    ]
   },
@@ -6095,7 +7105,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_hnd_ft_s42.pt --stop-on-noop {DEPLOY} --pde heatnd --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_hnd_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_hnd_ft_s42.pt {DEPLOY} --pde heatnd --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_hnd_ft_s42"
     }
    ]
   },
@@ -6113,7 +7123,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfnsbs_seed1.pt --stop-on-noop {DEPLOY} --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_nsbs_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfnsbs_seed1.pt {DEPLOY} --pde ns2d_backstep --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_nsbs_ag"
     }
    ]
   },
@@ -6197,7 +7207,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_nsbs_ft_s42.pt --stop-on-noop {DEPLOY} --pde ns2d_backstep --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_nsbs_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_nsbs_ft_s42.pt {DEPLOY} --pde ns2d_backstep --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_nsbs_ft_s42"
     }
    ]
   },
@@ -6215,7 +7225,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfp2c_seed1.pt --stop-on-noop {DEPLOY} --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_p2c_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfp2c_seed1.pt {DEPLOY} --pde poisson2d_classic --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_p2c_ag"
     }
    ]
   },
@@ -6299,7 +7309,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_p2c_ft_s42.pt --stop-on-noop {DEPLOY} --pde poisson2d_classic --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_p2c_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_p2c_ft_s42.pt {DEPLOY} --pde poisson2d_classic --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_p2c_ft_s42"
     }
    ]
   },
@@ -6317,7 +7327,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfp3d_seed1.pt --stop-on-noop {DEPLOY} --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_p3d_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfp3d_seed1.pt {DEPLOY} --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_p3d_ag"
     }
    ]
   },
@@ -6401,7 +7411,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_p3d_ft_s42.pt --stop-on-noop {DEPLOY} --pde poisson3d_complexgeometry --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_p3d_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_p3d_ft_s42.pt {DEPLOY} --pde poisson3d_complexgeometry --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_p3d_ft_s42"
     }
    ]
   },
@@ -6419,7 +7429,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpinv_seed1.pt --stop-on-noop {DEPLOY} --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pinv_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpinv_seed1.pt {DEPLOY} --pde poissoninv --plain-fnn --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pinv_ag"
     }
    ]
   },
@@ -6503,7 +7513,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_pinv_ft_s42.pt --stop-on-noop {DEPLOY} --pde poissoninv --plain-fnn --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_pinv_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_pinv_ft_s42.pt {DEPLOY} --pde poissoninv --plain-fnn --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_pinv_ft_s42"
     }
    ]
   },
@@ -6521,7 +7531,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpnd_seed1.pt --stop-on-noop {DEPLOY} --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pnd_ag"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdlog_multi_xfpnd_seed1.pt {DEPLOY} --pde poissonnd --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3f_pnd_ag"
     }
    ]
   },
@@ -6605,7 +7615,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_q_t3f_pnd_ft_s42.pt --stop-on-noop {DEPLOY} --pde poissonnd --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_pnd_ft_s42"
+     "args": "--policy agent --model-file agent_q_t3f_pnd_ft_s42.pt {DEPLOY} --pde poissonnd --budget 7000 --hours 7.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_q_t3f_pnd_ft_s42"
     }
    ]
   }

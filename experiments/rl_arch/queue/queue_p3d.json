@@ -80,35 +80,35 @@
    "id": "E1",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "порог по Q и страж вместе"
   },
   {
    "id": "E2",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "комитет агентов со стражем"
   },
   {
    "id": "E3",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --state-every 3 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-file {BEST_AGENT} --state-every 3 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "карты раз в три действия и страж: дешёвое развёртывание с защитой"
   },
   {
    "id": "E4",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy script --script {GUIDE} --script-tail agent --model-file {BEST_AGENT} --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy script --script {GUIDE} --script-tail agent --model-file {BEST_AGENT} --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "проводник как начало цепочки, агент как продолжение (без обучения)"
   },
   {
    "id": "E5",
    "kind": "eval",
    "script": "experiments/rl_arch/online_eval_env.py",
-   "args": "--policy agent --model-file {BEST_AGENT} --stop-on-noop --keep-opt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "args": "--policy agent --model-file {BEST_AGENT} --keep-opt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
    "note": "готовый агент в среде без сбросов: дешёвая проба до обучения K2"
   },
   {
@@ -370,6 +370,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t1ref-s42-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1ref_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1ref-s42-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1ref_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1ref_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t1ref-s43",
    "wave": 1,
    "group": "base",
@@ -412,6 +444,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1ref_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1ref-s43-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1ref_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1ref-s43-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 1 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1ref_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1ref_s43"
     }
    ]
   },
@@ -462,6 +526,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t1fixd-s42-na",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1fixd_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1fixd_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1fixd_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1fixd-s42-nb",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1fixd_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1fixd_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1fixd_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t1fixd-s43",
    "wave": 1,
    "group": "G04",
@@ -504,6 +600,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1fixd_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1fixd-s43-na",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1fixd_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1fixd_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1fixd_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1fixd-s43-nb",
+   "wave": 1,
+   "group": "G04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1fixd_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: исправленный офлайн-буфер, единая награда-разность, награда первого шага",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1fixd_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1fixd_s43"
     }
    ]
   },
@@ -554,6 +682,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t1al-s42-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1al_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1al_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1al-s42-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1al_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1al_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t1al-s43",
    "wave": 1,
    "group": "G03",
@@ -596,6 +756,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1al_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1al-s43-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1al_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1al_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1al-s43-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + эпизод по бюджету 7000 эпох как на оценке, без допуска, дисконт 0.99",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1al_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1al_s43"
     }
    ]
   },
@@ -646,6 +838,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t1alnb-s42-na",
+   "wave": 1,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1alnb_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alnb_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1alnb_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1alnb-s42-nb",
+   "wave": 1,
+   "group": "G27",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1alnb_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: абляция: согласованный конвейер без границ ценности",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alnb_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1alnb_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t1alc-s42",
    "wave": 1,
    "group": "G06",
@@ -688,6 +912,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alc_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1alc-s42-na",
+   "wave": 1,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1alc_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alc_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1alc_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1alc-s42-nb",
+   "wave": 1,
+   "group": "G06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1alc_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + контекст без истинной ошибки: шаг, доля бюджета, прошлое действие",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alc_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1alc_s42"
     }
    ]
   },
@@ -738,6 +994,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t1alm-s42-na",
+   "wave": 1,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1alm_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alm_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t1alm_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t1alm-s42-nb",
+   "wave": 1,
+   "group": "G02",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t1alm_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: то же + запрет заведомо вредных и пустых действий (Adam 1e-2, PSO с шагом)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t1alm_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t1alm_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t2ref-s42",
    "wave": 1,
    "group": "base",
@@ -784,6 +1072,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t2ref-s42-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2ref_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t2ref_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t2ref-s42-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2ref_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2ref_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t2ref_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t2ref-s43",
    "wave": 1,
    "group": "base",
@@ -826,6 +1146,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2ref_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t2ref-s43-na",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2ref_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t2ref_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t2ref-s43-nb",
+   "wave": 1,
+   "group": "base",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2ref_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: конфигурация лидера трека 2 без изменений",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2ref_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t2ref_s43"
     }
    ]
   },
@@ -880,6 +1232,38 @@
    ]
   },
   {
+   "id": "p3d-w1-t2al-s42-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2al_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t2al_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t2al-s42-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2al_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2al_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t2al_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w1-t2al-s43",
    "wave": 1,
    "group": "G03",
@@ -926,6 +1310,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2al_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t2al-s43-na",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2al_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t2al_s43"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-t2al-s43-nb",
+   "wave": 1,
+   "group": "G03",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t2al_s43.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: трек 2: тёплый старт переобучен на исправленном буфере, эпизод по бюджету",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t2al_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t2al_s43"
     }
    ]
   },
@@ -1020,6 +1436,60 @@
    ]
   },
   {
+   "id": "p3d-w1-offixn-m1",
+   "wave": 1,
+   "group": "G04",
+   "hours": 11.0,
+   "needs": [],
+   "note": "чистый офлайн на исправленном буфере, оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --model-tag n"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_n_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag ofn_fixd_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-offixn-mask",
+   "wave": 1,
+   "group": "G02",
+   "hours": 11.0,
+   "needs": [],
+   "note": "то же с маской на оценке, без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --model-tag n"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_n_seed1.pt --mask adam:0.01,pso:0.001,pso:0.0001 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag ofn_fixd_m1_mask"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w1-ofstatn",
+   "wave": 1,
+   "group": "G06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "кодировщик на статистиках карт, без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --save-model --seeds 1 --model-tag n"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_poisson3d_n_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag ofn_stat_m1"
+    }
+   ]
+  },
+  {
    "id": "p3d-w2-jsrl-s42",
    "wave": 2,
    "group": "G02",
@@ -1045,7 +1515,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_jsrl_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_jsrl_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_jsrl_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_jsrl_s42"
     }
    ]
   },
@@ -1061,7 +1531,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_jsrl_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_jsrl_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_jsrl_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_jsrl_s42"
     }
    ]
   },
@@ -1091,7 +1561,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_bonus_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_bonus_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_bonus_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_bonus_s42"
     }
    ]
   },
@@ -1107,7 +1577,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_bonus_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_bonus_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_bonus_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_bonus_s42"
     }
    ]
   },
@@ -1137,7 +1607,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_geps_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_geps_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_geps_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_geps_s42"
     }
    ]
   },
@@ -1153,7 +1623,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_geps_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_geps_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_geps_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_geps_s42"
     }
    ]
   },
@@ -1183,7 +1653,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_nstep_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_nstep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_nstep_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_nstep_s42"
     }
    ]
   },
@@ -1199,7 +1669,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_nstep_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_nstep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_nstep_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_nstep_s42"
     }
    ]
   },
@@ -1229,7 +1699,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd2_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_utd2_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd2_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_utd2_s42"
     }
    ]
   },
@@ -1245,7 +1715,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd2_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_utd2_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd2_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_utd2_s42"
     }
    ]
   },
@@ -1275,7 +1745,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd20_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_utd20_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd20_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_utd20_s42"
     }
    ]
   },
@@ -1291,7 +1761,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd20_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_utd20_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_utd20_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_utd20_s42"
     }
    ]
   },
@@ -1321,7 +1791,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_g1_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_g1_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_g1_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_g1_s42"
     }
    ]
   },
@@ -1337,7 +1807,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_g1_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_g1_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_g1_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_g1_s42"
     }
    ]
   },
@@ -1367,7 +1837,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_boot_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_boot_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_boot_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_boot_s42"
     }
    ]
   },
@@ -1383,7 +1853,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_boot_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_boot_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_boot_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_boot_s42"
     }
    ]
   },
@@ -1413,7 +1883,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_full_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_full_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_full_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_full_s42"
     }
    ]
   },
@@ -1429,7 +1899,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_full_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_full_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_full_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_full_s42"
     }
    ]
   },
@@ -1459,7 +1929,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_hlg_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_hlg_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_hlg_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_hlg_s42"
     }
    ]
   },
@@ -1475,7 +1945,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_hlg_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_hlg_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_hlg_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_hlg_s42"
     }
    ]
   },
@@ -1505,7 +1975,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_fact_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_fact_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_fact_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_fact_s42"
     }
    ]
   },
@@ -1521,7 +1991,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_fact_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_fact_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_fact_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_fact_s42"
     }
    ]
   },
@@ -1551,7 +2021,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_stat_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_stat_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_stat_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_stat_s42"
     }
    ]
   },
@@ -1567,7 +2037,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_stat_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_stat_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_stat_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_stat_s42"
     }
    ]
   },
@@ -1597,7 +2067,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_frz_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_frz_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_frz_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_frz_s42"
     }
    ]
   },
@@ -1613,7 +2083,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_frz_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_frz_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_frz_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_frz_s42"
     }
    ]
   },
@@ -1643,7 +2113,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_keep_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_keep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_keep_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d2_keep_s42"
     }
    ]
   },
@@ -1659,7 +2129,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_keep_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_keep_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d2_keep_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d2_keep_s42"
     }
    ]
   },
@@ -1673,7 +2143,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_vote"
+     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_vote"
     }
    ]
   },
@@ -1687,7 +2157,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_vote"
+     "args": "--policy agent --model-files {COMMITTEE} --ensemble vote --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_vote"
     }
    ]
   },
@@ -1701,7 +2171,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_gbon"
+     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_gbon"
     }
    ]
   },
@@ -1715,7 +2185,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_gbon"
+     "args": "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_gbon"
     }
    ]
   },
@@ -1733,7 +2203,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_ooo_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_ooo"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_ooo_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_ooo"
     }
    ]
   },
@@ -1763,7 +2233,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_distpbrs_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_distpbrs_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_distpbrs_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_distpbrs_s42"
     }
    ]
   },
@@ -1779,7 +2249,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_distpbrs_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_distpbrs_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_distpbrs_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_distpbrs_s42"
     }
    ]
   },
@@ -1809,7 +2279,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_rean_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_rean_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_rean_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_rean_s42"
     }
    ]
   },
@@ -1825,7 +2295,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_rean_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_rean_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_rean_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_rean_s42"
     }
    ]
   },
@@ -1855,7 +2325,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_per_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_per_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_per_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_per_s42"
     }
    ]
   },
@@ -1871,7 +2341,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_per_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_per_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_per_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_per_s42"
     }
    ]
   },
@@ -1901,7 +2371,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_sil_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_sil_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_sil_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_sil_s42"
     }
    ]
   },
@@ -1917,7 +2387,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_sil_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_sil_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_sil_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_sil_s42"
     }
    ]
   },
@@ -1947,7 +2417,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_goexp_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_goexp_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_goexp_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_goexp_s42"
     }
    ]
   },
@@ -1963,7 +2433,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_goexp_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_goexp_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_goexp_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_goexp_s42"
     }
    ]
   },
@@ -1993,7 +2463,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_reset_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_reset_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_reset_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_reset_s42"
     }
    ]
   },
@@ -2009,7 +2479,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_reset_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_reset_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_reset_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_reset_s42"
     }
    ]
   },
@@ -2039,7 +2509,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_redo_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_redo_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_redo_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_redo_s42"
     }
    ]
   },
@@ -2055,7 +2525,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_redo_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_redo_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_redo_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_redo_s42"
     }
    ]
   },
@@ -2085,7 +2555,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_aug_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_aug_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_aug_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_aug_s42"
     }
    ]
   },
@@ -2101,7 +2571,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_aug_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_aug_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_aug_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_aug_s42"
     }
    ]
   },
@@ -2131,7 +2601,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_spr_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_spr_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_spr_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_spr_s42"
     }
    ]
   },
@@ -2147,7 +2617,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_spr_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_spr_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_spr_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_spr_s42"
     }
    ]
   },
@@ -2177,7 +2647,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_munch_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_munch_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_munch_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d3_munch_s42"
     }
    ]
   },
@@ -2193,7 +2663,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_munch_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_munch_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d3_munch_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d3_munch_s42"
     }
    ]
   },
@@ -2223,7 +2693,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_base_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_base_s42"
     }
    ]
   },
@@ -2239,7 +2709,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_base_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_base_s42"
     }
    ]
   },
@@ -2269,7 +2739,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_base_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_base_s43"
     }
    ]
   },
@@ -2285,7 +2755,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_base_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_base_s43"
     }
    ]
   },
@@ -2301,7 +2771,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag e_qp3d4_base_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_base_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56,57,58,59,60,61 --tag e_qp3d4_base_s42"
     }
    ]
   },
@@ -2331,7 +2801,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_ca_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_ca_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_ca_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_ca_s42"
     }
    ]
   },
@@ -2347,7 +2817,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_ca_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_ca_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_ca_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_ca_s42"
     }
    ]
   },
@@ -2377,7 +2847,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cb_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_cb_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cb_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_cb_s42"
     }
    ]
   },
@@ -2393,7 +2863,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cb_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_cb_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cb_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_cb_s42"
     }
    ]
   },
@@ -2423,7 +2893,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cc_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_cc_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cc_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d4_cc_s42"
     }
    ]
   },
@@ -2439,7 +2909,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cc_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_cc_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d4_cc_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d4_cc_s42"
     }
    ]
   },
@@ -2497,7 +2967,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d5_final_s42"
     }
    ]
   },
@@ -2513,7 +2983,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d5_final_s42"
     }
    ]
   },
@@ -2529,7 +2999,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_qp3d5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_qp3d5_final_s42"
     }
    ]
   },
@@ -2545,7 +3015,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_qp3d5_final_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_qp3d5_final_s42"
     }
    ]
   },
@@ -2575,7 +3045,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d5_final_s43"
     }
    ]
   },
@@ -2591,7 +3061,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d5_final_s43"
     }
    ]
   },
@@ -2607,7 +3077,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_qp3d5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 52,53,54,55,56 --tag e_qp3d5_final_s43"
     }
    ]
   },
@@ -2623,7 +3093,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_qp3d5_final_s43"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s43.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 57,58,59,60,61 --tag e_qp3d5_final_s43"
     }
    ]
   },
@@ -2639,7 +3109,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_guard"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_guard"
     }
    ]
   },
@@ -2655,7 +3125,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_gbon"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_gbon"
     }
    ]
   },
@@ -2671,7 +3141,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_gg"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --guide {GUIDE} --guide-bonus 0.02 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_gg"
     }
    ]
   },
@@ -2687,7 +3157,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --stop-on-noop --state-every 3 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_ev3"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d5_final_s42.pt --state-every 3 --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d5_final_ev3"
     }
    ]
   },
@@ -3190,6 +3660,42 @@
    ]
   },
   {
+   "id": "p3d-w12-ofn-full-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "контроль: полные карты, без контекста; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --seeds 1 --model-tag fulln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_fulln_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_fulln_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-full-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "контроль: полные карты, без контекста; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --seeds 2 --model-tag fulln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_fulln_seed2.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_fulln_m2"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-of-ctx-m1",
    "wave": 12,
    "group": "H06",
@@ -3222,6 +3728,42 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_ctx_seed2.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3s_ctx_m2"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-ctx-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "полные карты и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 1 --model-tag ctxn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_ctxn_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_ctxn_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-ctx-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "полные карты и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 2 --model-tag ctxn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_ctxn_seed2.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_ctxn_m2"
     }
    ]
   },
@@ -3262,6 +3804,42 @@
    ]
   },
   {
+   "id": "p3d-w12-ofn-lvl-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только уровень потерь и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 1 --model-tag lvln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_lvln_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_lvln_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-lvl-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только уровень потерь и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 2 --model-tag lvln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_lvln_seed2.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_lvln_m2"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-of-shape",
    "wave": 12,
    "group": "H06",
@@ -3276,6 +3854,24 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_shape_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_shape_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-shape",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "только форма карт (уровень убран) и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shape --seeds 1 --model-tag shapen"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_shapen_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_shapen_m1"
     }
    ]
   },
@@ -3316,6 +3912,42 @@
    ]
   },
   {
+   "id": "p3d-w12-ofn-shuf-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "перемешанные пиксели и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shuffle --seeds 1 --model-tag shufn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_shufn_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_shufn_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-shuf-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "перемешанные пиксели и контекст времени; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode shuffle --seeds 2 --model-tag shufn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_shufn_seed2.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_shufn_m2"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-of-blind-m1",
    "wave": 12,
    "group": "H06",
@@ -3352,6 +3984,42 @@
    ]
   },
   {
+   "id": "p3d-w12-ofn-blind-m1",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, только время: политика без обратной связи (выученная статическая цепочка); оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 1 --model-tag blindn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_blindn_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_blindn_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-blind-m2",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, только время: политика без обратной связи (выученная статическая цепочка); оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 2 --model-tag blindn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_blindn_seed2.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3sn_blindn_m2"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-of-blinde",
    "wave": 12,
    "group": "H06",
@@ -3366,6 +4034,24 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_blinde_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_blinde_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-blinde",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "без карт, время и истинная ошибка (привилегированный верхний ориентир дешёвого состояния); оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --ctx-err --state-mode blind --seeds 1 --model-tag blinden"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_blinden_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_blinden_m1"
     }
    ]
   },
@@ -3388,6 +4074,24 @@
    ]
   },
   {
+   "id": "p3d-w12-ofn-slvl",
+   "wave": 12,
+   "group": "H06",
+   "hours": 11.0,
+   "needs": [],
+   "note": "малая сеть на скалярах: уровень потерь и время; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode level --seeds 1 --model-tag slvln"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_poisson3d_slvln_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_slvln_m1"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-of-sblind",
    "wave": 12,
    "group": "H06",
@@ -3402,6 +4106,24 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_poisson3d_sblind_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_sblind_m1"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-ofn-sblind",
+   "wave": 12,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [],
+   "note": "малая сеть на скалярах: только время; оценка без остановки на пустом действии",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant stat_dqn --subdir poisson3d_complexgeometry --chain-fix --reward-form delta --init-err 0.702 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --state-mode blind --seeds 1 --model-tag sblindn"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_stat_dqn_cfix_rdelta_vb_poisson3d_sblindn_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_sblindn_m1"
     }
    ]
   },
@@ -3452,6 +4174,38 @@
    ]
   },
   {
+   "id": "p3d-w12-on-blind-na",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_blind_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on-blind-nb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: без карт: только время",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_blind_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on_blind_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-on-lvl",
    "wave": 12,
    "group": "H06",
@@ -3494,6 +4248,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_lvl_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag e_qp3d_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on-lvl-na",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on_lvl_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_lvl_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on_lvl_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on-lvl-nb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on_lvl_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только уровень потерь",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_lvl_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on_lvl_s42"
     }
    ]
   },
@@ -3544,6 +4330,38 @@
    ]
   },
   {
+   "id": "p3d-w12-on-shuf-na",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on_shuf_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_shuf_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on-shuf-nb",
+   "wave": 12,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on_shuf_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: перемешанные пиксели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on_shuf_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on_shuf_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-on2-full",
    "wave": 12,
    "group": "H04",
@@ -3570,6 +4388,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_full_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3on2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-full-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_full_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_full_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on2_full_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-full-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_full_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_full_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on2_full_s42"
     }
    ]
   },
@@ -3604,6 +4454,38 @@
    ]
   },
   {
+   "id": "p3d-w12-on2-loss-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_loss_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_loss_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-loss-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_loss_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_loss_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-on2-blind",
    "wave": 12,
    "group": "H04",
@@ -3630,6 +4512,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_blind_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-blind-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_blind_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-blind-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_blind_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_blind_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on2_blind_s42"
     }
    ]
   },
@@ -3664,6 +4578,38 @@
    ]
   },
   {
+   "id": "p3d-w12-on2-fullk-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_fullk_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-fullk-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_fullk_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w12-on2-lossk",
    "wave": 12,
    "group": "H04",
@@ -3690,6 +4636,38 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_lossk_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-lossk-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_lossk_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-lossk-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_lossk_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on2_lossk_s42"
     }
    ]
   },
@@ -3724,6 +4702,38 @@
    ]
   },
   {
+   "id": "p3d-w12-on2-fine-na",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_fine_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qp3d_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
+   "id": "p3d-w12-on2-fine-nb",
+   "wave": 12,
+   "group": "H04",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qp3d_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка без остановки на пустом действии: мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3on2_fine_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qp3d_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
    "id": "p3d-w13-of-g0",
    "wave": 13,
    "group": "H08",
@@ -3737,7 +4747,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_g0_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_g0_m1"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_g0_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_g0_m1"
     }
    ]
   },
@@ -3767,7 +4777,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3g0_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3g0_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3g0_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3g0_s42"
     }
    ]
   },
@@ -3785,7 +4795,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_qp3d_t3h2_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 8.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d_t3h2_s42"
+     "args": "--policy agent --model-file agent_qp3d_t3h2_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 8.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d_t3h2_s42"
     }
    ]
   },
@@ -3803,7 +4813,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file agent_qp3d_t3h5_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 5.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d_t3h5_s42"
+     "args": "--policy agent --model-file agent_qp3d_t3h5_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 5.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag e_qp3d_t3h5_s42"
     }
    ]
   },
@@ -3821,7 +4831,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_buf9_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_buf9_m1"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_buf9_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_buf9_m1"
     }
    ]
   },
@@ -3839,7 +4849,7 @@
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_buf28_seed1.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3s_buf28_m1"
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_poisson3d_buf28_seed1.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3sn_buf28_m1"
     }
    ]
   },
@@ -3973,7 +4983,7 @@
    "steps": [
     {
      "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3lofi_s42.pt --stop-on-noop --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3lofi_s42"
+     "args": "--policy agent --model-file rl_arch/agents_online/qp3d_t3lofi_s42.pt --pde poisson3d_complexgeometry --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qp3d_t3lofi_s42"
     }
    ]
   }

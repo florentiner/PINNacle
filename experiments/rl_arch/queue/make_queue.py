@@ -239,7 +239,19 @@ for arm, (group, pre, targs, note) in arms.items():
                 [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
                         + ev_common(f"e_{tag}", sd))],
                 10.5, needs=[f"rl_arch/agents_online/{tag}.pt"], note="оценка: " + note)
+        for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
+            add(f"w1-{arm}-s{s}-n{suf}", 1, group,
+                [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
+                        + ev_common(f"n_{tag}", sd))],
+                10.5, needs=[f"rl_arch/agents_online/{tag}.pt"],
+                note="оценка без остановки на пустом действии: " + note)
 
+# Оценка без остановки на пустом действии (без --stop-on-noop). Агенты этого проекта учились на
+# эпизоде по бюджету: в обучении PSO с нулевым шагом не заканчивал эпизод, а это случайный поиск
+# вокруг весов, после которого агент продолжал. Остановка на нём на оценке обрывала цепочку
+# (pb2d, 3 октября: t3on_shuf — 1.02 на всех сидах после одного действия на 100 эпох). Прежние
+# задачи с остановкой оставлены как были (их строки уже сняты); остановка сохранена только у
+# лидеров треков 1-2 и агента qr, чтобы совпасть с их прежними оценками и вмешательствами.
 # чисто офлайновый режим на исправленном буфере: обучение минуты, затем оценка
 OF_FIX = (f"--variant convnext_dqn --subdir {SUBDIR} --chain-fix --reward-form delta "
           f"--init-err {INIT_ERR} --value-bound --gamma 0.99 --episode-budget {BUDGET} --save-model")
@@ -260,6 +272,21 @@ add("w1-offix-mask", 1, "G02",
      (EVAL, f"--policy agent --model-file {OF_MODEL.format(m=1)} --stop-on-noop "
             "--mask adam:0.01,pso:0.001,pso:0.0001 " + ev_common("of_fixd_m1_mask", seeds(42, 51)))],
     11.0, note="тот же офлайновый агент, на оценке запрещены Adam 1e-2 и PSO с шагом")
+add("w1-offixn-m1", 1, "G04",
+    [(OFFLINE, f"{OF_FIX} --seeds 1 --model-tag n"),
+     (EVAL, f"--policy agent --model-file {off_model('convnext_dqn', 'n')} "
+            + ev_common("ofn_fixd_m1", seeds(42, 51)))],
+    11.0, note="чистый офлайн на исправленном буфере, оценка без остановки на пустом действии")
+add("w1-offixn-mask", 1, "G02",
+    [(OFFLINE, f"{OF_FIX} --seeds 1 --model-tag n"),
+     (EVAL, f"--policy agent --model-file {off_model('convnext_dqn', 'n')} "
+            "--mask adam:0.01,pso:0.001,pso:0.0001 " + ev_common("ofn_fixd_m1_mask", seeds(42, 51)))],
+    11.0, note="то же с маской на оценке, без остановки на пустом действии")
+add("w1-ofstatn", 1, "G06",
+    [(OFFLINE, OF_FIX.replace("--variant convnext_dqn", "--variant stat_dqn") + " --seeds 1 --model-tag n"),
+     (EVAL, f"--policy agent --model-file {off_model('stat_dqn', 'n')} "
+            + ev_common("ofn_stat_m1", seeds(42, 51)))],
+    11.0, note="кодировщик на статистиках карт, без остановки на пустом действии")
 if NS2D:
   add("w1-ofref-more", 1, "base",
     [(EVAL, "--policy agent --model-file rl_arch/models/convnext_dqn_ns2d_seed1.pt "
@@ -299,28 +326,28 @@ for name, (group, targs, note) in W2.items():
     add(f"w2-{name}-s42", 2, group, [(TRAIN, f"{targs} --seed 42 --tag {tag}")], 11.8, note=note)
     for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
         add(f"w2-{name}-s42-e{suf}", 2, group,
-            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
                     + ev_common(f"e_{tag}", sd))],
             10.5, needs=[f"rl_arch/agents_online/{tag}.pt"], note="оценка: " + note)
 # без нового обучения: комитет, откат к эвристике при оценке, офлайновое переобучение
 add("w2-vote-ea", 2, "G12",
-    [(EVAL, "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop "
+    [(EVAL, "--policy agent --model-files {COMMITTEE} --ensemble vote "
             + ev_common("e_vote", seeds(42, 46)))], 10.5,
     note="комитет замороженных агентов (голосование)")
 add("w2-vote-eb", 2, "G12",
-    [(EVAL, "--policy agent --model-files {COMMITTEE} --ensemble vote --stop-on-noop "
+    [(EVAL, "--policy agent --model-files {COMMITTEE} --ensemble vote "
             + ev_common("e_vote", seeds(47, 51)))], 10.5)
 add("w2-gbon-ea", 2, "G22",
     [(EVAL, "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 "
-            "--stop-on-noop " + ev_common("e_gbon", seeds(42, 46)))], 10.5,
+            "" + ev_common("e_gbon", seeds(42, 46)))], 10.5,
     note="при оценке агент отходит от эвристики только при выигрыше по Q больше 0.02")
 add("w2-gbon-eb", 2, "G22",
     [(EVAL, "--policy agent --model-file {BEST_AGENT} --guide {GUIDE} --guide-bonus 0.02 "
-            "--stop-on-noop " + ev_common("e_gbon", seeds(47, 51)))], 10.5)
+            "" + ev_common("e_gbon", seeds(47, 51)))], 10.5)
 add("w2-ooo", 2, "G12",
     [(OFFLINE, f"{OF_FIX} --seeds 1 --extra-buffers {{BUFFERS}} --model-tag ooo"),
      (EVAL, f"--policy agent --model-file {off_model('convnext_dqn', 'ooo')} "
-            "--stop-on-noop " + ev_common("e_ooo", seeds(42, 51)))], 11.0,
+            "" + ev_common("e_ooo", seeds(42, 51)))], 11.0,
     note="OOO: итоговая политика переобучается офлайн на буфере + всех онлайновых данных волны 1")
 
 # ---------------------------------------------------------------- волна 3
@@ -345,7 +372,7 @@ for name, (group, targs, note) in W3.items():
         note="повтор на исправленном конвейере: " + note)
     for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
         add(f"w3-{name}-s42-e{suf}", 3, group,
-            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
                     + ev_common(f"e_{tag}", sd))],
             10.5, needs=[f"rl_arch/agents_online/{tag}.pt"])
 
@@ -360,11 +387,11 @@ for s_ in (42, 43):
         note="объединённая база волны 1: все флаги с индивидуальным выигрышем вместе")
     for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
         add(f"w4-base-s{s_}-e{suf}", 4, "base",
-            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
                     + ev_common(f"e_{tag}", sd))], 10.5,
             needs=[f"rl_arch/agents_online/{tag}.pt"], note="оценка объединённой базы")
 add("w4-base-s42-ec", 4, "base",
-    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}4_base_s42.pt --stop-on-noop "
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}4_base_s42.pt "
             + ev_common(f"e_{Q}4_base_s42", seeds(52, 61)))], 10.5,
     needs=[f"rl_arch/agents_online/{Q}4_base_s42.pt"], note="сиды 52-61: двадцать сидов у финалиста волны 1")
 # слоты комбинаций: до трёх наборов флагов обучения и до двух наборов флагов оценки, собранных
@@ -376,7 +403,7 @@ for c_ in "abc":
         note=f"комбинация {c_.upper()}: набор флагов обучения из decisions.json (COMBO_{c_.upper()})")
     for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
         add(f"w4-c{c_}-s42-e{suf}", 4, "base",
-            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
                     + ev_common(f"e_{tag}", sd))], 10.5,
             needs=[f"rl_arch/agents_online/{tag}.pt"], note=f"оценка комбинации {c_.upper()}")
 for c_ in "ab":
@@ -390,25 +417,25 @@ for s_ in (42, 43):
         note="итоговая конфигурация: база плюс победители волн 2, 3, 12, 13")
     for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51)), ("c", seeds(52, 56)), ("d", seeds(57, 61))):
         add(f"w5-final-s{s_}-e{suf}", 5, "base",
-            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
                     + ev_common(f"e_{tag}", sd))], 10.5,
             needs=[f"rl_arch/agents_online/{tag}.pt"], note="оценка итоговой конфигурации, 20 сидов")
 add("w5-final-guard", 5, "H16",
-    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --stop-on-noop "
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt "
             "--guard-rollback 1.0 --guard-fallback LBFGS:1:500 " + ev_common(f"e_{Q}5_final_guard", seeds(42, 51)))],
     10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"], note="итоговая конфигурация со стражем")
 add("w5-final-gbon", 5, "H16",
     [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --guide {{GUIDE}} --guide-bonus 0.02 "
-            "--stop-on-noop " + ev_common(f"e_{Q}5_final_gbon", seeds(42, 51)))],
+            "" + ev_common(f"e_{Q}5_final_gbon", seeds(42, 51)))],
     10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"], note="итоговая конфигурация с порогом по Q для отхода от проводника")
 add("w5-final-gg", 5, "H16",
     [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --guide {{GUIDE}} --guide-bonus 0.02 "
-            "--stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500 "
+            "--guard-rollback 1.0 --guard-fallback LBFGS:1:500 "
             + ev_common(f"e_{Q}5_final_gg", seeds(42, 51)))],
     10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"],
     note="итоговая конфигурация: порог по Q и страж вместе (гарантия «не хуже проводника» с двух сторон)")
 add("w5-final-ev3", 5, "H04",
-    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --stop-on-noop --state-every 3 "
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{Q}5_final_s42.pt --state-every 3 "
             + ev_common(f"e_{Q}5_final_ev3", seeds(42, 51)))],
     10.5, needs=[f"rl_arch/agents_online/{Q}5_final_s42.pt"],
     note="итоговая конфигурация с картами после каждого третьего действия; не нужна, если состояние без карт")
@@ -567,33 +594,41 @@ T3_OF = (f"--subdir {SUBDIR} --chain-fix --reward-form delta --init-err {INIT_ER
          f"--gamma 0.99 --episode-budget {BUDGET} --ctx-kmax 70 --save-model")
 
 
-def t3off(jid, variant, flags, mtag, note, wave=12, group="H06", model_seeds=(1,), sd=S10, hours=11.0):
+def t3off(jid, variant, flags, mtag, note, wave=12, group="H06", model_seeds=(1,), sd=S10, hours=11.0,
+          stop=True):
     for m in model_seeds:
         suf = "" if len(model_seeds) == 1 else f"-m{m}"
         model = off_model(variant, mtag, m)
         add(f"{jid}{suf}", wave, group,
             [(OFFLINE, f"--variant {variant} {T3_OF} {flags} --seeds {m} --model-tag {mtag}"),
-             (EVAL, f"--policy agent --model-file {model} --stop-on-noop "
-                    + t3ev(f"t3s_{mtag}_m{m}", sd if m == 1 else S5))],
+             (EVAL, f"--policy agent --model-file {model} {'--stop-on-noop ' if stop else ''}"
+                    + t3ev(f"{'t3s' if stop else 't3sn'}_{mtag}_m{m}", sd if m == 1 else S5))],
             hours, note=note)
 
 
-t3off("w12-of-full", "convnext_dqn", "", "full", "контроль: полные карты, без контекста", model_seeds=(1, 2))
-t3off("w12-of-ctx", "convnext_dqn", "--scalar-ctx", "ctx", "полные карты и контекст времени", model_seeds=(1, 2))
-t3off("w12-of-lvl", "convnext_dqn", "--scalar-ctx --state-mode level", "lvl",
+def t3offn(jid, variant, flags, mtag, note, **kw):
+    """Прежний арм лестницы и его пара без остановки на пустом действии (jid -> jid с 'ofn')."""
+    t3off(jid, variant, flags, mtag, note, **kw)
+    t3off(jid.replace("-of-", "-ofn-"), variant, flags, mtag + "n",
+          note + "; оценка без остановки на пустом действии", stop=False, **kw)
+
+
+t3offn("w12-of-full", "convnext_dqn", "", "full", "контроль: полные карты, без контекста", model_seeds=(1, 2))
+t3offn("w12-of-ctx", "convnext_dqn", "--scalar-ctx", "ctx", "полные карты и контекст времени", model_seeds=(1, 2))
+t3offn("w12-of-lvl", "convnext_dqn", "--scalar-ctx --state-mode level", "lvl",
       "только уровень потерь и контекст времени", model_seeds=(1, 2))
-t3off("w12-of-shape", "convnext_dqn", "--scalar-ctx --state-mode shape", "shape",
+t3offn("w12-of-shape", "convnext_dqn", "--scalar-ctx --state-mode shape", "shape",
       "только форма карт (уровень убран) и контекст времени")
-t3off("w12-of-shuf", "convnext_dqn", "--scalar-ctx --state-mode shuffle", "shuf",
+t3offn("w12-of-shuf", "convnext_dqn", "--scalar-ctx --state-mode shuffle", "shuf",
       "перемешанные пиксели и контекст времени", model_seeds=(1, 2))
-t3off("w12-of-blind", "convnext_dqn", "--scalar-ctx --state-mode blind", "blind",
+t3offn("w12-of-blind", "convnext_dqn", "--scalar-ctx --state-mode blind", "blind",
       "без карт, только время: политика без обратной связи (выученная статическая цепочка)",
       model_seeds=(1, 2), hours=6.0)
-t3off("w12-of-blinde", "convnext_dqn", "--scalar-ctx --ctx-err --state-mode blind", "blinde",
+t3offn("w12-of-blinde", "convnext_dqn", "--scalar-ctx --ctx-err --state-mode blind", "blinde",
       "без карт, время и истинная ошибка (привилегированный верхний ориентир дешёвого состояния)", hours=6.0)
-t3off("w12-of-slvl", "stat_dqn", "--scalar-ctx --state-mode level", "slvl",
+t3offn("w12-of-slvl", "stat_dqn", "--scalar-ctx --state-mode level", "slvl",
       "малая сеть на скалярах: уровень потерь и время")
-t3off("w12-of-sblind", "stat_dqn", "--scalar-ctx --state-mode blind", "sblind",
+t3offn("w12-of-sblind", "stat_dqn", "--scalar-ctx --state-mode blind", "sblind",
       "малая сеть на скалярах: только время", hours=6.0)
 # дистилляция лидера в дешёвое состояние: нужен ли ему ландшафт при развёртывании
 for name, variant, flags, note in ((
@@ -622,6 +657,11 @@ for name, flags, note in (("blind", "--state-mode blind", "без карт: то
             [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
                     + t3ev(f"e_{tag}", sd))],
             10.5 if name != "blind" else 4.0, needs=[f"rl_arch/agents_online/{tag}.pt"], note="оценка: " + note)
+    for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
+        add(f"w12-on-{name}-n{suf}", 12, "H06",
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt " + t3ev(f"n_{tag}", sd))],
+            10.5, needs=[f"rl_arch/agents_online/{tag}.pt"],
+            note="оценка без остановки на пустом действии: " + note)
 # онлайн без офлайн-данных и без тёплого старта: дешёвое состояние из обучающих лоссов
 T3_ON2 = (f"--pde {PDE}{PLAIN} --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 "
           f"--self-prior 60 --reset-every 200 --init-err {INIT_ERR} --value-bound --gamma 0.99 "
@@ -648,10 +688,15 @@ for name, variant, flags, note in (
                 + t3ev(f"e_{tag}", S10))],
         10.5 if name.startswith("full") else 4.0, needs=[f"rl_arch/agents_online/{tag}.pt"],
         note="оценка: " + note)
+    for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
+        add(f"w12-on2-{name}-n{suf}", 12, "H04",
+            [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt " + t3ev(f"n_{tag}", sd))],
+            10.5, needs=[f"rl_arch/agents_online/{tag}.pt"],
+            note="оценка без остановки на пустом действии: " + note)
 
 # ---------------------------------------------------------------- волна 13
 # Лестница машинерии, кривая стоимости, страж и сдвиги условий.
-t3off("w13-of-g0", "convnext_dqn", "--gamma 0", "g0",
+t3off("w13-of-g0", "convnext_dqn", "--gamma 0", "g0", stop=False, note=
       "близорукий офлайновый агент (дисконт 0): регрессия награды шага, как классический выбор алгоритма",
       wave=13, group="H08")
 # дисконт 0 идёт последним флагом: у argparse побеждает последнее значение --gamma
@@ -659,20 +704,20 @@ tag = f"{Q}_t3g0_s42"
 add("w13-on-g0", 13, "H08", [(TRAIN, f"{T1} {ALIGN} --gamma 0 --seed 42 --tag {tag}")], 11.8,
     note="близорукий онлайновый агент: контекстный бандит вместо RL")
 add("w13-on-g0-e", 13, "H08",
-    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
             + t3ev(f"e_{tag}", S10))], 10.5, needs=[f"rl_arch/agents_online/{tag}.pt"])
 # кривая «качество — часы мета-обучения»: 0 (офлайн), 2, 5 и 11 часов (11 — арм w1-t1al)
 for h in (2, 5):
     tag = f"{Q}_t3h{h}_s42"
     add(f"w13-h{h}", 13, "H01",
         [(TRAIN, f"{T1.replace('--hours 11', f'--hours {h}')} {ALIGN} --seed 42 --tag {tag}"),
-         (EVAL, f"--policy agent --model-file agent_{tag}.pt --stop-on-noop "
+         (EVAL, f"--policy agent --model-file agent_{tag}.pt "
                 + t3ev(f"e_{tag}", S5, hours=max(1.0, 10.5 - h)))],
         11.5, note=f"онлайновое обучение {h} ч вместо 11, оценка в том же кернеле")
 # кривая «качество — объём офлайнового буфера»: 9 и 28 файлов из 93
 for k in (9, 28):
     t3off(f"w13-buf{k}", "convnext_dqn", f"--per-pde-files {k}", f"buf{k}",
-          f"офлайновый агент на {k} файлах буфера из 93", wave=13, group="H01")
+          f"офлайновый агент на {k} файлах буфера из 93", wave=13, group="H01", stop=False)
 # страж: откат действия агента, поднявшего обучающий лосс (агенты ns2d)
 if NS2D:
   add("w13-guard-l1", 13, "H16",
@@ -711,7 +756,7 @@ add("w13-lofi", 13, "H03",
              f"--budget {BUDGET} --seed 42 --tag {tag}")], 11.8,
     note="обучение на эпизодах 3500 эпох (вдвое дешевле), контекст нормирован на 7000")
 add("w13-lofi-e", 13, "H03",
-    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt --stop-on-noop "
+    [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt "
             + t3ev(f"e_{tag}", S10))], 10.5, needs=[f"rl_arch/agents_online/{tag}.pt"])
 
 # ---------------------------------------------------------------- волна 14
@@ -731,7 +776,7 @@ for tk, (pde, sub) in (XFER.items() if NS2D else ()):
         model = f"/tmp/agent_convnext_dqn_cfix_rdlog_multi_{mtag}_seed1.pt"
         add(f"w14-{tk}-{vk}", 14, "H14",
             [(OFFLINE, f"--variant convnext_dqn {T3_MULTI} --holdout {sub} {flags} --seeds 1 --model-tag {mtag}"),
-             (EVAL, f"--policy agent --model-file {model} --stop-on-noop "
+             (EVAL, f"--policy agent --model-file {model} "
                     + t3ev(f"t3x_{mtag}", S5, pde=pde))],
             11.5, note=f"перенос на {pde} без дообучения, обучение на остальных решаемых УрЧП: {note}")
     # простые альтернативы на той же задаче, тех же сидах и бюджете
@@ -769,7 +814,7 @@ for tk, (pde, sub) in (XFER.items() if NS2D else ()):
                  f"--rlpd --rlpd-utd 8 --self-prior 30 --warm-start {warm} --online-reward dlog --err-norm init "
                  f"--gamma 0.99 --episode-budget {BUDGET} --tolerance 0 --max-chain-steps 70 {CTX} "
                  f"--seed 42 --tag {ftag}"),
-         (EVAL, f"--policy agent --model-file agent_{ftag}.pt --stop-on-noop "
+         (EVAL, f"--policy agent --model-file agent_{ftag}.pt "
                 + t3ev(f"e_{ftag}", S5, pde=pde, hours=7.5))],
         11.5, needs=[f"rl_arch/models/{warm}"],
         note=f"{pde}: три часа дообучения агента смеси на целевой задаче, затем оценка")
@@ -794,7 +839,7 @@ for k, (pde, sub) in ((dict(XFER, **REST11)).items() if NS2D else ()):
     model = f"/tmp/agent_convnext_dqn_cfix_rdlog_multi_{mtag}_seed1.pt"
     add(f"w15-{k}-ag", 15, "H14",
         [(OFFLINE, f"--variant convnext_dqn {T3_MULTI} --holdout {sub} {{XFER_FLAGS}} --seeds 1 --model-tag {mtag}"),
-         (EVAL, f"--policy agent --model-file {model} --stop-on-noop {{DEPLOY}} "
+         (EVAL, f"--policy agent --model-file {model} {{DEPLOY}} "
                 + t3ev(f"t3f_{k}_ag", S5, pde=pde))],
         11.5, note=f"итоговая таблица, {pde}: агент смеси остальных решаемых УрЧП без дообучения, "
                    f"состояние и развёртывание по решениям фаз C и E")
@@ -828,7 +873,7 @@ for k, (pde, sub) in ((dict(XFER, **REST11)).items() if NS2D else ()):
                  f"--wsrl-warmup 5 --rlpd --rlpd-utd 8 --self-prior 30 --warm-start {warm} {{XFER_FLAGS}} "
                  f"--online-reward dlog --err-norm init --gamma 0.99 --episode-budget {BUDGET} --tolerance 0 "
                  f"--max-chain-steps 70 {CTX} --seed 42 --tag {ftag}"),
-         (EVAL, f"--policy agent --model-file agent_{ftag}.pt --stop-on-noop {{DEPLOY}} "
+         (EVAL, f"--policy agent --model-file agent_{ftag}.pt {{DEPLOY}} "
                 + t3ev(f"e_{ftag}", S5, pde=pde, hours=7.5))],
         11.5, needs=[f"rl_arch/models/{warm}"],
         note=f"итоговая таблица, {pde}: три часа дообучения агента смеси на целевой задаче")
@@ -839,7 +884,7 @@ for k, (pde, sub) in ((dict(XFER, **REST11)).items() if NS2D else ()):
 # поэтому в таблицу комбинаций PLAN.md попадают только исполнимые сочетания
 GUIDE_B = "--guide {GUIDE} --guide-mode bonus --guide-bonus 0.05 --guide-chains 20"
 GUARD = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
-AG = "--policy agent --model-file {BEST_AGENT} --stop-on-noop"
+AG = "--policy agent --model-file {BEST_AGENT}"
 EVC = ev_common("combo", S10)
 MULTI_NS = f"--variant convnext_dqn {T3_MULTI} --holdout ns2d_liddriven --seeds 1 --model-tag xcombo"
 combos = [
@@ -862,12 +907,12 @@ combos = [
     dict(id="E1", kind="eval", script=EVAL, args=f"{AG} --guide {{GUIDE}} --guide-bonus 0.02 {GUARD} {EVC}",
          note="порог по Q и страж вместе"),
     dict(id="E2", kind="eval", script=EVAL,
-         args=f"--policy agent --model-files {{COMMITTEE}} --ensemble vote --stop-on-noop {GUARD} {EVC}",
+         args=f"--policy agent --model-files {{COMMITTEE}} --ensemble vote {GUARD} {EVC}",
          note="комитет агентов со стражем"),
     dict(id="E3", kind="eval", script=EVAL, args=f"{AG} --state-every 3 {GUARD} {EVC}",
          note="карты раз в три действия и страж: дешёвое развёртывание с защитой"),
     dict(id="E4", kind="eval", script=EVAL,
-         args=f"--policy script --script {{GUIDE}} --script-tail agent --model-file {{BEST_AGENT}} --stop-on-noop {EVC}",
+         args=f"--policy script --script {{GUIDE}} --script-tail agent --model-file {{BEST_AGENT}} {EVC}",
          note="проводник как начало цепочки, агент как продолжение (без обучения)"),
     dict(id="E5", kind="eval", script=EVAL, args=f"{AG} {KEEP} {EVC}",
          note="готовый агент в среде без сбросов: дешёвая проба до обучения K2"),
