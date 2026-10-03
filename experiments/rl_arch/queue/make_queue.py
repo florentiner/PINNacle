@@ -146,6 +146,15 @@ baseline("f64", "--policy script --script LBFGS:1:1000 --script-tail repeat", 10
          note="диагностика уровня среды: снимает ли двойная точность застой L-BFGS")
 baseline("f64a", "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat", 10,
          group="G25", extra="--float64", hours=6.0)
+# двойная точность по одному сиду на задачу (те же теги bl_f64, bl_f64a): сид в двойной точности
+# на T4 стоит 3.5-6 часов, и задача на 10 сидов успевала за сессию Kaggle (12 ч) только 2-3 сида.
+# На pb2d двойная точность сняла застой L-BFGS: 0.0061 против 0.0250 (3 сида, 3 октября)
+for sd_ in range(42, 52):
+    for name, sc in (("f64", "LBFGS:1:1000"), ("f64a", "Adam:0.001:1000,LBFGS:1:1000")):
+        add(f"w0-{name}-s{sd_}", 0, "G25",
+            [(EVAL, f"--policy script --script {sc} --script-tail repeat --no-state --float64 "
+                    + ev_common(f"bl_{name}", str(sd_)))],
+            7.0, note=f"двойная точность, сид {sd_}: {sc}")
 
 # среда без сбросов оптимизатора (--keep-opt): действие продолжает моменты Adam и историю
 # кривизны L-BFGS прошлого действия того же семейства. Прецедент — перенос состояния при

@@ -339,6 +339,286 @@
    ]
   },
   {
+   "id": "w0-f64-s42",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 42: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s42",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 42: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s43",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 43: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 43 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s43",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 43: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 43 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s44",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 44: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 44 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s44",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 44: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 44 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s45",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 45: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 45 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s45",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 45: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 45 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s46",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 46: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 46 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s46",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 46: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 46 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s47",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 47: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s47",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 47: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 47 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s48",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 48: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 48 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s48",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 48: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 48 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s49",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 49: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 49 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s49",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 49: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 49 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s50",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 50: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 50 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s50",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 50: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 50 --tag bl_f64a"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64-s51",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 51: LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 51 --tag bl_f64"
+    }
+   ]
+  },
+  {
+   "id": "w0-f64a-s51",
+   "wave": 0,
+   "group": "G25",
+   "hours": 7.0,
+   "needs": [],
+   "note": "двойная точность, сид 51: Adam:0.001:1000,LBFGS:1:1000",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:1000,LBFGS:1:1000 --script-tail repeat --no-state --float64 --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 51 --tag bl_f64a"
+    }
+   ]
+  },
+  {
    "id": "w0-l1kk",
    "wave": 0,
    "group": "H12",
