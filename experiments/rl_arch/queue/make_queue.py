@@ -562,6 +562,21 @@ add("w11-scoutk", 11, "H12",
     [(EVAL, f"--policy scout {KEEP} --no-state " + t3ev("t3b_scoutk", S10, hours=8.0))], 8.0,
     note="разведка без сбросов: победившее действие продолжает оптимизатор прошлого победителя того же "
          "семейства (ROR с переносом состояния, как в AOS); пара к w11-scout")
+# пары без сбросов для лучших открытых цепочек pb2d (3 октября): без них нельзя посчитать планку
+# BEST_SIMPLE среды без сбросов (решение 7 фазы A). На pb2d первые пары дали выигрыш 15-63%:
+# второе действие L-BFGS без сброса истории продолжает снижать ошибку, а со сбросом встаёт
+for nm, sc in (("sk2", "Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000"), ("sk3", "Adam:0.001:2500,LBFGS:1:1000")):
+    t3script(f"w11-{nm}k", f"t3b_{nm}k", sc, tail="repeat", group="H12", extra=KEEP, hours=8.0,
+             note=f"каркас {nm} без сбросов оптимизатора; пара к w11-{nm}")
+for i, r in enumerate(MINED, 1):
+    t3script(f"w11-log{i}k", f"t3b_log{i}k", r["script"], group="H12", extra=KEEP, hours=8.0,
+             note=f"цепочка №{i} из буфера без сбросов оптимизатора; пара к w11-log{i}")
+# цепочка, которую исполняет лучший агент (подстановка AGENT_CHAIN из decisions_<префикс>.json):
+# если она без агента даёт то же, вклад RL — найденное расписание, а не обратная связь
+for nm, ex, note in (("agch", "", "цепочка лучшего агента как открытая"),
+                     ("agchk", KEEP, "цепочка лучшего агента как открытая, без сбросов оптимизатора")):
+    t3script(f"w11-{nm}", f"t3b_{nm}", "{AGENT_CHAIN}", tail="repeat", group="H02", extra=ex, hours=8.0,
+             note=note)
 # потолок среды: оптимизатор SOAP в тех же эпохах, сидах и метрике
 t3script("w11-soap", "t3b_soap", "SOAP:0.003:1000", tail="repeat", group="H12",
          note="SOAP весь бюджет 7000 эпох")
@@ -688,6 +703,11 @@ for name, variant, flags, note in (
                 + t3ev(f"e_{tag}", S10))],
         10.5 if name.startswith("full") else 4.0, needs=[f"rl_arch/agents_online/{tag}.pt"],
         note="оценка: " + note)
+    add(f"w12-on2-{name}-ka", 12, "H12",
+        [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt {KEEP} "
+                + t3ev(f"k_{tag}", seeds(42, 46)))],
+        10.5, needs=[f"rl_arch/agents_online/{tag}.pt"],
+        note="оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): " + note)
     for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
         add(f"w12-on2-{name}-n{suf}", 12, "H04",
             [(EVAL, f"--policy agent --model-file rl_arch/agents_online/{tag}.pt " + t3ev(f"n_{tag}", sd))],
@@ -926,7 +946,7 @@ out = dict(pde=PDE, prefix=PREFIX, subdir=SUBDIR, budget=BUDGET, init_err=INIT_E
            placeholders=["BASE", "BASE_NOVB", "BASE_QR", "BASE_FACT", "BASE_STAT", "GUIDE",
                          "COMMITTEE", "BEST_AGENT", "BUFFERS", "RS_CHAIN_LOSS", "RS_CHAIN_ERR", "FINAL",
                          "RULE_BEST", "COMBO_A", "COMBO_B", "COMBO_C", "COMBO_EVAL_A", "COMBO_EVAL_B",
-                         "XFER_FLAGS", "DEPLOY"],
+                         "XFER_FLAGS", "DEPLOY", "AGENT_CHAIN"],
            combos=combos, jobs=jobs)
 with open(OUT_FILE, "w") as f:
     json.dump(out, f, ensure_ascii=False, indent=1)

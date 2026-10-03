@@ -55,6 +55,7 @@ DUMMY["COMBO_EVAL_A"] = ("--policy agent --model-file rl_arch/agents_online/a.pt
 DUMMY["COMBO_EVAL_B"] = ("--policy agent --model-files rl_arch/agents_online/a.pt,rl_arch/agents_online/b.pt "
                          "--ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500")
 DUMMY["XFER_FLAGS"] = "--state-mode tasknorm"
+DUMMY["AGENT_CHAIN"] = "Adam:0.001:1000,Adam:0.0001:100,LBFGS:0.5:1000"
 DUMMY["DEPLOY"] = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
 DUMMY["FINAL"] = DUMMY["BASE"] + " --scalar-ctx --ctx-no-err"
 DUMMY["BASE_QR"] = DUMMY["BASE_NOVB"].replace("convnext_dqn", "cnx_qrdqn")

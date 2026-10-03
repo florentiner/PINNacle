@@ -24,7 +24,8 @@
   "COMBO_EVAL_A",
   "COMBO_EVAL_B",
   "XFER_FLAGS",
-  "DEPLOY"
+  "DEPLOY",
+  "AGENT_CHAIN"
  ],
  "combos": [
   {
@@ -3980,6 +3981,132 @@
    ]
   },
   {
+   "id": "w11-sk2k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас sk2 без сбросов оптимизатора; пара к w11-sk2",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk2k"
+    }
+   ]
+  },
+  {
+   "id": "w11-sk3k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "каркас sk3 без сбросов оптимизатора; пара к w11-sk3",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_sk3k"
+    }
+   ]
+  },
+  {
+   "id": "w11-log1k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №1 из буфера без сбросов оптимизатора; пара к w11-log1",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500,Adam:0.01:2500,PSO:0.0001:300,PSO:0:200,LBFGS:0.1:100,LBFGS:1:1000 --script-tail stop --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log1k"
+    }
+   ]
+  },
+  {
+   "id": "w11-log2k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №2 из буфера без сбросов оптимизатора; пара к w11-log2",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,PSO:0:100,PSO:0:100,Adam:0.01:100,Adam:0.0001:2500,Adam:0.01:1000,PSO:0.0001:300,LBFGS:1:1000 --script-tail stop --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log2k"
+    }
+   ]
+  },
+  {
+   "id": "w11-log3k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №3 из буфера без сбросов оптимизатора; пара к w11-log3",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0.0001:300,PSO:0:300,PSO:0.001:200,PSO:0.0001:300,Adam:0.01:100,Adam:0.01:2500,Adam:0.0001:1000,Adam:0.001:1000,PSO:0:200,LBFGS:1:1000 --script-tail stop --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log3k"
+    }
+   ]
+  },
+  {
+   "id": "w11-log4k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №4 из буфера без сбросов оптимизатора; пара к w11-log4",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0.001:300,Adam:0.01:2500,LBFGS:1:100,LBFGS:1:100,PSO:0.0001:200,PSO:0.001:300,LBFGS:0.5:1000 --script-tail stop --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log4k"
+    }
+   ]
+  },
+  {
+   "id": "w11-log5k",
+   "wave": 11,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка №5 из буфера без сбросов оптимизатора; пара к w11-log5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0.0001:200,Adam:0.001:100,Adam:0.001:2500,Adam:0.0001:1000,PSO:0:100,LBFGS:0.1:100,LBFGS:1:1000,PSO:0.0001:100,LBFGS:0.1:100,Adam:0.001:100,LBFGS:0.5:500,PSO:0:300 --script-tail stop --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_log5k"
+    }
+   ]
+  },
+  {
+   "id": "w11-agch",
+   "wave": 11,
+   "group": "H02",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка лучшего агента как открытая",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {AGENT_CHAIN} --script-tail repeat --no-state --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_agch"
+    }
+   ]
+  },
+  {
+   "id": "w11-agchk",
+   "wave": 11,
+   "group": "H02",
+   "hours": 8.0,
+   "needs": [],
+   "note": "цепочка лучшего агента как открытая, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {AGENT_CHAIN} --script-tail repeat --no-state --keep-opt --pde ns2d_liddriven --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3b_agchk"
+    }
+   ]
+  },
+  {
    "id": "w11-soap",
    "wave": 11,
    "group": "H12",
@@ -4926,6 +5053,22 @@
    ]
   },
   {
+   "id": "w12-on2-full-ka",
+   "wave": 12,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_full_s42.pt"
+   ],
+   "note": "оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): контроль: полные карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_full_s42.pt --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag k_q_t3on2_full_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on2-full-na",
    "wave": 12,
    "group": "H04",
@@ -4984,6 +5127,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_loss_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_loss_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-loss-ka",
+   "wave": 12,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_loss_s42.pt"
+   ],
+   "note": "оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): обучающие лоссы вместо карт, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_loss_s42.pt --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag k_q_t3on2_loss_s42"
     }
    ]
   },
@@ -5050,6 +5209,22 @@
    ]
   },
   {
+   "id": "w12-on2-blind-ka",
+   "wave": 12,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_blind_s42.pt"
+   ],
+   "note": "оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): только время, карты не строятся",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_blind_s42.pt --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag k_q_t3on2_blind_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on2-blind-na",
    "wave": 12,
    "group": "H04",
@@ -5108,6 +5283,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fullk_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_fullk_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fullk-ka",
+   "wave": 12,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fullk_s42.pt"
+   ],
+   "note": "оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): полные карты, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fullk_s42.pt --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag k_q_t3on2_fullk_s42"
     }
    ]
   },
@@ -5174,6 +5365,22 @@
    ]
   },
   {
+   "id": "w12-on2-lossk-ka",
+   "wave": 12,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_lossk_s42.pt"
+   ],
+   "note": "оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): обучающие лоссы, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_lossk_s42.pt --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag k_q_t3on2_lossk_s42"
+    }
+   ]
+  },
+  {
    "id": "w12-on2-lossk-na",
    "wave": 12,
    "group": "H04",
@@ -5232,6 +5439,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fine_s42.pt --stop-on-noop --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_q_t3on2_fine_s42"
+    }
+   ]
+  },
+  {
+   "id": "w12-on2-fine-ka",
+   "wave": 12,
+   "group": "H12",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_t3on2_fine_s42.pt"
+   ],
+   "note": "оценка без остановки и без сбросов оптимизатора (агент учился со сбросами): мелкий шаг решений: 70 действий по 100 эпох, лоссы вместо карт, без сбросов оптимизатора (ближайший аналог политики из arXiv 2609.01811)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_t3on2_fine_s42.pt --keep-opt --pde ns2d_liddriven --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag k_q_t3on2_fine_s42"
     }
    ]
   },
