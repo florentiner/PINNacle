@@ -859,6 +859,10 @@ def main():
     ap.add_argument("--keep-opt-mode", default="all", choices=["all", "safe"],
                     help="all: состояние любого оптимизатора живёт, пока семейство не меняется; safe: "
                          "история L-BFGS всегда, Adam и SOAP — только при том же шаге")
+    ap.add_argument("--lbfgs-tol", type=float, default=None,
+                    help="трек 3: допуски L-BFGS в среде (tolerance_grad = tolerance_change = число; 0 — без "
+                         "обрыва «по сходимости», как ftol=0 у PINNacle). Без флага — умолчания torch. "
+                         "Пишется в meta чекпоинта, оценка подхватывает сама")
     ap.add_argument("--online-reward", default="delta", choices=["delta", "dlog"],
                     help="награда онлайновых переходов: delta — разность ошибок (как раньше); "
                          "dlog — log10(E_до) - log10(E_после), относительное улучшение, не "
@@ -933,6 +937,9 @@ def main():
     ap.add_argument("--tag", default=None)
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
+    if args.lbfgs_tol is not None and args.lbfgs_tol >= 0:
+        import online_eval_env as _E
+        _E.LBFGS_TOL = float(args.lbfgs_tol)      # build_optimizer читает модульную переменную
     if args.rlpd_full:
         args.rlpd = True        # полному RLPD нужен тот же офлайновый буфер
     if args.offline_reward != "logged" and not args.offline_fix:
@@ -1015,6 +1022,7 @@ def main():
                     freeze_encoder=bool(args.freeze_encoder),
                     state_mode=args.state_mode, pde_ctx=bool(args.pde_ctx), keep_opt=bool(args.keep_opt),
                     keep_opt_mode=(args.keep_opt_mode if args.keep_opt else None),
+                    lbfgs_tol=(None if args.lbfgs_tol is None or args.lbfgs_tol < 0 else float(args.lbfgs_tol)),
                     err_norm=args.err_norm, online_reward=args.online_reward,
                     scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
     n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)

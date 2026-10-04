@@ -5601,6 +5601,34 @@
      "args": "--policy agent --model-file rl_arch/agents_online/qwave_t3lofi_s42.pt --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag e_qwave_t3lofi_s42"
     }
    ]
+  },
+  {
+   "id": "wave-w17-l1k-t0",
+   "wave": 17,
+   "group": "H12",
+   "hours": 8.0,
+   "needs": [],
+   "note": "пара к w0-l1kk (L-BFGS без сбросов): нулевые допуски L-BFGS",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --lbfgs-tol 0 --pde wave1d --budget 7000 --hours 8.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3e_l1k_t0"
+    }
+   ]
+  },
+  {
+   "id": "wave-w17-sk2s-ls",
+   "wave": 17,
+   "group": "H12",
+   "hours": 7.0,
+   "needs": [],
+   "note": "пара к w11-sk2s: завершающий шаг «последний слой МНК» (--finish-ls all)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --keep-opt-mode safe --finish-ls all --pde wave1d --budget 7000 --hours 7.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3e_sk2s_ls"
+    }
+   ]
   }
  ]
 }

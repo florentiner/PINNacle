@@ -102,6 +102,14 @@ def reuse_optimizer(cache, opt_name, lr, net, keep, mode="all"):
     return opt
 
 
+# Допуски L-BFGS. None — как было: умолчания torch (tolerance_grad=1e-7, tolerance_change=1e-9),
+# при которых в одинарной точности внутренний цикл обрывается «по сходимости» задолго до
+# настоящего застоя (2505.10949; сам PINNacle через deepxde ставит ftol=0, gtol=1e-8).
+# Число >= 0 ставит tolerance_grad = tolerance_change = это число. Задаётся флагом
+# --lbfgs-tol, у обученных агентов читается из meta чекпоинта.
+LBFGS_TOL = None
+
+
 def build_optimizer(opt_name, lr, net):
     """Mirrors rl_trainer._build_torch_optimizer (note LBFGS max_iter=10)."""
     from deepxde.optimizers.config import set_PSO_options
@@ -109,8 +117,9 @@ def build_optimizer(opt_name, lr, net):
     if opt_name == "Adam":
         return torch.optim.Adam(net.parameters(), lr=lr)
     if opt_name == "LBFGS":
+        kw = {} if LBFGS_TOL is None else dict(tolerance_grad=LBFGS_TOL, tolerance_change=LBFGS_TOL)
         return torch.optim.LBFGS(net.parameters(), lr=lr,
-                                 line_search_fn="strong_wolfe", max_iter=10)
+                                 line_search_fn="strong_wolfe", max_iter=10, **kw)
     if opt_name == "PSO":
         set_PSO_options(lr=lr)
         return "PSO"
@@ -459,6 +468,16 @@ def run_seed(seed, args, progress_cb=None):
     keep_mode = meta.get("keep_opt_mode") or args.keep_opt_mode
     if keep_opt and not args.keep_opt:
         print("агент обучен с --keep-opt: состояние оптимизатора сохраняется между действиями", flush=True)
+    # допуски L-BFGS: флаг, иначе условия обучения агента (meta), иначе умолчания torch
+    global LBFGS_TOL
+    if args.lbfgs_tol is not None and args.lbfgs_tol >= 0:
+        LBFGS_TOL = float(args.lbfgs_tol)
+    elif meta.get("lbfgs_tol") is not None:
+        LBFGS_TOL = float(meta["lbfgs_tol"])
+        args.lbfgs_tol = LBFGS_TOL
+        print(f"агент обучен с --lbfgs-tol {LBFGS_TOL:g}: те же допуски L-BFGS в оценке", flush=True)
+    else:
+        LBFGS_TOL = None
     prev_raw2 = None                 # режим rebuild: предыдущая карта второй сборки
     stale_maps = None                # --state-every: последняя построенная карта
     # перенос между УрЧП: описатель задачи и масштаб ошибки — как при обучении
@@ -519,6 +538,7 @@ def run_seed(seed, args, progress_cb=None):
     last_prog = t0
     last_ckpt_up = t0
     rmse = brmse = l2re_op = l2re_bnd = float("inf")
+    tester = None
 
     ckpt_name = getattr(args, "_ckpt_name", None)
     ck = load_ckpt(ckpt_name) if (args.resume and ckpt_name) else None
@@ -895,9 +915,24 @@ def run_seed(seed, args, progress_cb=None):
                         budget=args.budget, n_steps=len(chain),
                         elapsed_s=round(time.time() - t0, 1))
 
+    ls_info = None
+    if getattr(args, "finish_ls", "none") != "none" and tester is not None:
+        # завершающий шаг трека 3: последний слой методом наименьших квадратов на тех же
+        # точках и с теми же весами лоссов; применяется одинаково к любой политике, бюджет
+        # эпох не трогает, его цена сообщается отдельно (ls.time_s)
+        from lastlayer import finish_ls, tester_metrics
+        l2_pre = math.hypot(l2re_op, l2re_bnd)
+        ls_info = finish_ls(model, loss_weights, basis=args.finish_ls)
+        ls_info["l2re_before"] = l2_pre
+        if ls_info.get("ok"):
+            l2re_op, l2re_bnd = tester_metrics(model, tester)
+            ls_info["l2re_after"] = math.hypot(l2re_op, l2re_bnd)
+            print(f"[seed {seed}] завершающий шаг LS ({args.finish_ls}): l2re "
+                  f"{l2_pre:.4e} -> {ls_info['l2re_after']:.4e}", flush=True)
     l2re = math.hypot(l2re_op, l2re_bnd)
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
-                stop_reason=stop_reason, spent=spent,
+                stop_reason=stop_reason, spent=spent, ls=ls_info,
+                lbfgs_tol=(None if args.lbfgs_tol is None or args.lbfgs_tol < 0 else args.lbfgs_tol),
                 boost_trigger=args.boost_trigger, boosted=boosted, rmse=rmse,
                 brmse=brmse, l2re_op=l2re_op, l2re_bnd=l2re_bnd, budget=args.budget,
                 n_steps=len(chain), chain=chain, ae_epochs=args.ae_epochs,
@@ -1066,6 +1101,18 @@ def main():
                     help="all: состояние любого оптимизатора живёт, пока семейство не меняется; safe: "
                          "история L-BFGS сохраняется всегда, а Adam и SOAP — только при том же шаге "
                          "(при смене шага сохранённые моменты Adam вредили). Для агента берётся из чекпоинта")
+    ap.add_argument("--lbfgs-tol", type=float, default=None,
+                    help="трек 3, допуски L-BFGS: число >= 0 ставит tolerance_grad = tolerance_change = "
+                         "это число (0 — не обрывать внутренний цикл «по сходимости», как ftol=0 у "
+                         "PINNacle); без флага — умолчания torch (1e-7, 1e-9), при которых L-BFGS в "
+                         "одинарной точности встаёт раньше времени (2505.10949). Для агента берётся из "
+                         "чекпоинта. Меняет среду: сравнивать только арм с армом при одном значении")
+    ap.add_argument("--finish-ls", default="none", choices=["none", "last", "all"],
+                    help="трек 3, завершающий шаг после бюджета: последний слой методом наименьших "
+                         "квадратов на точках и весах обучения (2603.04672). last — тот же выходной слой; "
+                         "all — считывание со всех скрытых слоёв (500 базисных функций у сети 100×5). "
+                         "Линейные УрЧП решаются за один шаг, нелинейные — Левенбергом–Марквардтом. "
+                         "Применяется к любой политике одинаково; в строке результата поле ls")
     ap.add_argument("--ckpt-min-interval", type=float, default=1800.0,
                     help="чекпоинт докатки не чаще, чем раз в столько секунд (лимит HF — 128 коммитов в "
                          "час на репозиторий; при политиках с действиями по 100 эпох --ckpt-every 10 давал "
