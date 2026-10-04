@@ -61,7 +61,15 @@ def test_mask_and_no_guide():
     assert dev and a != 3, (a, dev)                    # проводник вне маски — голосование
 
 
+def test_fit_channels():
+    st = np.zeros((9, 26, 26), np.float32)
+    assert E.fit_channels(st, np.zeros((1, 4, 1, 1))).shape == (4, 26, 26)     # агент без контекста
+    assert E.fit_channels(st, np.zeros((1, 9, 1, 1))).shape == (9, 26, 26)     # агент с контекстом
+    assert E.fit_channels(st, 0.0).shape == (9, 26, 26)                        # скалярная нормировка
+
+
 if __name__ == "__main__":
+    test_fit_channels()
     test_follow_when_disagree()
     test_deviate_when_agree_and_margin()
     test_mask_and_no_guide()

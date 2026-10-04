@@ -242,9 +242,20 @@ NOOP_ACTIONS = (18, 19, 20)     # PSO с lr=0: в 39-85% применений о
 Q_POLICY = "auto"   # auto | mean | cvar — как сводить квантили к скаляру
 
 
+def fit_channels(state, mean):
+    """Состояние под агента комитета: каналы идут в порядке «карты, скалярный контекст,
+    описатель задачи», и агент без контекста берёт только первые каналы. Без этого комитет из
+    агентов с контекстом и без падал на несовпадении форм (pb2d-w17-cmtg, 4 октября)."""
+    m = np.asarray(mean)
+    if m.ndim == 4 and state.ndim == 3 and m.shape[1] < state.shape[0]:
+        return state[:m.shape[1]]
+    return state
+
+
 def q_values(agent, state, mean, std, variant):
     """Вектор Q по 27 действиям (numpy) — для маски, ансамбля и надбавки проводника."""
     dev = next(agent.model.parameters()).device
+    state = fit_channels(state, mean)
     x = torch.as_tensor((state[None] - mean) / std, device=dev).float()
     with torch.no_grad():
         hlg = getattr(agent, "_hlg", None)
@@ -313,6 +324,7 @@ def pick_action(agent, state, mean, std, variant):
     # deepxde на GPU ставит default device = cuda, поэтому вход надо создавать
     # на том же устройстве, где лежат веса агента
     dev = next(agent.model.parameters()).device
+    state = fit_channels(state, mean)
     x = torch.as_tensor((state[None] - mean) / std, device=dev).float()
     with torch.no_grad():
         hlg = getattr(agent, "_hlg", None)
@@ -464,14 +476,23 @@ def run_seed(seed, args, progress_cb=None):
             sys.exit(f"--q-policy cvar требует квантильного варианта, а в чекпоинте "
                      f"{variant}: у него один выход на действие, брать хвост распределения не из чего")
     meta = getattr(agent, "_meta", {}) if agent is not None else {}
+
+    def _wants_ctx(ag, var):
+        return (next(ag.model.parameters()).shape[1] > 4 if var != "stat_dqn"
+                else next(ag.model.parameters()).shape[1] > 32)
+    ctx_meta = meta
+    for ag_, _m, _s, var_ in agents[1:]:
+        if not _wants_ctx(agent, variant) and _wants_ctx(ag_, var_):
+            ctx_meta = getattr(ag_, "_meta", {}) or {}
+            break
     allowed = parse_mask(args.mask)
     for i in meta.get("mask", []):
         allowed[int(i)] = False          # маска обучения действует и на оценке
     script = parse_chain(args.script)
     guide = parse_chain(args.guide)
-    ctx_kmax = int(meta.get("ctx_kmax", 10))
-    ctx_budget = int(meta.get("ctx_budget", 31000))
-    ctx_err = meta.get("ctx_err", "l2re")   # старые чекпоинты: прежнее поведение оценки
+    ctx_kmax = int(ctx_meta.get("ctx_kmax", 10))
+    ctx_budget = int(ctx_meta.get("ctx_budget", 31000))
+    ctx_err = ctx_meta.get("ctx_err", "l2re")   # старые чекпоинты: прежнее поведение оценки
     stop_reason = "budget"
     # ---- трек 3: режим состояния, учёт времени, история по шагам ----
     from offline_rl import apply_state_mode, loss_state, pde_desc, pde_meta
@@ -507,8 +528,8 @@ def run_seed(seed, args, progress_cb=None):
     prev_raw2 = None                 # режим rebuild: предыдущая карта второй сборки
     stale_maps = None                # --state-every: последняя построенная карта
     # перенос между УрЧП: описатель задачи и масштаб ошибки — как при обучении
-    desc_vals = pde_desc(args.pde) if meta.get("pde_ctx") else None
-    err_scale = float(pde_meta()[args.pde]["init_err"]) if meta.get("err_norm") == "init" else 1.0
+    desc_vals = pde_desc(args.pde) if ctx_meta.get("pde_ctx") else None
+    err_scale = float(pde_meta()[args.pde]["init_err"]) if ctx_meta.get("err_norm") == "init" else 1.0
     prev_loss_tot = None
 
     def add_desc(st):
@@ -545,10 +566,7 @@ def run_seed(seed, args, progress_cb=None):
 
     # initial state: zero maps (rl_trainer.zero_state)
     state = np.zeros((4, 26, 26), dtype=np.float32)
-    want_ctx = bool(agent is not None and
-                    (next(agent.model.parameters()).shape[1] > 4
-                     if variant != "stat_dqn" else
-                     next(agent.model.parameters()).shape[1] > 32))
+    want_ctx = bool(agents and any(_wants_ctx(ag_, var_) for ag_, _m, _s, var_ in agents))
     last_a = None
     if want_ctx:
         state = add_desc(add_scalar_ctx(state, 0, ctx_kmax, 0, ctx_budget, None,
