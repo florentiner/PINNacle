@@ -8553,6 +8553,76 @@
      "args": "--policy script --script PSO:0:300,Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,PSO:0.001:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:1:100 --script-tail stop --no-state --pde ns2d_liddriven --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3e_sur_rob"
     }
    ]
+  },
+  {
+   "id": "w17-br-c1",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 42-42",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde ns2d_liddriven --seeds 42 --prefix Adam:0.01:2500,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,LBFGS:1:1000;LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "w17-br-c2",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 43-43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde ns2d_liddriven --seeds 43 --prefix Adam:0.01:2500,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,LBFGS:1:1000;LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "w17-br-c3",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 44-44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde ns2d_liddriven --seeds 44 --prefix Adam:0.01:2500,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,LBFGS:1:1000;LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "w17-br-c4",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 45-45",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde ns2d_liddriven --seeds 45 --prefix Adam:0.01:2500,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,LBFGS:1:1000;LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "w17-br-c5",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 46-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde ns2d_liddriven --seeds 46 --prefix Adam:0.01:2500,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,LBFGS:1:1000;LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
   }
  ]
 }

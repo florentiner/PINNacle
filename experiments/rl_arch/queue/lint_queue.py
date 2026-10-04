@@ -164,9 +164,28 @@ def lint_ga(argv):
         G.run_seed, G.load_state = saved
 
 
+def lint_branch(argv):
+    """Ветвление концовок: разбор аргументов и цепочек до первого прогона среды."""
+    import branch_endings as B
+    saved = B.E.run_seed, B.E.result_done
+
+    def reached(*a, **k):
+        raise SystemExit("lint: дошли до run_seed")
+    B.E.run_seed = reached
+    B.E.result_done = lambda name: False
+    try:
+        B.main(list(argv) + ["--save-dir", tempfile.mkdtemp(prefix="lint_br_")])
+    except SystemExit as e:
+        if "lint" in str(e):
+            raise Reached()
+        raise
+    finally:
+        B.E.run_seed, B.E.result_done = saved
+
+
 LINTERS = {"offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
-           "ga_chains.py": lint_ga}
+           "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}
 
 
 def check(script, args):

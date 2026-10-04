@@ -5783,6 +5783,76 @@
      "args": "--policy script --script Adam:0.01:1000,Adam:0.001:2500,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3e_sur_abs"
     }
    ]
+  },
+  {
+   "id": "pb2d-w17-br-c1",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 42-43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde poissonboltzmann2d --seeds 42,43 --prefix Adam:0.01:1000,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,SOAP:0.003:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:0.1:500,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:1000,LBFGS:0.5:500,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w17-br-c2",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 44-45",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde poissonboltzmann2d --seeds 44,45 --prefix Adam:0.01:1000,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,SOAP:0.003:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:0.1:500,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:1000,LBFGS:0.5:500,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w17-br-c3",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 46-47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde poissonboltzmann2d --seeds 46,47 --prefix Adam:0.01:1000,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,SOAP:0.003:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:0.1:500,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:1000,LBFGS:0.5:500,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w17-br-c4",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 48-49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde poissonboltzmann2d --seeds 48,49 --prefix Adam:0.01:1000,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,SOAP:0.003:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:0.1:500,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:1000,LBFGS:0.5:500,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w17-br-c5",
+   "wave": 17,
+   "group": "H07",
+   "hours": 4.5,
+   "needs": [],
+   "note": "ветвление шести концовок от снимка каркаса, сиды 50-51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/branch_endings.py",
+     "args": "--pde poissonboltzmann2d --seeds 50,51 --prefix Adam:0.01:1000,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,SOAP:0.003:1000,LBFGS:1:1000,LBFGS:1:500;LBFGS:0.1:500,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:1000,LBFGS:0.5:500,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
+    }
+   ]
   }
  ]
 }

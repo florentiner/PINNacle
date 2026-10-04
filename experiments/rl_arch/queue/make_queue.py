@@ -1025,6 +1025,38 @@ if PDE in ("ns2d_liddriven", "poissonboltzmann2d"):
                     + t3ev("t3e_sur_abs", seeds(42, 46), hours=4.5))],
             4.5, note="цепочка A/B планировщика в безопасной среде без сбросов; контроль t3b_sk2s")
 
+# ветвление концовок от одного снимка (branch_endings.py, 5 октября): каркас до конца фаз Adam,
+# затем шесть концовок L-BFGS от тех же весов на том же сиде — парное сравнение без шума сида.
+# Итог цепочки на 53-60% решают два последних действия (surrogate_active.py, опыт 3), данных
+# рядом с лучшими цепочками в буферах нет; ветвление меряет запас адаптации в концовке (оракул
+# по сиду против лучшей концовки) и даёт пары «состояние в точке решения -> лучшая концовка»
+BRANCH = "experiments/rl_arch/branch_endings.py"
+if PDE in ("ns2d_liddriven", "poissonboltzmann2d"):
+    if NS2D:
+        _bp = "Adam:0.01:2500,Adam:0.0001:2500"
+        _be = ["LBFGS:1:1000,LBFGS:1:1000",
+               "LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500",
+               "LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100",
+               "SOAP:0.003:1000,LBFGS:1:1000",
+               "LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500",
+               "LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100"]
+        _bchunks = [(s_, s_) for s_ in range(42, 47)]
+    else:
+        _bp = "Adam:0.01:1000,Adam:0.0001:2500"
+        _be = ["LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500",
+               "LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500",
+               "LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,Adam:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100",
+               "SOAP:0.003:1000,SOAP:0.003:1000,LBFGS:1:1000,LBFGS:1:500",
+               "LBFGS:0.1:500,LBFGS:1:100,LBFGS:1:500,LBFGS:0.1:1000,LBFGS:0.5:500,LBFGS:1:500,"
+               "LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100",
+               "LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100"]
+        _bchunks = [(42, 43), (44, 45), (46, 47), (48, 49), (50, 51)]
+    for _i, (_lo, _hi) in enumerate(_bchunks, 1):
+        add(f"w17-br-c{_i}", 17, "H07",
+            [(BRANCH, f"--pde {PDE}{PLAIN} --seeds {seeds(_lo, _hi)} --prefix {_bp} --endings {';'.join(_be)} "
+                      f"--budget {BUDGET} {KEEPS} --tag t3br_sk --hours 4.5 --resume")],
+            4.5, note=f"ветвление шести концовок от снимка каркаса, сиды {_lo}-{_hi}")
+
 # Наборы флагов для слотов волны 4 ({COMBO_A..C}, {COMBO_EVAL_A..B}) и для {XFER_FLAGS}. Каждый
 # набор lint_queue.py прогоняет через разбор аргументов и проверки совместимости своего скрипта,
 # поэтому в таблицу комбинаций PLAN.md попадают только исполнимые сочетания
