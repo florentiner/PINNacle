@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import tempfile
 import json
 import os
 import re
@@ -56,6 +57,7 @@ DUMMY["COMBO_EVAL_B"] = ("--policy agent --model-files rl_arch/agents_online/a.p
                          "--ensemble vote --stop-on-noop --guard-rollback 1.0 --guard-fallback LBFGS:1:500")
 DUMMY["XFER_FLAGS"] = "--state-mode tasknorm"
 DUMMY["AGENT_CHAIN"] = "Adam:0.001:1000,Adam:0.0001:100,LBFGS:0.5:1000"
+DUMMY["GA_TOP1"] = "Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000"
 DUMMY["DEPLOY"] = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
 DUMMY["FINAL"] = DUMMY["BASE"] + " --scalar-ctx --ctx-no-err"
 DUMMY["BASE_QR"] = DUMMY["BASE_NOVB"].replace("convnext_dqn", "cnx_qrdqn")
@@ -140,8 +142,31 @@ def lint_chain(argv):
         json.load(open(path))
 
 
+def lint_ga(argv):
+    """Генетический поиск по цепочкам: разбор аргументов и подготовка до первого прогона среды.
+    Обычное исключение из run_seed скрипт засчитывает особи как штраф, поэтому подмена поднимает
+    SystemExit (его скрипт пропускает наружу); --resume без локального файла идёт в HF, поэтому
+    load_state тоже подменён; состояние пишется во временную папку, а не в runs_rl_online."""
+    import ga_chains as G
+    saved = G.run_seed, G.load_state
+
+    def reached(*a, **k):
+        raise SystemExit("lint: дошли до run_seed")
+    G.run_seed = reached
+    G.load_state = lambda path, name, smoke: None
+    try:
+        G.main(list(argv) + ["--save-dir", tempfile.mkdtemp(prefix="lint_ga_")])
+    except SystemExit as e:
+        if "lint" in str(e):
+            raise Reached()
+        raise
+    finally:
+        G.run_seed, G.load_state = saved
+
+
 LINTERS = {"offline_rl.py": lint_offline, "online_train_env.py": lint_train,
-           "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain}
+           "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
+           "ga_chains.py": lint_ga}
 
 
 def check(script, args):

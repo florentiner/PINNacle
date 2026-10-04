@@ -969,6 +969,22 @@ add("w17-cmtg", 17, "H16",
     [(EVAL, f"{CMTG} {KEEPS} " + ev_common("n_w17_cmtg", S10))],
     10.5, needs=["{COMMITTEE}"], note="комитет с проводником и воздержанием, безопасная среда без сбросов")
 
+# генетический поиск по цепочкам при GPU-часах, равных одному обучению агента (область C9 обзора,
+# 2011.11062): одна сессия, популяция 8, до 6 поколений, отсеивающие сиды 1000-1099 (как у
+# случайного поиска w11-rs), в безопасной среде без сбросов; затем top3 переоцениваются на сидах
+# 42-51 задачей --policy script (подстановка {GA_TOP1} из decisions после чтения строки *_ga в HF)
+GA = "experiments/rl_arch/ga_chains.py"
+_ga_init = ("Adam:0.01:2500,Adam:0.0001:2500,LBFGS:1:1000" if NS2D
+            else "Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000")
+add("w17-ga", 17, "H15",
+    [(GA, f"--pde {PDE}{PLAIN} --budget {BUDGET} --hours 10.5 --kernel-hours 11 --resume --mask pso "
+          f"--pop 8 --gens 6 {KEEPS} --init {_ga_init} --tag t3g_ga --save-dir runs_rl_online")],
+    11.5, note="генетический поиск по цепочкам при стоимости одного обучения агента; каркас в начальной популяции")
+add("w17-ga-top", 17, "H15",
+    [(EVAL, f"--policy script --script {{GA_TOP1}} --script-tail stop --no-state {KEEPS} "
+            + t3ev("t3e_ga_top1", S10, hours=7.0))],
+    7.0, note="лучшая цепочка генетического поиска, переоценка на сидах 42-51 (подстановка GA_TOP1)")
+
 # Наборы флагов для слотов волны 4 ({COMBO_A..C}, {COMBO_EVAL_A..B}) и для {XFER_FLAGS}. Каждый
 # набор lint_queue.py прогоняет через разбор аргументов и проверки совместимости своего скрипта,
 # поэтому в таблицу комбинаций PLAN.md попадают только исполнимые сочетания
@@ -1019,7 +1035,7 @@ out = dict(pde=PDE, prefix=PREFIX, subdir=SUBDIR, budget=BUDGET, init_err=INIT_E
            placeholders=["BASE", "BASE_NOVB", "BASE_QR", "BASE_FACT", "BASE_STAT", "GUIDE",
                          "COMMITTEE", "BEST_AGENT", "BUFFERS", "RS_CHAIN_LOSS", "RS_CHAIN_ERR", "FINAL",
                          "RULE_BEST", "COMBO_A", "COMBO_B", "COMBO_C", "COMBO_EVAL_A", "COMBO_EVAL_B",
-                         "XFER_FLAGS", "DEPLOY", "AGENT_CHAIN"],
+                         "XFER_FLAGS", "DEPLOY", "AGENT_CHAIN", "GA_TOP1"],
            combos=combos, jobs=jobs)
 with open(OUT_FILE, "w") as f:
     json.dump(out, f, ensure_ascii=False, indent=1)

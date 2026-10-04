@@ -1019,7 +1019,9 @@ def upload(row, name):
             time.sleep(5 if row.get("partial") else min(600, 20 * 2 ** attempt))
 
 
-def main():
+def build_parser():
+    """Разбор аргументов оценки. Вынесен из main, чтобы другие скрипты (ga_chains.py) могли
+    собрать Namespace для run_seed с теми же флагами и умолчаниями."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--policy", required=True,
                     choices=["agent", "random", "fixed", "script", "rule", "bandit", "scout"])
@@ -1165,7 +1167,11 @@ def main():
                          "Допустимо только для policy=fixed/random с триггерами "
                          "none/plateau/midpoint — там карты не используются")
     ap.add_argument("--smoke", action="store_true")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
     global Q_POLICY
     Q_POLICY = args.q_policy
     if args.float64 and not args.no_state:

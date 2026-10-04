@@ -25,7 +25,8 @@
   "COMBO_EVAL_B",
   "XFER_FLAGS",
   "DEPLOY",
-  "AGENT_CHAIN"
+  "AGENT_CHAIN",
+  "GA_TOP1"
  ],
  "combos": [
   {
@@ -5650,6 +5651,34 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-files {COMMITTEE} --guide {GUIDE} --guide-bonus 0.5 --guide-agree 2 --keep-opt --keep-opt-mode safe --pde heat2d_multiscale --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag n_w17_cmtg"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w17-ga",
+   "wave": 17,
+   "group": "H15",
+   "hours": 11.5,
+   "needs": [],
+   "note": "генетический поиск по цепочкам при стоимости одного обучения агента; каркас в начальной популяции",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/ga_chains.py",
+     "args": "--pde heat2d_multiscale --budget 7000 --hours 10.5 --kernel-hours 11 --resume --mask pso --pop 8 --gens 6 --keep-opt --keep-opt-mode safe --init Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000 --tag t3g_ga --save-dir runs_rl_online"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w17-ga-top",
+   "wave": 17,
+   "group": "H15",
+   "hours": 7.0,
+   "needs": [],
+   "note": "лучшая цепочка генетического поиска, переоценка на сидах 42-51 (подстановка GA_TOP1)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {GA_TOP1} --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde heat2d_multiscale --budget 7000 --hours 7.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3e_ga_top1"
     }
    ]
   }
