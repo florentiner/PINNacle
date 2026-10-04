@@ -284,6 +284,31 @@ def ensemble_action(agents, state, allowed, how="vote"):
     return best
 
 
+def committee_with_guide(agents, state, allowed, guide_a, k_agree, bonus):
+    """Комитет с проводником и воздержанием (UBRL, arXiv 2305.07487): от действия проводника
+    guide_a отходим только если не меньше k_agree агентов голосуют за одно и то же действие a
+    и среднее стандартизованное Q(a) выше Q(guide_a) не меньше, чем на bonus (шкалы Q у агентов
+    разные, поэтому сравнение в z-единицах). Возвращает (действие, отошли ли от проводника)."""
+    zs, votes = [], []
+    for ag, mean, std, variant in agents:
+        q = q_values(ag, state, mean, std, variant).astype(np.float64)
+        q[~allowed] = -np.inf
+        f = q[np.isfinite(q)]
+        zs.append(np.where(np.isfinite(q), (q - f.mean()) / (f.std() + 1e-8), -np.inf))
+        votes.append(int(np.argmax(q)))
+    zmean = np.mean(zs, axis=0)
+    best, cnt = votes[0], 0
+    for v in votes:
+        c = votes.count(v)
+        if c > cnt:
+            best, cnt = v, c
+    if guide_a is None or not allowed[guide_a]:
+        return best, True
+    if best != guide_a and cnt >= k_agree and zmean[best] - zmean[guide_a] >= bonus:
+        return best, True
+    return guide_a, False
+
+
 def pick_action(agent, state, mean, std, variant):
     # deepxde на GPU ставит default device = cuda, поэтому вход надо создавать
     # на том же устройстве, где лежат веса агента
@@ -462,6 +487,7 @@ def run_seed(seed, args, progress_cb=None):
     build_maps = (not args.no_state) and (not mapless or args.state_compare or not needs_agent)
     guard_fb = parse_action_spec(args.guard_fallback) if args.guard_rollback else None
     guard_log, guard_spent = [], 0
+    guide_stat = [0, 0]              # комитет с проводником: [следовал проводнику, отошёл]
     opt_cache = {}                   # --keep-opt: оптимизатор прошлого действия
     # агент, обученный в среде без сбросов оптимизатора, оценивается в ней же
     keep_opt = bool(args.keep_opt or meta.get("keep_opt"))
@@ -663,7 +689,12 @@ def run_seed(seed, args, progress_cb=None):
                 print(f"[seed {seed}] разведка: лоссы {['%.3e' % v for v in losses]} -> "
                       f"{ALL_ACTIONS[a][0]} lr={ALL_ACTIONS[a][1]} ep={ALL_ACTIONS[a][2]}", flush=True)
         if use_agent:
-            if len(agents) > 1:
+            if len(agents) > 1 and guide:
+                g = guide[len(chain)] if len(chain) < len(guide) else None
+                k_agree = args.guide_agree if args.guide_agree > 0 else len(agents)
+                a, dev = committee_with_guide(agents, state, allowed, g, k_agree, args.guide_bonus)
+                guide_stat[1 if dev else 0] += 1
+            elif len(agents) > 1:
                 a = ensemble_action(agents, state, allowed, args.ensemble)
             elif allowed.all() and not guide:
                 a = pick_action(agent, state, mean, std, variant)     # прежний путь
@@ -945,6 +976,7 @@ def run_seed(seed, args, progress_cb=None):
                             if agree else None),
                 scout_spent=int(scout_spent), scout_log=scout_log,
                 guard_spent=int(guard_spent), guard_log=guard_log,
+                guide_follow=int(guide_stat[0]), guide_deviate=int(guide_stat[1]),
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
                 keep_opt_mode=(keep_mode if keep_opt else None),
                 elapsed_s=round(time.time() - t0, 1))
@@ -1050,6 +1082,11 @@ def main():
                     help="цепочка-эвристика: агент отходит от неё, только если его Q "
                          "выше Q действия эвристики больше чем на --guide-bonus")
     ap.add_argument("--guide-bonus", type=float, default=0.0)
+    ap.add_argument("--guide-agree", type=int, default=0,
+                    help="комитет с проводником (--model-files и --guide): от действия проводника отходим, "
+                         "только если не меньше стольких агентов согласны между собой и среднее "
+                         "стандартизованное Q выше Q проводника на --guide-bonus (в z-единицах); 0 — все "
+                         "агенты. Без --guide комитет голосует как раньше (UBRL, arXiv 2305.07487)")
     ap.add_argument("--float64", action="store_true",
                     help="решать PINN в двойной точности (только с --no-state: конвейер "
                          "карт рассчитан на float32). Диагностика: снимает ли точность "

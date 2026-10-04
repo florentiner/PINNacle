@@ -113,6 +113,13 @@
    "note": "готовый агент в среде без сбросов: дешёвая проба до обучения K2"
   },
   {
+   "id": "E6",
+   "kind": "eval",
+   "script": "experiments/rl_arch/online_eval_env.py",
+   "args": "--policy agent --model-files {COMMITTEE} --guide {GUIDE} --guide-bonus 0.5 --guide-agree 2 --keep-opt --keep-opt-mode safe --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag combo",
+   "note": "комитет с проводником и воздержанием плюс страж: отход от проводника только при согласии агентов"
+  },
+  {
    "id": "X1",
    "kind": "xfer",
    "script": "experiments/rl_arch/offline_rl.py",
@@ -5627,6 +5634,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500,LBFGS:1:1000 --script-tail repeat --no-state --keep-opt --keep-opt-mode safe --finish-ls all --pde wave1d --budget 7000 --hours 7.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3e_sk2s_ls"
+    }
+   ]
+  },
+  {
+   "id": "wave-w17-cmtg",
+   "wave": 17,
+   "group": "H16",
+   "hours": 10.5,
+   "needs": [
+    "{COMMITTEE}"
+   ],
+   "note": "комитет с проводником и воздержанием, безопасная среда без сбросов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files {COMMITTEE} --guide {GUIDE} --guide-bonus 0.5 --guide-agree 2 --keep-opt --keep-opt-mode safe --pde wave1d --budget 7000 --hours 10.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag n_w17_cmtg"
     }
    ]
   }
