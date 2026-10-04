@@ -64,7 +64,16 @@ def load_queue(path=QUEUE):
         for s in j["steps"]:
             for k, v in dec.items():
                 s["args"] = s["args"].replace("{" + k + "}", str(v))
-        j["unresolved"] = sorted({m for s in j["steps"] for m in re.findall(r"\{([A-Z_]+)\}", s["args"])})
+        # needs тоже с подстановками: {BEST_AGENT}, {COMMITTEE} (список через запятую — по файлу на
+        # агента); без этого need_problem искал в HF файл с буквальным именем «{COMMITTEE}»
+        needs = []
+        for n in j.get("needs", []):
+            for k, v in dec.items():
+                n = n.replace("{" + k + "}", str(v))
+            needs += [x.strip() for x in n.split(",") if x.strip()]
+        j["needs"] = needs
+        j["unresolved"] = sorted({m for s in j["steps"] for m in re.findall(r"\{([A-Z][A-Z0-9_]*)\}", s["args"])}
+                                 | {m for n in needs for m in re.findall(r"\{([A-Z][A-Z0-9_]*)\}", n)})
     return q
 
 

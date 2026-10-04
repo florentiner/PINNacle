@@ -172,7 +172,7 @@ LINTERS = {"offline_rl.py": lint_offline, "online_train_env.py": lint_train,
 def check(script, args):
     for k, v in DUMMY.items():
         args = args.replace("{" + k + "}", v)
-    left = re.findall(r"\{([A-Z_]+)\}", args)
+    left = re.findall(r"\{([A-Z][A-Z0-9_]*)\}", args)
     if left:
         return f"неизвестные подстановки {left}"
     fn = LINTERS.get(os.path.basename(script))
