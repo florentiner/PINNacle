@@ -5681,6 +5681,66 @@
      "args": "--policy script --script {GA_TOP1} --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde wave1d --budget 7000 --hours 7.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3e_ga_top1"
     }
    ]
+  },
+  {
+   "id": "wave-w17-cmtg-c1",
+   "wave": 17,
+   "group": "H16",
+   "hours": 4.5,
+   "needs": [
+    "{COMMITTEE}"
+   ],
+   "note": "комитет с проводником и воздержанием, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files {COMMITTEE} --guide {GUIDE} --guide-bonus 0.5 --guide-agree 2 --keep-opt --keep-opt-mode safe --pde wave1d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_w17_cmtg"
+    }
+   ]
+  },
+  {
+   "id": "wave-w17-ga-top-c1",
+   "wave": 17,
+   "group": "H15",
+   "hours": 4.5,
+   "needs": [],
+   "note": "лучшая цепочка генетического поиска, сиды 42-46 (подстановка GA_TOP1)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {GA_TOP1} --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde wave1d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3e_ga_top1"
+    }
+   ]
+  },
+  {
+   "id": "wave-w17-cmtg-c2",
+   "wave": 17,
+   "group": "H16",
+   "hours": 4.5,
+   "needs": [
+    "{COMMITTEE}"
+   ],
+   "note": "комитет с проводником и воздержанием, сиды 47-51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files {COMMITTEE} --guide {GUIDE} --guide-bonus 0.5 --guide-agree 2 --keep-opt --keep-opt-mode safe --pde wave1d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_w17_cmtg"
+    }
+   ]
+  },
+  {
+   "id": "wave-w17-ga-top-c2",
+   "wave": 17,
+   "group": "H15",
+   "hours": 4.5,
+   "needs": [],
+   "note": "лучшая цепочка генетического поиска, сиды 47-51 (подстановка GA_TOP1)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script {GA_TOP1} --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde wave1d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3e_ga_top1"
+    }
+   ]
   }
  ]
 }
