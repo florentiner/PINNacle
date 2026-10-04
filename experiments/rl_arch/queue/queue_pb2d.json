@@ -5741,6 +5741,48 @@
      "args": "--policy script --script {GA_TOP1} --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3e_ga_top1"
     }
    ]
+  },
+  {
+   "id": "pb2d-w17-sur-ab-c1",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка планировщика по суррогатной среде (ab), сиды 42-46, среда со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.001:2500,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3e_sur_ab"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w17-sur-rob-c1",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка планировщика по суррогатной среде (rob), сиды 42-46, среда со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:100,Adam:0.001:2500,PSO:0.0001:200,LBFGS:1:1000,PSO:0.001:100,LBFGS:1:1000,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:1:500,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:1:1000 --script-tail stop --no-state --pde poissonboltzmann2d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3e_sur_rob"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w17-sur-abs",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка A/B планировщика в безопасной среде без сбросов; контроль t3b_sk2s",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.001:2500,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:1000,LBFGS:1:500 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3e_sur_abs"
+    }
+   ]
   }
  ]
 }

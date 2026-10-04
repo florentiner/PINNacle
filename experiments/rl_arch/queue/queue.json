@@ -8497,6 +8497,62 @@
      "args": "--policy script --script {GA_TOP1} --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 50,51 --tag t3e_ga_top1"
     }
    ]
+  },
+  {
+   "id": "w17-sur-ab-c1",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка планировщика по суррогатной среде (ab), сиды 42-44, среда со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,LBFGS:1:1000 --script-tail stop --no-state --pde ns2d_liddriven --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3e_sur_ab"
+    }
+   ]
+  },
+  {
+   "id": "w17-sur-ab-c2",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка планировщика по суррогатной среде (ab), сиды 45-46, среда со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,LBFGS:1:1000 --script-tail stop --no-state --pde ns2d_liddriven --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3e_sur_ab"
+    }
+   ]
+  },
+  {
+   "id": "w17-sur-rob-c1",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка планировщика по суррогатной среде (rob), сиды 42-44, среда со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:300,Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,PSO:0.001:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:1:100 --script-tail stop --no-state --pde ns2d_liddriven --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3e_sur_rob"
+    }
+   ]
+  },
+  {
+   "id": "w17-sur-rob-c2",
+   "wave": 17,
+   "group": "H03",
+   "hours": 4.5,
+   "needs": [],
+   "note": "цепочка планировщика по суррогатной среде (rob), сиды 45-46, среда со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script PSO:0:300,Adam:0.01:2500,Adam:0.001:2500,LBFGS:1:1000,PSO:0.001:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:0.5:100,LBFGS:1:100 --script-tail stop --no-state --pde ns2d_liddriven --budget 7000 --hours 4.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3e_sur_rob"
+    }
+   ]
   }
  ]
 }
