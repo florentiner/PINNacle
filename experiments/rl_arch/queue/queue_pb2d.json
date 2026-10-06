@@ -5633,6 +5633,38 @@
    ]
   },
   {
+   "id": "pb2d-w18-mbpo",
+   "wave": 18,
+   "group": "H03",
+   "hours": 3.0,
+   "needs": [
+    "rl_arch/agents_online/poissonboltzmann2d_mbpo.pt"
+   ],
+   "note": "модельный агент MBPO, 5 сидов со сбросами",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/poissonboltzmann2d_mbpo.pt --no-state --state-mode loss --pde poissonboltzmann2d --budget 7000 --hours 3.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_mbpo_h5l05"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w18-mbpok",
+   "wave": 18,
+   "group": "H03",
+   "hours": 3.0,
+   "needs": [
+    "rl_arch/agents_online/poissonboltzmann2d_mbpo.pt"
+   ],
+   "note": "модельный агент MBPO, 5 сидов без сбросов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/poissonboltzmann2d_mbpo.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 3.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_mbpok_h5l05"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w13-of-g0",
    "wave": 13,
    "group": "H08",
