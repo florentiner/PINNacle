@@ -1057,6 +1057,15 @@ if PDE in ("ns2d_liddriven", "poissonboltzmann2d"):
                       f"--budget {BUDGET} {KEEPS} --tag t3br_sk --hours 4.5 --resume")],
             4.5, note=f"ветвление шести концовок от снимка каркаса, сиды {_lo}-{_hi}")
 
+# концовка с SOAP на ns2d (ветвление 6 октября: 0.0328 против 0.0356 у каркаса, 5 побед из 5 на
+# сидах 42-46): досчёт до 10 сидов той же цепочкой без ветвления, тег тот же — строки сливаются
+if NS2D:
+    for _i, (_lo, _hi) in enumerate(((47, 48), (49, 50), (51, 51)), 1):
+        add(f"w17-soapend-c{_i}", 17, "H12",
+            [(EVAL, f"--policy script --script Adam:0.01:2500,Adam:0.0001:2500,SOAP:0.003:1000,LBFGS:1:1000 "
+                    f"--script-tail stop --no-state {KEEPS} " + t3ev("t3br_sk_e3", seeds(_lo, _hi), hours=3.0))],
+            3.0, note=f"каркас, SOAP, L-BFGS: досчёт концовки с SOAP, сиды {_lo}-{_hi}")
+
 # Наборы флагов для слотов волны 4 ({COMBO_A..C}, {COMBO_EVAL_A..B}) и для {XFER_FLAGS}. Каждый
 # набор lint_queue.py прогоняет через разбор аргументов и проверки совместимости своего скрипта,
 # поэтому в таблицу комбинаций PLAN.md попадают только исполнимые сочетания

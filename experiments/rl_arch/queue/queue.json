@@ -8623,6 +8623,48 @@
      "args": "--pde ns2d_liddriven --seeds 46 --prefix Adam:0.01:2500,Adam:0.0001:2500 --endings LBFGS:1:1000,LBFGS:1:1000;LBFGS:1:500,LBFGS:1:500,LBFGS:1:500,LBFGS:1:500;LBFGS:1:1000,Adam:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100;SOAP:0.003:1000,LBFGS:1:1000;LBFGS:0.5:500,LBFGS:1:500,LBFGS:0.1:500,LBFGS:1:500;LBFGS:1:1000,PSO:0.001:100,LBFGS:1:500,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100,LBFGS:1:100 --budget 7000 --keep-opt --keep-opt-mode safe --tag t3br_sk --hours 4.5 --resume"
     }
    ]
+  },
+  {
+   "id": "w17-soapend-c1",
+   "wave": 17,
+   "group": "H12",
+   "hours": 3.0,
+   "needs": [],
+   "note": "каркас, SOAP, L-BFGS: досчёт концовки с SOAP, сиды 47-48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,SOAP:0.003:1000,LBFGS:1:1000 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.0 --resume --ckpt-every 10 --seeds 47,48 --tag t3br_sk_e3"
+    }
+   ]
+  },
+  {
+   "id": "w17-soapend-c2",
+   "wave": 17,
+   "group": "H12",
+   "hours": 3.0,
+   "needs": [],
+   "note": "каркас, SOAP, L-BFGS: досчёт концовки с SOAP, сиды 49-50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,SOAP:0.003:1000,LBFGS:1:1000 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.0 --resume --ckpt-every 10 --seeds 49,50 --tag t3br_sk_e3"
+    }
+   ]
+  },
+  {
+   "id": "w17-soapend-c3",
+   "wave": 17,
+   "group": "H12",
+   "hours": 3.0,
+   "needs": [],
+   "note": "каркас, SOAP, L-BFGS: досчёт концовки с SOAP, сиды 51-51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500,SOAP:0.003:1000,LBFGS:1:1000 --script-tail stop --no-state --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.0 --resume --ckpt-every 10 --seeds 51 --tag t3br_sk_e3"
+    }
+   ]
   }
  ]
 }
