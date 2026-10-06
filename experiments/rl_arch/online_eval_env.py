@@ -133,6 +133,64 @@ def build_optimizer(opt_name, lr, net):
 SCALAR_CH = 5
 
 
+# ---- режим состояния tele: телеметрия последнего действия (offline_rl.tele_state) ----
+def tele_display_every(epochs, display_every):
+    """Частота записи кривой лосса (model.losshistory) в режиме tele: не реже display_every и
+    не реже max(10, epochs//20) — около двадцати точек на действие. Запись — лишний прямой
+    проход на тренировочных и тестовых точках, веса и поток случайных чисел не меняются."""
+    return max(1, min(int(display_every), max(10, int(epochs) // 20)))
+
+
+def flat_params(net):
+    """Плоская копия весов сети (для смещения ||θ_end − θ_start|| / ||θ_start||)."""
+    with torch.no_grad():
+        return torch.cat([p.detach().reshape(-1) for p in net.parameters()]).clone()
+
+
+def loss_grad_norm(model):
+    """Норма градиента общего (взвешенного) обучающего лосса по весам сети в текущей точке:
+    один прямой и один обратный проход, .grad параметров и оптимизатор не трогаются.
+    None — если посчитать не удалось."""
+    ts = model.train_state
+    params = [p for p in model.net.parameters() if p.requires_grad]
+    if ts.X_train is None or not params or model.outputs_losses_train is None:
+        return None
+    model.net.auxiliary_vars = ts.train_aux_vars
+    try:
+        losses = model.outputs_losses_train(ts.X_train, ts.y_train)[1]
+        gs = torch.autograd.grad(torch.sum(losses), params, allow_unused=True)
+        g2 = sum(float((g.double() ** 2).sum()) for g in gs if g is not None)
+        return math.sqrt(g2) if np.isfinite(g2) else None
+    except Exception as e:      # noqa: BLE001 — наблюдение не должно ронять прогон
+        print(f"tele: норма градиента не посчитана ({type(e).__name__}: {e})", flush=True)
+        return None
+    finally:
+        model.net.auxiliary_vars = None
+
+
+def tele_observe(model, hist_start, theta0, prev_total):
+    """Состояние tele после действия: лоссы в конце, кривая лосса этого действия (записи
+    losshistory начиная с hist_start, включая точку до первого шага), норма градиента и
+    смещение весов от theta0. Возвращает (состояние TELE_CH x 26 x 26, общий лосс или None)."""
+    from offline_rl import tele_state, TELE_CH
+    lv = np.asarray(model.train_state.loss_train, dtype=float).ravel()
+    n_pde = int(getattr(getattr(model, "pde", None), "num_pde", len(lv)))
+    l3 = (float(lv.sum()), float(lv[:n_pde].sum()), float(lv[n_pde:].sum()))
+    if not all(np.isfinite(l3)):
+        return np.zeros((TELE_CH, 26, 26), dtype=np.float32), None
+    lh = model.losshistory
+    steps = list(lh.steps[hist_start:])
+    curve = [float(np.sum(np.asarray(v, dtype=float))) for v in lh.loss_train[hist_start:]]
+    disp = None
+    if theta0 is not None:
+        th1 = flat_params(model.net)
+        if th1.shape == theta0.shape:
+            disp = float((th1 - theta0).norm() / max(float(theta0.norm()), 1e-12))
+    st = tele_state(l3[0], l3[1], l3[2], prev_total, curve_steps=steps, curve_loss=curve,
+                    grad_norm=loss_grad_norm(model), rel_disp=disp)
+    return st, l3[0]
+
+
 def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
     """Дубликат из online_train_env: контекст постоянными каналами. Копия, чтобы
     оценка не импортировала обучающий скрипт целиком."""
@@ -477,9 +535,13 @@ def run_seed(seed, args, progress_cb=None):
                      f"{variant}: у него один выход на действие, брать хвост распределения не из чего")
     meta = getattr(agent, "_meta", {}) if agent is not None else {}
 
+    from offline_rl import state_channels
+
     def _wants_ctx(ag, var):
-        return (next(ag.model.parameters()).shape[1] > 4 if var != "stat_dqn"
-                else next(ag.model.parameters()).shape[1] > 32)
+        # каналов наблюдения до контекста: 4 карты, у режима tele — TELE_CH (из meta агента)
+        base = state_channels((getattr(ag, "_meta", {}) or {}).get("state_mode", "full"))
+        return (next(ag.model.parameters()).shape[1] > base if var != "stat_dqn"
+                else next(ag.model.parameters()).shape[1] > 8 * base)
     ctx_meta = meta
     for ag_, _m, _s, var_ in agents[1:]:
         if not _wants_ctx(agent, variant) and _wants_ctx(ag_, var_):
@@ -497,11 +559,21 @@ def run_seed(seed, args, progress_cb=None):
     # ---- трек 3: режим состояния, учёт времени, история по шагам ----
     from offline_rl import apply_state_mode, loss_state, pde_desc, pde_meta
     state_mode = meta.get("state_mode", "full") if args.state_mode == "auto" else args.state_mode
-    mapless = state_mode in ("blind", "loss")
+    mapless = state_mode in ("blind", "loss", "tele")
+    if needs_agent and len({(getattr(ag_, "_meta", {}) or {}).get("state_mode", "full") == "tele"
+                            for ag_, *_r in agents}) > 1:
+        sys.exit("комитет из агентов режима tele и агентов на картах не поддержан: разные каналы")
+    if needs_agent and (state_mode == "tele") != (meta.get("state_mode", "full") == "tele"):
+        sys.exit(f"агент обучен в режиме {meta.get('state_mode', 'full')!r}, а запрошен {state_mode!r}: "
+                 "у tele другое число каналов")
     if args.no_state and needs_agent and not mapless:
         sys.exit(f"--no-state: агент обучен в режиме состояния {state_mode!r}, ему нужны карты")
-    if args.state_compare and state_mode == "loss":
-        sys.exit("--state-compare не определён для режима loss: агент обучен на лоссах, не на картах")
+    if args.state_compare and state_mode in ("loss", "tele"):
+        sys.exit(f"--state-compare не определён для режима {state_mode}: агент обучен на лоссах, не на картах")
+    # tele считается и без агента (случайная/скриптовая политика с --state-mode tele): дешёвая
+    # телеметрия кривой лосса пишется в результат (tele_log) для анализа застоев
+    want_tele = state_mode == "tele"
+    tele_log, tele_obs = [], None
     if state_mode == "rebuild" and not args.state_compare:
         sys.exit("--state-mode rebuild имеет смысл только с --state-compare: агент действует по первой "
                  "сборке карт, а записывается, что он выбрал бы по второй")
@@ -531,6 +603,7 @@ def run_seed(seed, args, progress_cb=None):
     desc_vals = pde_desc(args.pde) if ctx_meta.get("pde_ctx") else None
     err_scale = float(pde_meta()[args.pde]["init_err"]) if ctx_meta.get("err_norm") == "init" else 1.0
     prev_loss_tot = None
+    from offline_rl import state_channels as _sch
 
     def add_desc(st):
         if desc_vals is None:
@@ -565,7 +638,7 @@ def run_seed(seed, args, progress_cb=None):
     os.makedirs(save_dir, exist_ok=True)
 
     # initial state: zero maps (rl_trainer.zero_state)
-    state = np.zeros((4, 26, 26), dtype=np.float32)
+    state = np.zeros((_sch(state_mode) if needs_agent else 4, 26, 26), dtype=np.float32)
     want_ctx = bool(agents and any(_wants_ctx(ag_, var_) for ag_, _m, _s, var_ in agents))
     last_a = None
     if want_ctx:
@@ -600,6 +673,7 @@ def run_seed(seed, args, progress_cb=None):
         rmse, brmse, l2re_op, l2re_bnd = ck["metrics"]
         t3 = ck.get("t3") or {}
         prev_loss_tot = t3.get("prev_loss_tot")
+        tele_log = t3.get("tele_log", [])
         guard_log, guard_spent = t3.get("guard_log", []), t3.get("guard_spent", 0)
         prev_raw2, stale_maps = t3.get("prev_raw2"), t3.get("stale_maps")
         agree, hist = t3.get("agree", []), t3.get("hist", [])
@@ -622,6 +696,7 @@ def run_seed(seed, args, progress_cb=None):
             boost_layers=boost_layers, boost_eps=boost_eps,
             rule_st=rule_st,
             t3=dict(agree=agree, hist=hist, true_state=true_state, prev_loss_tot=prev_loss_tot,
+                    tele_log=tele_log,
                     guard_log=guard_log, guard_spent=guard_spent, stale_maps=stale_maps,
                     prev_raw2=({k: v.detach().cpu() for k, v in prev_raw2.items()}
                                if prev_raw2 is not None else None),
@@ -744,8 +819,13 @@ def run_seed(seed, args, progress_cb=None):
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
+            if want_tele:
+                # начало кривой этого действия и веса до него (откат стража берёт новые)
+                tele_h0, tele_th0 = len(model.losshistory.steps), flat_params(model.net)
             t_op = time.time()
-            model.train(iterations=epochs, display_every=args.display_every,
+            model.train(iterations=epochs,
+                        display_every=(tele_display_every(epochs, args.display_every) if want_tele
+                                       else args.display_every),
                         callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
             t_opt_tot += time.time() - t_op
             spent += epochs
@@ -766,6 +846,10 @@ def run_seed(seed, args, progress_cb=None):
                 continue
             break
         chain.append([opt_name, lr, epochs])
+        if want_tele:
+            # телеметрия снимается сразу после действия: дальше возможен бустинг (новая сеть)
+            tele_obs = tele_observe(model, tele_h0, tele_th0, prev_loss_tot)
+            tele_log.append([len(chain), int(spent)] + [round(float(v), 4) for v in tele_obs[0][:, 0, 0]])
         last_a = a if a < 27 else -1      # действие вне пространства агента в контексте неизвестно
         if args.policy == "bandit":
             if loss_before is not None and np.isfinite(cur_loss) and cur_loss > 0 and loss_before > 0:
@@ -913,6 +997,8 @@ def run_seed(seed, args, progress_cb=None):
             true_maps = stale_maps
         else:
             true_maps = np.zeros((4, 26, 26), dtype=np.float32)
+        if want_tele and tele_obs is not None and not needs_agent:
+            prev_loss_tot = tele_obs[1] if tele_obs[1] is not None else prev_loss_tot
         if build_maps or needs_agent:
             # вмешательство в состояние: агент получает искажённые карты, истинные
             # сохраняются для сравнения выбранных действий
@@ -926,6 +1012,11 @@ def run_seed(seed, args, progress_cb=None):
                     prev_loss_tot = l3[0]
                 else:
                     maps = np.zeros((4, 26, 26), dtype=np.float32)
+            elif state_mode == "tele":
+                # телеметрия последнего действия (снята выше, до бустинга)
+                maps = tele_obs[0]
+                if tele_obs[1] is not None:
+                    prev_loss_tot = tele_obs[1]
             elif state_mode == "rebuild":
                 maps = true_maps          # агент действует по первой сборке
             else:
@@ -993,6 +1084,7 @@ def run_seed(seed, args, progress_cb=None):
                 agree_rate=(round(float(np.mean([x[1] == x[2] for x in agree])), 4)
                             if agree else None),
                 scout_spent=int(scout_spent), scout_log=scout_log,
+                tele_log=(tele_log if want_tele else None),
                 guard_spent=int(guard_spent), guard_log=guard_log,
                 guide_follow=int(guide_stat[0]), guide_deviate=int(guide_stat[1]),
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
@@ -1058,11 +1150,14 @@ def build_parser():
     ap.add_argument("--guard-fallback", default="LBFGS:1:500",
                     help="запасное действие стража")
     ap.add_argument("--state-mode", default="auto",
-                    choices=["auto", "full", "blind", "level", "shape", "shuffle", "loss", "rebuild", "tasknorm"],
+                    choices=["auto", "full", "blind", "level", "shape", "shuffle", "loss", "rebuild", "tasknorm",
+                             "tele"],
                     help="Трек 3: что видит агент. auto — как при обучении (из чекпоинта); "
                          "blind — карты не строятся; level — только уровень потерь; shape — только "
                          "форма; shuffle — перемешанные пиксели; loss — обучающие лоссы вместо карт "
-                         "(карты не строятся); rebuild — вторая сборка карт с другой случайностью "
+                         "(карты не строятся); tele — телеметрия обучения: лоссы, статистики кривой лосса "
+                         "внутри действия, норма градиента, смещение весов (offline_rl.tele_state; "
+                         "без агента пишется в tele_log результата); rebuild — вторая сборка карт с другой случайностью "
                          "автокодировщика (с --state-compare). Явное значение — вмешательство на оценке")
     ap.add_argument("--state-compare", action="store_true",
                     help="Вместе с вмешательством: строить истинные карты и записывать, какое "
@@ -1203,8 +1298,8 @@ def main():
     uses_agent = args.policy == "agent" or (args.policy == "script" and args.script_tail == "agent")
     if args.no_state and args.boost_trigger.startswith("landscape"):
         sys.exit("--no-state несовместим с ландшафтными триггерами: им нужны карты")
-    if args.no_state and uses_agent and args.state_mode not in ("auto", "blind", "loss"):
-        sys.exit("--no-state с агентом допустим только при --state-mode blind или loss (или auto "
+    if args.no_state and uses_agent and args.state_mode not in ("auto", "blind", "loss", "tele"):
+        sys.exit("--no-state с агентом допустим только при --state-mode blind, loss или tele (или auto "
                  "для агента, обученного без карт)")
     if args.state_compare and (args.no_state or not uses_agent):
         sys.exit("--state-compare требует агента и построения карт (без --no-state)")

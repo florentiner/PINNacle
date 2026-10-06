@@ -40,9 +40,11 @@ import torch  # noqa: E402
 import deepxde as dde  # noqa: E402
 
 from online_eval_env import (ACTION_TABLE, AE_MODEL_PARAMS, GRID_RANGE, LOSS_TYPES,  # noqa: E402
-                             OUT_REPO, build_optimizer, build_state, reuse_optimizer)
+                             OUT_REPO, build_optimizer, build_state, reuse_optimizer,
+                             flat_params, tele_display_every, tele_observe)
 from offline_rl import (QNet, apply_state_mode, chain_ctx, STATE_MODES, PDE_DESC_CH,  # noqa: E402
-                        keep_consistent, loss_state, pde_desc, pde_meta, subdir_to_pde)
+                        keep_consistent, loss_state, pde_desc, pde_meta, state_channels,
+                        subdir_to_pde)
 
 EPS_START, EPS_END, EPS_DECAY = 0.5, 0.05, 50   # значения авторов (rl_algorithms.py)
 GAMMA = 0.9                                      # их rl_agent_params
@@ -931,7 +933,10 @@ def main():
                          "шаг среды дешевле); level только уровень потерь; shape только форма; "
                          "shuffle перемешанные пиксели; loss обучающие лоссы вместо карт (карты не "
                          "строятся, наблюдение бесплатное); tasknorm карты нормированы статистиками "
-                         "своей задачи (перенос между УрЧП)")
+                         "своей задачи (перенос между УрЧП); tele телеметрия обучения: лоссы, "
+                         "наклон/t-статистика/разброс/доля улучшений кривой лосса внутри действия, "
+                         "норма градиента, смещение весов (offline_rl.tele_state, 10 каналов, "
+                         "карты не строятся)")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -951,8 +956,8 @@ def main():
         if bad:
             ap.error("--state-mode, отличный от full, несовместим с " + ", ".join(bad)
                      + ": эти режимы опираются на сами карты")
-        if args.state_mode == "loss" and ((args.rlpd and not args.self_prior) or args.preload):
-            ap.error("--state-mode loss несовместим с офлайновыми буферами (--rlpd без "
+        if args.state_mode in ("loss", "tele") and ((args.rlpd and not args.self_prior) or args.preload):
+            ap.error(f"--state-mode {args.state_mode} несовместим с офлайновыми буферами (--rlpd без "
                      "--self-prior, --preload): в них нет обучающего лосса")
     if args.pde_ctx and not args.scalar_ctx:
         ap.error("--pde-ctx требует --scalar-ctx")
@@ -1026,6 +1031,8 @@ def main():
                     err_norm=args.err_norm, online_reward=args.online_reward,
                     scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
     n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)
+    n_obs = state_channels(args.state_mode)     # каналы наблюдения до контекста: 4 карты или 10 tele
+    tele = args.state_mode == "tele"
     desc_vals = pde_desc(args.pde) if args.pde_ctx else None
 
     def with_ctx(st, step_, spent_, last_a, err_):
@@ -1071,7 +1078,7 @@ def main():
               f"таргет по минимуму из {args.rlpd_subset} случайных, "
               f"{net.n_params()/1e6:.2f} млн параметров", flush=True)
     else:
-        net = QNet(args.variant, dev, in_ch=4 + n_ctx)
+        net = QNet(args.variant, dev, in_ch=n_obs + n_ctx)
     mean = std = None
     if args.warm_start and not os.path.exists(args.warm_start):
         # допускаем имя файла в HF-датасете (rl_arch/models/...)
@@ -1099,7 +1106,7 @@ def main():
         print(f"тёплый старт из {args.warm_start}: перенесено {len(ok)} тензоров"
               + (f", пропущено {skipped} (несовпадение формы)" if skipped else ""), flush=True)
     if args.scalar_ctx:
-        mean, std = pad_norm(mean, std, 4 + n_ctx)
+        mean, std = pad_norm(mean, std, n_obs + n_ctx)
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
 
     if args.ssl_pretrain:
@@ -1236,7 +1243,7 @@ def main():
         if mean is None:
             mean, std = om, os_
         if args.scalar_ctx:
-            mean, std = pad_norm(mean, std, 4 + n_ctx)
+            mean, std = pad_norm(mean, std, n_obs + n_ctx)
         print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
               f"UTD={args.rlpd_utd}", flush=True)
     if args.preload:
@@ -1264,7 +1271,7 @@ def main():
         if mean is None:
             mean, std = om, os_
         if args.scalar_ctx:
-            mean, std = pad_norm(mean, std, 4 + n_ctx)
+            mean, std = pad_norm(mean, std, n_obs + n_ctx)
         print(f"предзагрузка по схеме авторов: {len(buf)} переходов из {args.preload}", flush=True)
 
     wm = wm_opt = None
@@ -1346,11 +1353,11 @@ def main():
                     torch.nn.init.zeros_(m.bias)
         model.net.apply(reinit)
 
-        state = np.zeros((4, 26, 26), dtype=np.float32)
+        state = np.zeros((n_obs, 26, 26), dtype=np.float32)
         if args.scalar_ctx:
             state = with_ctx(state, 0, 0, None, None if args.ctx_no_err else 1.0)
         prev_raw = None
-        prev_loss_tot = None      # режим loss: общий обучающий лосс после прошлого действия
+        prev_loss_tot = None      # режимы loss/tele: общий обучающий лосс после прошлого действия
         opt_cache = {}            # --keep-opt: оптимизатор прошлого действия этой цепочки
         pending = []          # хвост цепочки для n-шаговых возвратов
         spent, chain, done = 0, [], 0
@@ -1475,8 +1482,13 @@ def main():
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
+            if tele:
+                # начало кривой лосса этого действия и веса до него
+                tele_h0, tele_th0 = len(model.losshistory.steps), flat_params(model.net)
             t_op = time.time()
-            model.train(iterations=epochs, display_every=args.display_every,
+            model.train(iterations=epochs,
+                        display_every=(tele_display_every(epochs, args.display_every) if tele
+                                       else args.display_every),
                         callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
             t_opt_total += time.time() - t_op
             spent += epochs
@@ -1528,6 +1540,12 @@ def main():
                     prev_loss_tot = loss3[0]
                 else:
                     next_state = np.zeros((4, 26, 26), dtype=np.float32)
+            elif tele:
+                # телеметрия: лоссы, статистики кривой внутри действия, градиент, смещение весов
+                raw, pls, ae = None, None, None
+                next_state, l_tot = tele_observe(model, tele_h0, tele_th0, prev_loss_tot)
+                if l_tot is not None:
+                    prev_loss_tot = l_tot
             else:
                 ae = vm.train(5e-4, 1200, args.ae_epochs, 100, args.batch_size, True,
                               finetune_AE_model=False, callbacks=[EarlyStopping(patience=4000)],
@@ -1564,8 +1582,8 @@ def main():
                     # контекстные каналы постоянны, их пространственный разброс равен
                     # нулю — деление на 1e-6 раздуло бы вход в миллион раз. Они уже
                     # лежат в [-1,1], поэтому нормировка им не нужна вовсе.
-                    mean[:, 4:] = 0.0
-                    std[:, 4:] = 1.0
+                    mean[:, n_obs:] = 0.0
+                    std[:, n_obs:] = 1.0
             s_norm = ((state[None] - mean) / std)[0]
             s2_norm = ((next_state[None] - mean) / std)[0]
             if args.save_buffer:

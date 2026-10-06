@@ -171,7 +171,9 @@ REWARD_FORMS = ("logged", "level", "delta", "model", "dlog")
 #           (статистики буфера данного УрЧП из track3/pde_meta.json): одномерный оптимальный
 #           перенос распределений уровня между задачами при гауссовом приближении; уровень
 #           внутри задачи сохраняется, различия масштабов между задачами убраны
-STATE_MODES = ("full", "blind", "level", "shape", "shuffle", "loss", "tasknorm")
+# tele      — телеметрия обучения (tele_state): лоссы, статистики кривой внутри действия,
+#           норма градиента, смещение весов; десять каналов, только онлайн
+STATE_MODES = ("full", "blind", "level", "shape", "shuffle", "loss", "tasknorm", "tele")
 SCALAR_CH = 5
 PDE_DESC_CH = 6
 _EPOCHS_TABLE = [100, 1000, 2500, 100, 500, 1000, 100, 200, 300]
@@ -199,9 +201,9 @@ def apply_state_mode(S, mode: str = "full", seed: int = 0, pde: str | None = Non
         nz = m[..., :3, :, :] != 0.0           # нулевая стартовая карта остаётся нулевой
         m[..., :3, :, :] = np.where(nz, (m[..., :3, :, :] - mu) / np.maximum(sd, 1e-6), 0.0)
         return S
-    if mode == "loss":
-        raise ValueError("режим loss строится из обучающего лосса (loss_state) и для массивов "
-                         "карт не определён: в офлайновых буферах обучающего лосса нет")
+    if mode in ("loss", "tele"):
+        raise ValueError(f"режим {mode} строится из обучающего лосса (loss_state/tele_state) и для "
+                         "массивов карт не определён: в офлайновых буферах обучающего лосса нет")
     if mode == "blind":
         m[...] = 0.0
     elif mode == "level":
@@ -234,6 +236,93 @@ def loss_state(loss_total, loss_oper, loss_bnd, prev_total=None, size: int = 26)
         d = float(np.clip(np.log10(float(prev_total)) - np.log10(float(loss_total)), -1.0, 1.0))
     vals = [_loss_code(loss_total), _loss_code(loss_oper), _loss_code(loss_bnd), d]
     return np.stack([np.full((size, size), v, dtype=np.float32) for v in vals])
+
+
+# Режим tele: телеметрия обучения вместо карт (сигналы состояния обучения AOS 2608.01997;
+# статистический тест застоя по кривой лосса ExpTest 2411.16975 / SSS 2103.01205; проекция
+# шага SWATS 1712.07628 — здесь в виде относительного смещения весов). Десять постоянных
+# каналов на месте четырёх карт, контекст (--scalar-ctx) приклеивается после них.
+TELE_CH = 10
+TELE_NAMES = ("log_loss", "log_pde", "log_bnd", "drop", "slope100", "t_slope", "resid_sd",
+              "improve_frac", "grad_norm", "rel_disp")
+TELE_IMPROVE_TOL = 1e-6     # падение log10 лосса меньше этого (~20 ulp float32) — не улучшение
+
+
+def state_channels(mode: str) -> int:
+    """Число каналов наблюдения до контекста: 10 у tele, 4 (карты) у остальных режимов."""
+    return TELE_CH if mode == "tele" else 4
+
+
+def _symlog(x, floor):
+    """Знаковый логарифм: sign(x)·log10(1 + |x|/floor), обрезка в [-3, 3]."""
+    return float(np.clip(np.sign(x) * np.log10(1.0 + abs(float(x)) / floor), -3.0, 3.0))
+
+
+def curve_stats(steps, losses, tail: float = 0.5):
+    """Статистики кривой лосса внутри одного действия (ExpTest/SSS): МНК по log10 лосса на
+    последней доле tail эпох действия. Возвращает сырые значения: slope100 — наклон в
+    порядках на 100 эпох, t — его t-статистика, resid_sd — разброс остатков (порядки),
+    improve — доля интервалов записи, где лосс упал больше чем на TELE_IMPROVE_TOL порядка,
+    n — число точек. Меньше двух точек — нули."""
+    st = np.asarray(steps, dtype=float).ravel()
+    y = np.log10(np.maximum(np.asarray(losses, dtype=float).ravel(), 1e-30))
+    ok = np.isfinite(st) & np.isfinite(y)
+    st, y = st[ok], y[ok]
+    out = dict(slope100=0.0, t=0.0, resid_sd=0.0, improve=0.0, n=int(len(st)))
+    if len(st) < 2:
+        return out
+    cut = st[0] + (1.0 - tail) * (st[-1] - st[0])
+    m = st >= cut
+    if m.sum() < 2:
+        m[-2:] = True
+    x, yy = st[m], y[m]
+    out["n"] = int(len(x))
+    dy = np.diff(yy)
+    out["improve"] = float(np.mean(dy < -TELE_IMPROVE_TOL)) if len(dy) else 0.0
+    xc = x - x.mean()
+    sxx = float((xc ** 2).sum())
+    if sxx <= 0:
+        return out
+    b = float((xc * (yy - yy.mean())).sum() / sxx)
+    out["slope100"] = b * 100.0
+    if len(x) >= 3:
+        res = yy - yy.mean() - b * xc
+        sd = float(np.sqrt((res ** 2).sum() / (len(x) - 2)))
+        out["resid_sd"] = sd
+        se = sd / np.sqrt(sxx)
+        out["t"] = float(np.clip(b / se, -1e4, 1e4)) if se > 1e-12 else (0.0 if b == 0 else float(np.sign(b) * 1e4))
+    return out
+
+
+def tele_state(loss_total, loss_oper, loss_bnd, prev_total=None, curve_steps=None, curve_loss=None,
+               grad_norm=None, rel_disp=None, size: int = 26):
+    """Состояние режима tele: TELE_CH постоянных каналов 26x26, каждый примерно в [-3, 3].
+    Нормировка (фиксированная, без статистик буфера):
+      0-3 log_loss, log_pde, log_bnd, drop — как loss_state: log10(L)/6 + 1/3 в [-1, 1];
+          падение общего лосса за действие в порядках, обрезка [-1, 1];
+      4 slope100 — наклон log10 лосса на 100 эпох на второй половине действия,
+          symlog с полом 1e-3: sign·log10(1 + |s|/1e-3), [-3, 3] (застой 0, -0.1/100 эп -> -2);
+      5 t_slope — t-статистика наклона, sign·log10(1 + |t|), [-3, 3] (|t| < 2 -> |код| < 0.48);
+      6 resid_sd — разброс остатков МНК в порядках: (log10(sd + 1e-6) + 3) / 2, [-3, 3];
+      7 improve_frac — доля интервалов записи с падением лосса: 2f - 1 в [-1, 1];
+      8 grad_norm — норма градиента общего лосса в конце действия: log10(g) / 2, [-3, 3];
+      9 rel_disp — ||θ_end − θ_start|| / ||θ_start|| за действие: (log10(d + 1e-12) + 4) / 1.5, [-3, 3].
+    Нет кривой (меньше двух точек) — каналы 4-7 нулевые; нет градиента или смещения — нули."""
+    head = loss_state(loss_total, loss_oper, loss_bnd, prev_total, size=size)
+    cs = curve_stats(curve_steps if curve_steps is not None else [],
+                     curve_loss if curve_loss is not None else [])
+    if cs["n"] >= 2:
+        c_curve = [_symlog(cs["slope100"], 1e-3), _symlog(cs["t"], 1.0),
+                   float(np.clip((np.log10(cs["resid_sd"] + 1e-6) + 3.0) / 2.0, -3.0, 3.0)),
+                   2.0 * cs["improve"] - 1.0]
+    else:
+        c_curve = [0.0, 0.0, 0.0, 0.0]
+    g = (float(np.clip(np.log10(max(float(grad_norm), 1e-12)) / 2.0, -3.0, 3.0))
+         if grad_norm is not None and np.isfinite(grad_norm) else 0.0)
+    dsp = (float(np.clip((np.log10(max(float(rel_disp), 0.0) + 1e-12) + 4.0) / 1.5, -3.0, 3.0))
+           if rel_disp is not None and np.isfinite(rel_disp) else 0.0)
+    tail = np.stack([np.full((size, size), v, dtype=np.float32) for v in c_curve + [g, dsp]])
+    return np.concatenate([head, tail], axis=0)
 
 
 _PDE_META = None
@@ -1617,8 +1706,8 @@ def main():
         multi = resolve_subdirs(args.subdirs, args.holdout)
     elif args.holdout or args.pde_ctx:
         ap.error("--holdout и --pde-ctx работают только вместе с --subdirs")
-    if args.state_mode == "loss":
-        ap.error("--state-mode loss офлайн недоступен: в буферах нет обучающего лосса")
+    if args.state_mode in ("loss", "tele"):
+        ap.error(f"--state-mode {args.state_mode} офлайн недоступен: в буферах нет обучающего лосса")
     if args.state_mode == "tasknorm" and not args.chain_fix:
         ap.error("--state-mode tasknorm требует --chain-fix (нужна принадлежность состояний задаче)")
     if args.reward_form != "logged" and not args.chain_fix:

@@ -5357,6 +5357,282 @@
    ]
   },
   {
+   "id": "h2ms-w18-tele-s42",
+   "wave": 18,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: состояние застоя вместо карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode tele --seed 42 --tag qh2ms_t3on2_tele_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-tele-s42-na",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_tele_s42.pt"
+   ],
+   "note": "оценка: состояние застоя вместо карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_tele_s42.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qh2ms_t3on2_tele_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-tele-s42-nb",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_tele_s42.pt"
+   ],
+   "note": "оценка: состояние застоя вместо карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_tele_s42.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qh2ms_t3on2_tele_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-tele-s43",
+   "wave": 18,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: состояние застоя вместо карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode tele --seed 43 --tag qh2ms_t3on2_tele_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-tele-s43-na",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_tele_s43.pt"
+   ],
+   "note": "оценка: состояние застоя вместо карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_tele_s43.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qh2ms_t3on2_tele_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-tele-s43-nb",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_tele_s43.pt"
+   ],
+   "note": "оценка: состояние застоя вместо карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_tele_s43.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qh2ms_t3on2_tele_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telek-s42",
+   "wave": 18,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: состояние застоя, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode tele --keep-opt --seed 42 --tag qh2ms_t3on2_telek_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telek-s42-na",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telek_s42.pt"
+   ],
+   "note": "оценка: состояние застоя, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telek_s42.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qh2ms_t3on2_telek_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telek-s42-nb",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telek_s42.pt"
+   ],
+   "note": "оценка: состояние застоя, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telek_s42.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qh2ms_t3on2_telek_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telek-s43",
+   "wave": 18,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: состояние застоя, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode tele --keep-opt --seed 43 --tag qh2ms_t3on2_telek_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telek-s43-na",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telek_s43.pt"
+   ],
+   "note": "оценка: состояние застоя, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telek_s43.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qh2ms_t3on2_telek_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telek-s43-nb",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telek_s43.pt"
+   ],
+   "note": "оценка: состояние застоя, среда без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telek_s43.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qh2ms_t3on2_telek_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telef-s42",
+   "wave": 18,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: состояние застоя, мелкий шаг решений по 100 эпох, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode tele --keep-opt --mask adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000 --seed 42 --tag qh2ms_t3on2_telef_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telef-s42-na",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telef_s42.pt"
+   ],
+   "note": "оценка: состояние застоя, мелкий шаг решений по 100 эпох, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telef_s42.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qh2ms_t3on2_telef_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telef-s42-nb",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telef_s42.pt"
+   ],
+   "note": "оценка: состояние застоя, мелкий шаг решений по 100 эпох, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telef_s42.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qh2ms_t3on2_telef_s42"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telef-s43",
+   "wave": 18,
+   "group": "H04",
+   "hours": 11.8,
+   "needs": [],
+   "note": "чистый онлайн с нуля: состояние застоя, мелкий шаг решений по 100 эпох, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant stat_dqn --pde heat2d_multiscale --hours 11 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --self-prior 60 --reset-every 200 --init-err 0.609 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --state-mode tele --keep-opt --mask adam:0.01,pso,adam:0.001:1000,adam:0.001:2500,adam:0.0001:1000,adam:0.0001:2500,lbfgs:1:500,lbfgs:1:1000,lbfgs:0.5:500,lbfgs:0.5:1000,lbfgs:0.1:500,lbfgs:0.1:1000 --seed 43 --tag qh2ms_t3on2_telef_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telef-s43-na",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telef_s43.pt"
+   ],
+   "note": "оценка: состояние застоя, мелкий шаг решений по 100 эпох, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telef_s43.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qh2ms_t3on2_telef_s43"
+    }
+   ]
+  },
+  {
+   "id": "h2ms-w18-telef-s43-nb",
+   "wave": 18,
+   "group": "H04",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/qh2ms_t3on2_telef_s43.pt"
+   ],
+   "note": "оценка: состояние застоя, мелкий шаг решений по 100 эпох, без сбросов оптимизатора",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qh2ms_t3on2_telef_s43.pt --no-state --pde heat2d_multiscale --budget 7000 --hours 4.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qh2ms_t3on2_telef_s43"
+    }
+   ]
+  },
+  {
    "id": "h2ms-w13-of-g0",
    "wave": 13,
    "group": "H08",
