@@ -6033,16 +6033,16 @@
    ]
   },
   {
-   "id": "pb2d-w21-smoke",
+   "id": "pb2d-w21-smoke2",
    "wave": 21,
    "group": "H06",
    "hours": 1.0,
    "needs": [],
-   "note": "смоук нового кода агента на картах: все приёмы разом, 2 эпохи, один короткий сид",
+   "note": "смоук нового кода агента на картах: все приёмы разом, 2 эпохи (не --smoke: с ним чекпоинт не сохраняется), один короткий сид оценки",
    "steps": [
     {
      "script": "experiments/rl_arch/offline_rl.py",
-     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --smoke --encoder resnetpos --ens 3 --ens-min 2 --mb-aux 0.5 --mb-h 2 --pani-w 0.5 --pani-sigma 0.1 --distill-top 10 --distill-w 1.0 --mask-schedule --aug d4 --seeds 1 --model-tag w21smoke"
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --epochs 2 --fqe-epochs 2 --encoder resnetpos --ens 3 --ens-min 2 --mb-aux 0.5 --mb-h 2 --pani-w 0.5 --pani-sigma 0.1 --distill-top 10 --distill-w 1.0 --mask-schedule --aug d4 --seeds 1 --model-tag w21smoke"
     },
     {
      "script": "experiments/rl_arch/online_eval_env.py",
@@ -6101,24 +6101,6 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_mres_seed1.pt --stop-on-noop --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_mres"
-    }
-   ]
-  },
-  {
-   "id": "pb2d-w21-m-pos",
-   "wave": 21,
-   "group": "H06",
-   "hours": 3.5,
-   "needs": [],
-   "note": "ResNet с каналами координат и без усреднения по карте",
-   "steps": [
-    {
-     "script": "experiments/rl_arch/offline_rl.py",
-     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnetpos --seeds 1 --model-tag mpos"
-    },
-    {
-     "script": "experiments/rl_arch/online_eval_env.py",
-     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_mpos_seed1.pt --stop-on-noop --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_mpos"
     }
    ]
   },

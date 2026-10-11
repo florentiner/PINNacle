@@ -875,7 +875,8 @@ MAP_ARMS = (
     ("base", "convnext_dqn", "", (), "база: ConvNeXt, полные карты и время, без добавок"),
     ("cqlqr", "cnx_cql_qr", "", (), "консервативное квантильное обучение (CQL + QR), лучший вариант статьи"),
     ("res", "convnext_dqn", "--encoder resnet", (), "кодировщик ResNet"),
-    ("pos", "convnext_dqn", "--encoder resnetpos", (), "ResNet с каналами координат и без усреднения по карте"),
+    # считывание с сохранением положения (resnetpos) в лестницу не идёт: во втором запуске пробы оно
+    # хуже усреднения (R² 0.8963 против 0.9001) и равно своему варианту с перемешанными пикселями
     ("mae", "convnext_dqn", f"--encoder resnet --encoder-init {ENC_MAE}", (ENC_MAE,),
      "ResNet, предобученный восстановлением закрытых блоков на картах 22 уравнений"),
     ("frz", "convnext_dqn", f"--encoder resnet --encoder-init {ENC_CON} --freeze-encoder", (ENC_CON,),
@@ -898,13 +899,14 @@ def map_job(jid, variant, flags, mtag, note, needs=(), wave=21, sd=S5, hours=3.5
         hours, needs=needs, note=note)
 
 
-add("w21-smoke", 21, "H06",
-    [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} --smoke --encoder resnetpos --ens 3 --ens-min 2 --mb-aux 0.5 "
+add("w21-smoke2", 21, "H06",
+    [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} --epochs 2 --fqe-epochs 2 --encoder resnetpos --ens 3 --ens-min 2 --mb-aux 0.5 "
                "--mb-h 2 --pani-w 0.5 --pani-sigma 0.1 --distill-top 10 --distill-w 1.0 --mask-schedule --aug d4 "
                "--seeds 1 --model-tag w21smoke"),
      (EVAL, f"--policy agent --model-file {off_model('convnext_dqn', 'w21smoke')} --stop-on-noop {KEEPS} "
             + t3ev("t3m_smoke", "42", hours=0.5, budget=1500))],
-    1.0, note="смоук нового кода агента на картах: все приёмы разом, 2 эпохи, один короткий сид")
+    1.0, note="смоук нового кода агента на картах: все приёмы разом, 2 эпохи (не --smoke: с ним чекпоинт "
+              "не сохраняется), один короткий сид оценки")
 for nm, variant, flags, needs, note in MAP_ARMS:
     map_job(f"w21-m-{nm}", variant, flags, f"m{nm}", note, needs=needs)
 
