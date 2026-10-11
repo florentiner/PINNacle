@@ -5747,6 +5747,106 @@
    ]
   },
   {
+   "id": "pb2d-w19-lad-s0",
+   "wave": 19,
+   "group": "H03",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лестница по одному компоненту, офлайн, сид обучения 0: база: каркас и MBPO; база и CQL; база и ансамбль голов Q; база и упреждающие цели через модель; база и дистилляция лучших цепочек; база и сглаживание по сетке действий; база и расписание маски; MBPO без каркаса; каркас и CQL без модельных данных; каркас и обычный DQN",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval half --tag qpb2d_lad_c0_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --seed 0 --offline-eval half --tag qpb2d_lad_c1_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --ens 5 --ens-min 2 --utd 4 --seed 0 --offline-eval half --tag qpb2d_lad_c2_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --mve 2 --seed 0 --offline-eval half --tag qpb2d_lad_c3_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --distill-top 15 --distill-w 1.0 --seed 0 --offline-eval half --tag qpb2d_lad_c4_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --pani-w 0.3 --seed 0 --offline-eval half --tag qpb2d_lad_c5_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --mask-schedule --seed 0 --offline-eval half --tag qpb2d_lad_c6_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval half --tag qpb2d_lad_c7_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --cql-alpha 1.0 --seed 0 --offline-eval half --tag qpb2d_lad_c8_s0"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --seed 0 --offline-eval half --tag qpb2d_lad_c9_s0"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-lad-s1",
+   "wave": 19,
+   "group": "H03",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лестница по одному компоненту, офлайн, сид обучения 1: база: каркас и MBPO; база и CQL; база и ансамбль голов Q; база и упреждающие цели через модель; база и дистилляция лучших цепочек; база и сглаживание по сетке действий; база и расписание маски; MBPO без каркаса; каркас и CQL без модельных данных; каркас и обычный DQN",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --seed 1 --offline-eval half --tag qpb2d_lad_c0_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --seed 1 --offline-eval half --tag qpb2d_lad_c1_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --ens 5 --ens-min 2 --utd 4 --seed 1 --offline-eval half --tag qpb2d_lad_c2_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --mve 2 --seed 1 --offline-eval half --tag qpb2d_lad_c3_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --distill-top 15 --distill-w 1.0 --seed 1 --offline-eval half --tag qpb2d_lad_c4_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --pani-w 0.3 --seed 1 --offline-eval half --tag qpb2d_lad_c5_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --mask-schedule --seed 1 --offline-eval half --tag qpb2d_lad_c6_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 1 --offline-eval half --tag qpb2d_lad_c7_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --cql-alpha 1.0 --seed 1 --offline-eval half --tag qpb2d_lad_c8_s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --seed 1 --offline-eval half --tag qpb2d_lad_c9_s1"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w19-ca-lcb",
    "wave": 19,
    "group": "H03",

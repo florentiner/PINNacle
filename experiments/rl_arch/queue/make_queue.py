@@ -806,6 +806,27 @@ if PDE in ("ns2d_liddriven", "poissonboltzmann2d"):
                        f"--smoke --quick --tag ca_smoke_lcb --save-dir runs_rl_online")],
             1.5, note="смоук: сбор с общими префиксами и обрывом; направленный сбор с таблицей буферов")
     combo_jobs("w19-combo", f"{Q}_combo_s42", "", "полная комбинация на существующих буферах")
+    # лестница по одному компоненту (11 октября): полная комбинация сразу оказалась хуже цепочки
+    # (ns2d на GPU 0.356 против 0.0356; офлайн-отчёт показывал это заранее), поэтому каждый компонент
+    # проверяется отдельно поверх базы «каркас + MBPO». Только офлайн-обучение и офлайн-оценка на
+    # независимой половине данных, PINN не обучается; десять обучений подряд в одном кернеле на общей
+    # таблице, два сида обучения двумя задачами. На GPU-оценку идут варианты не хуже лучшей цепочки
+    _lb = "--mbpo-h 5 --mopo-lam 0.5"
+    LADDER = [("c0", f"--guide {_cg} {_lb}", "база: каркас и MBPO"),
+              ("c1", f"--guide {_cg} {_lb} --cql-alpha 1.0", "база и CQL"),
+              ("c2", f"--guide {_cg} {_lb} --ens 5 --ens-min 2 --utd 4", "база и ансамбль голов Q"),
+              ("c3", f"--guide {_cg} {_lb} --mve 2", "база и упреждающие цели через модель"),
+              ("c4", f"--guide {_cg} {_lb} --distill-top 15 --distill-w 1.0", "база и дистилляция лучших цепочек"),
+              ("c5", f"--guide {_cg} {_lb} --pani-w 0.3", "база и сглаживание по сетке действий"),
+              ("c6", f"--guide {_cg} {_lb} --mask-schedule", "база и расписание маски"),
+              ("c7", _lb, "MBPO без каркаса"),
+              ("c8", f"--guide {_cg} --cql-alpha 1.0", "каркас и CQL без модельных данных"),
+              ("c9", f"--guide {_cg}", "каркас и обычный DQN")]
+    for s_ in (0, 1):
+        add(f"w19-lad-s{s_}", 19, "H03",
+            [(COMBO, f"--pde {PDE} {fl} --seed {s_} --offline-eval half --tag {Q}_lad_{nm}_s{s_}")
+             for nm, fl, _n in LADDER],
+            4.0, note=f"лестница по одному компоненту, офлайн, сид обучения {s_}: " + "; ".join(n for _a, _b, n in LADDER))
     if not NS2D:
         _ca = ("--pde {p} --budget {b} --rounds 8 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 "
                "{k} --hours 11 --kernel-hours 11 --resume --save-dir runs_rl_online")
