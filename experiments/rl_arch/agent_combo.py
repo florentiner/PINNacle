@@ -1048,6 +1048,10 @@ def verify_ckpt(path, ag, tab, pi, guide, n=16):
     сетью и не зависит от каналов лоссов. Первым проверяется состояние сразу после каркаса."""
     import online_eval_env as E
     from offline_rl import loss_state, pde_desc, pde_meta
+    # импорт среды тянет deepxde, а он на GPU делает тензором по умолчанию cuda; обучавшаяся
+    # сеть и её входы живут на CPU, поэтому проверка возвращает умолчание обратно (смоук в
+    # кернеле 11 октября падал здесь на несовпадении устройств)
+    torch.set_default_tensor_type(torch.FloatTensor)
     name = tab["NAMES"][pi]
     net, mean, std, variant = E.load_agent(path)
     meta = net._meta
