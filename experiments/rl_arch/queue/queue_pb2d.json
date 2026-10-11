@@ -5665,6 +5665,274 @@
    ]
   },
   {
+   "id": "pb2d-w19-smoke-combo",
+   "wave": 19,
+   "group": "H03",
+   "hours": 1.0,
+   "needs": [],
+   "note": "смоук: обучение комбинации и оценка чекпоинта в одном кернеле",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 --distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule --smoke --tag qpb2d_combo_smoke"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_smoke.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 300 --seeds 42 --smoke --tag smoke_combo"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-smoke-ca",
+   "wave": 19,
+   "group": "H03",
+   "hours": 1.5,
+   "needs": [],
+   "note": "смоук: сбор с общими префиксами и обрывом; направленный сбор с таблицей буферов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --acq random --rounds 2 --batch 3 --share-prefix --truncate 3 --keep-opt --keep-opt-mode safe --smoke --tag ca_smoke --save-dir runs_rl_online"
+    },
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --acq lcb --rounds 1 --batch 2 --share-prefix --truncate 3 --keep-opt --keep-opt-mode safe --smoke --quick --tag ca_smoke_lcb --save-dir runs_rl_online"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-tr",
+   "wave": 19,
+   "group": "H03",
+   "hours": 2.0,
+   "needs": [],
+   "note": "офлайн-обучение: полная комбинация на существующих буферах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 --distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule --offline-eval half --tag qpb2d_combo_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-na",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на существующих буферах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qpb2d_combo_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-nb",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на существующих буферах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qpb2d_combo_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-ca-lcb",
+   "wave": 19,
+   "group": "H03",
+   "hours": 11.5,
+   "needs": [],
+   "note": "сбор буфера заново: направленный сбор, общие префиксы, ранний обрыв",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 8 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --hours 11 --kernel-hours 11 --resume --save-dir runs_rl_online --acq lcb --lcb-k 1 --tag ca_lcb"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-lcb-tr",
+   "wave": 19,
+   "group": "H03",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/online_env/poissonboltzmann2d_ca_lcb_collect.json"
+   ],
+   "note": "офлайн-обучение: полная комбинация на малом буфере (направленный сбор, общие префиксы, ранний обрыв)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 --distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule --extra-data rl_arch/online_env/poissonboltzmann2d_ca_lcb_collect.json --extra-only-target --offline-eval half --tag qpb2d_combo_lcb_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-lcb-na",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_lcb_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на малом буфере (направленный сбор, общие префиксы, ранний обрыв)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_lcb_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qpb2d_combo_lcb_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-lcb-nb",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_lcb_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на малом буфере (направленный сбор, общие префиксы, ранний обрыв)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_lcb_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qpb2d_combo_lcb_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-ca-rnd",
+   "wave": 19,
+   "group": "H03",
+   "hours": 11.5,
+   "needs": [],
+   "note": "сбор буфера заново: контроль: случайный сбор того же размера",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 8 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --hours 11 --kernel-hours 11 --resume --save-dir runs_rl_online --acq random --tag ca_rnd"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-rnd-tr",
+   "wave": 19,
+   "group": "H03",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/online_env/poissonboltzmann2d_ca_rnd_collect.json"
+   ],
+   "note": "офлайн-обучение: полная комбинация на малом буфере (контроль: случайный сбор того же размера)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 --distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule --extra-data rl_arch/online_env/poissonboltzmann2d_ca_rnd_collect.json --extra-only-target --offline-eval half --tag qpb2d_combo_rnd_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-rnd-na",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_rnd_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на малом буфере (контроль: случайный сбор того же размера)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_rnd_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qpb2d_combo_rnd_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-rnd-nb",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_rnd_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на малом буфере (контроль: случайный сбор того же размера)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_rnd_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qpb2d_combo_rnd_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-ca-lcbh",
+   "wave": 19,
+   "group": "H03",
+   "hours": 11.5,
+   "needs": [],
+   "note": "сбор буфера заново: направленный сбор на эпизодах половинной длины",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 3500 --rounds 8 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --hours 11 --kernel-hours 11 --resume --save-dir runs_rl_online --acq lcb --lcb-k 1 --no-clip --tag ca_lcbh"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-lcbh-tr",
+   "wave": 19,
+   "group": "H03",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/online_env/poissonboltzmann2d_ca_lcbh_collect.json"
+   ],
+   "note": "офлайн-обучение: полная комбинация на малом буфере (направленный сбор на эпизодах половинной длины)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --guide Adam:0.01:1000,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 --distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule --extra-data rl_arch/online_env/poissonboltzmann2d_ca_lcbh_collect.json --extra-only-target --offline-eval half --tag qpb2d_combo_lcbh_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-lcbh-na",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_lcbh_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на малом буфере (направленный сбор на эпизодах половинной длины)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_lcbh_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_qpb2d_combo_lcbh_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w19-combo-lcbh-nb",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_combo_lcbh_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на малом буфере (направленный сбор на эпизодах половинной длины)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:1000,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/qpb2d_combo_lcbh_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_qpb2d_combo_lcbh_s42"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w13-of-g0",
    "wave": 13,
    "group": "H08",

@@ -6167,6 +6167,52 @@
    ]
   },
   {
+   "id": "w19-combo-tr",
+   "wave": 19,
+   "group": "H03",
+   "hours": 2.0,
+   "needs": [],
+   "note": "офлайн-обучение: полная комбинация на существующих буферах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --guide Adam:0.01:2500,Adam:0.0001:2500 --mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 --distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule --offline-eval half --tag q_combo_s42"
+    }
+   ]
+  },
+  {
+   "id": "w19-combo-na",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/q_combo_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на существующих буферах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/q_combo_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag n_q_combo_s42"
+    }
+   ]
+  },
+  {
+   "id": "w19-combo-nb",
+   "wave": 19,
+   "group": "H03",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/agents_online/q_combo_s42.pt"
+   ],
+   "note": "оценка: полная комбинация на существующих буферах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.01:2500,Adam:0.0001:2500 --script-tail agent --model-file rl_arch/agents_online/q_combo_s42.pt --no-state --state-mode loss --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 6.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag n_q_combo_s42"
+    }
+   ]
+  },
+  {
    "id": "w16-l1-keep",
    "wave": 16,
    "group": "H16",

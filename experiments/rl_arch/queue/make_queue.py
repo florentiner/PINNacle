@@ -765,6 +765,62 @@ if PDE == "poissonboltzmann2d":
                     + t3ev(f"n_{nm}_h5l05", seeds(42, 46), hours=3.0))],
             3.0, needs=[_mb], note=f"модельный агент MBPO, 5 сидов {'без сбросов' if ex else 'со сбросами'}")
 
+# ---------------------------------------------------------------- волна 19
+# Полная комбинация методов агента из обзора (agent_combo.py, 11 октября): офлайн-обучение в
+# GPU-кернеле на буферах и модельных продолжениях, затем оценка чекпоинта. Компоненты: MBPO со
+# штрафом MOPO, CQL, проводник-каркас, ансамбль Q (REDQ), упреждающие цели через модель (MVE),
+# дистилляция лучших цепочек (DQfD), сглаживание по сетке действий (PANI), расписание маски.
+# Плюс удешевлённый сбор данных (collect_active.py, только pb2d): направленный выбор цепочек (LCB),
+# общие префиксы, ранний обрыв; контроль — случайный сбор того же размера; вариант половинной длины.
+COMBO = "experiments/rl_arch/agent_combo.py"
+COLLECT = "experiments/rl_arch/collect_active.py"
+if PDE in ("ns2d_liddriven", "poissonboltzmann2d"):
+    _cg = "Adam:0.01:2500,Adam:0.0001:2500" if NS2D else "Adam:0.01:1000,Adam:0.0001:2500"
+    _cfull = ("--mbpo-h 5 --mopo-lam 0.5 --cql-alpha 1.0 --ens 5 --ens-min 2 --utd 4 --mve 2 "
+              "--distill-top 15 --distill-w 1.0 --pani-w 0.3 --mask-schedule")
+
+    def combo_jobs(jid, tag, extra, note, needs=()):
+        ck = f"rl_arch/agents_online/{tag}.pt"
+        add(f"{jid}-tr", 19, "H03",
+            [(COMBO, f"--pde {PDE} --guide {_cg} {_cfull} {extra} --offline-eval half --tag {tag}")],
+            2.0, needs=list(needs), note="офлайн-обучение: " + note)
+        for suf, sd in (("a", seeds(42, 46)), ("b", seeds(47, 51))):
+            add(f"{jid}-n{suf}", 19, "H03",
+                [(EVAL, f"--policy script --script {_cg} --script-tail agent --model-file {ck} "
+                        f"--no-state --state-mode loss {KEEPS} " + t3ev(f"n_{tag}", sd, hours=6.0))],
+                6.0, needs=[ck], note="оценка: " + note)
+
+    # смоуки в кернеле перед настоящими запусками: скачивание буферов, таблица, заливка чекпоинта,
+    # мягкая остановка цепочки и докатка концовок в среде; на HF итог не пишут (кроме чекпоинта смоука)
+    if not NS2D:
+        add("w19-smoke-combo", 19, "H03",
+            [(COMBO, f"--pde {PDE} --guide {_cg} {_cfull} --smoke --tag {Q}_combo_smoke"),
+             (EVAL, f"--policy script --script {_cg} --script-tail agent "
+                    f"--model-file rl_arch/agents_online/{Q}_combo_smoke.pt --no-state --state-mode loss {KEEPS} "
+                    f"--pde {PDE} --budget 300 --seeds 42 --smoke --tag smoke_combo")],
+            1.0, note="смоук: обучение комбинации и оценка чекпоинта в одном кернеле")
+        add("w19-smoke-ca", 19, "H03",
+            [(COLLECT, f"--pde {PDE} --acq random --rounds 2 --batch 3 --share-prefix --truncate 3 {KEEPS} "
+                       f"--smoke --tag ca_smoke --save-dir runs_rl_online"),
+             (COLLECT, f"--pde {PDE} --acq lcb --rounds 1 --batch 2 --share-prefix --truncate 3 {KEEPS} "
+                       f"--smoke --quick --tag ca_smoke_lcb --save-dir runs_rl_online")],
+            1.5, note="смоук: сбор с общими префиксами и обрывом; направленный сбор с таблицей буферов")
+    combo_jobs("w19-combo", f"{Q}_combo_s42", "", "полная комбинация на существующих буферах")
+    if not NS2D:
+        _ca = ("--pde {p} --budget {b} --rounds 8 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 "
+               "{k} --hours 11 --kernel-hours 11 --resume --save-dir runs_rl_online")
+        for nm, acq, bud, extra, note in (
+                ("lcb", "--acq lcb --lcb-k 1", BUDGET, "", "направленный сбор, общие префиксы, ранний обрыв"),
+                ("rnd", "--acq random", BUDGET, "", "контроль: случайный сбор того же размера"),
+                ("lcbh", "--acq lcb --lcb-k 1", BUDGET // 2, "--no-clip", "направленный сбор на эпизодах половинной длины")):
+            ctag = f"ca_{nm}"
+            add(f"w19-ca-{nm}", 19, "H03",
+                [(COLLECT, _ca.format(p=PDE, b=bud, k=KEEPS) + f" {acq} {extra} --tag {ctag}")],
+                11.5, note="сбор буфера заново: " + note)
+            cfile = f"rl_arch/online_env/{PDE}_{ctag}_collect.json"
+            combo_jobs(f"w19-combo-{nm}", f"{Q}_combo_{nm}_s42", f"--extra-data {cfile} --extra-only-target",
+                       "полная комбинация на малом буфере (" + note + ")", needs=[cfile])
+
 # ---------------------------------------------------------------- развёртывание лидеров
 # Лидеры треков 1-2 на ns2d в среде без сбросов оптимизатора и со стражем, без нового обучения:
 # в их цепочках идут подряд действия L-BFGS, а на pb2d и ns2d L-BFGS без сброса истории на 20-30%

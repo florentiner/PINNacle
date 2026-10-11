@@ -183,7 +183,45 @@ def lint_branch(argv):
         B.E.run_seed, B.E.result_done = saved
 
 
-LINTERS = {"offline_rl.py": lint_offline, "online_train_env.py": lint_train,
+def lint_combo(argv):
+    """Обучение полной комбинации: разбор аргументов до построения таблицы буферов."""
+    import agent_combo as C
+    saved = C.get_table
+
+    def reached(*a, **k):
+        raise Reached()
+    C.get_table = reached
+    try:
+        C.main(list(argv) + ["--no-upload", "--out-dir", tempfile.mkdtemp(prefix="lint_combo_")])
+    finally:
+        C.get_table = saved
+    if "--guide" in argv:
+        import online_eval_env as E
+        E.parse_chain(argv[argv.index("--guide") + 1])
+
+
+def lint_collect(argv):
+    """Сбор данных: разбор аргументов до таблицы буферов или первого прогона среды."""
+    import collect_active as A
+    saved = A.run_seed, A.load_state, A.base_table
+
+    def reached(*a, **k):
+        # обычное исключение из run_seed сбор засчитывает цепочке как неудачу, SystemExit пропускает
+        raise SystemExit("lint: дошли до тяжёлой части")
+    A.run_seed = A.base_table = reached
+    A.load_state = lambda path, name, smoke: None
+    try:
+        A.main(list(argv) + ["--save-dir", tempfile.mkdtemp(prefix="lint_ca_")])
+    except SystemExit as e:
+        if "lint" in str(e):
+            raise Reached()
+        raise
+    finally:
+        A.run_seed, A.load_state, A.base_table = saved
+
+
+LINTERS = {"agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+           "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}
 
