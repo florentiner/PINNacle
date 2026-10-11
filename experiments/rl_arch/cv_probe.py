@@ -32,6 +32,8 @@
     frozen      энкодер после ssl-mae заморожен, учится только голова (качество представления;
                 признаки считаются один раз — так подешевело бы обучение агента); frozen-con — то же
                 после ssl-con
+                --save-encoder пишет веса предобученного энкодера (cvprobe_<tag>_enc_<mae|con>_<энкодер>.pt,
+                в HF rl_arch/encoders/) для offline_rl.py --encoder-init
     lopo:level, lopo:best   «исключить УрЧП»: level и лучший конфиг с картами на --lopo задачах
 
 Энкодеры: conv (энкодер статьи RL/rl_utils/DQN_classes.ConvEncoder; между свёртками нет
@@ -83,7 +85,7 @@ import surrogate as S  # noqa: E402
 BUDGET = S.BUDGET
 KMAX = S.K_MAX
 ROWKEYS = ("PDE", "FILE", "CH", "STEP", "SPENT", "A", "PA", "L", "LN", "LV", "LVN", "SPF", "LAST")
-ENCODERS = ("conv", "convnext", "resnet", "vit", "cnn")
+ENCODERS = ("conv", "convnext", "resnet", "resnetpos", "vit", "cnn")
 DEFAULT_ENCODERS = ("conv", "convnext", "resnet", "vit")
 FALLBACK_ENCODER = "convnext"
 BASES = {
@@ -110,6 +112,7 @@ DEFAULT_CONFIGS = (["scalars", "level", "level-hgb"] + [f"maps-{e}" for e in DEF
 DEFAULT_LOPO = "poissonboltzmann2d,ns2d_liddriven,heat2d_multiscale,wave1d,poisson3d_complexgeometry"
 STEP_EDGES = (1, 3, 6)              # корзины шага: 0 | 1-2 | 3-5 | 6+
 HF_DIR = "rl_arch/online_env"
+ENC_DIR = "rl_arch/encoders"       # предобученные энкодеры (--save-encoder) в HF-датасете результатов
 
 
 # --------------------------------------------------------------------------------------------
@@ -426,70 +429,11 @@ def in_channels(mode, c):
 # Энкодеры и модель
 # --------------------------------------------------------------------------------------------
 
-class _Res(nn.Module):
-    def __init__(self, cin, cout, stride):
-        super().__init__()
-        self.c1 = nn.Conv2d(cin, cout, 3, stride=stride, padding=1, bias=False)
-        self.b1 = nn.BatchNorm2d(cout)
-        self.c2 = nn.Conv2d(cout, cout, 3, padding=1, bias=False)
-        self.b2 = nn.BatchNorm2d(cout)
-        self.sc = None
-        if stride != 1 or cin != cout:
-            self.sc = nn.Sequential(nn.Conv2d(cin, cout, 1, stride=stride, bias=False), nn.BatchNorm2d(cout))
-
-    def forward(self, x):
-        y = self.b2(self.c2(F.relu(self.b1(self.c1(x)))))
-        return F.relu(y + (x if self.sc is None else self.sc(x)))
-
-
-class SmallResNet(nn.Module):
-    """Малый ResNet под 26x26: первые блоки без уменьшения, затем 13x13 и 7x7, среднее по карте."""
-    out_dim = 256
-
-    def __init__(self, in_ch):
-        super().__init__()
-        self.stem = nn.Sequential(nn.Conv2d(in_ch, 32, 3, padding=1, bias=False), nn.BatchNorm2d(32), nn.ReLU())
-        self.body = nn.Sequential(_Res(32, 32, 1), _Res(32, 64, 2), _Res(64, 64, 1), _Res(64, 128, 2))
-        self.head = nn.Sequential(nn.Linear(128, 256), nn.ReLU())
-
-    def forward(self, x):
-        return self.head(self.body(self.stem(x)).mean((2, 3)))
-
-
-class _Block(nn.Module):
-    def __init__(self, dim, heads, mlp):
-        super().__init__()
-        self.n1, self.n2 = nn.LayerNorm(dim), nn.LayerNorm(dim)
-        self.attn = nn.MultiheadAttention(dim, heads, batch_first=True)
-        self.mlp = nn.Sequential(nn.Linear(dim, mlp), nn.GELU(), nn.Linear(mlp, dim))
-
-    def forward(self, x):
-        h = self.n1(x)
-        x = x + self.attn(h, h, h, need_weights=False)[0]
-        return x + self.mlp(self.n2(x))
-
-
-class TinyViT(nn.Module):
-    """ViT: патч 2 (13x13 = 169 токенов у карты 26x26), 4 слоя, среднее по токенам."""
-
-    def __init__(self, in_ch, size=26, patch=2, dim=96, depth=4, heads=4):
-        super().__init__()
-        self.out_dim = dim
-        self.patch = nn.Conv2d(in_ch, dim, patch, stride=patch)
-        self.pos = nn.Parameter(torch.zeros(1, (size // patch) ** 2, dim))
-        nn.init.trunc_normal_(self.pos, std=0.02)
-        self.blocks = nn.Sequential(*[_Block(dim, heads, 2 * dim) for _ in range(depth)])
-        self.norm = nn.LayerNorm(dim)
-
-    def forward(self, x):
-        t = self.patch(x).flatten(2).transpose(1, 2) + self.pos
-        return self.norm(self.blocks(t).mean(1))
-
-
 def make_encoder(kind, in_ch=4, size=26):
     """conv — энкодер статьи (offline_rl.make_encoder('their') = RL/rl_utils/DQN_classes.ConvEncoder;
-    для входа не из 4 каналов заменяется первая свёртка), convnext и cnn — offline_rl.make_encoder,
-    resnet и vit — здесь."""
+    для входа не из 4 каналов заменяется первая свёртка); convnext, cnn, resnet (малый ResNet под
+    26x26) и vit (патч 2) — offline_rl.make_encoder: определения общие с тренером агента
+    (offline_rl.py --encoder), чтобы предобученные здесь веса читались там (--encoder-init)."""
     import offline_rl as O
     if kind == "conv":
         enc = O.make_encoder("their")
@@ -499,12 +443,8 @@ def make_encoder(kind, in_ch=4, size=26):
             nn.init.kaiming_uniform_(new.weight, nonlinearity="relu")
             enc.enc.backbone[0] = new
         return enc
-    if kind in ("convnext", "cnn"):
-        return O.make_encoder(kind, in_ch)
-    if kind == "resnet":
-        return SmallResNet(in_ch)
-    if kind == "vit":
-        return TinyViT(in_ch, size)
+    if kind in ("convnext", "cnn", "resnet", "resnetpos", "vit"):
+        return O.make_encoder(kind, in_ch, size)
     raise ValueError(f"неизвестный энкодер {kind!r}: {ENCODERS}")
 
 
@@ -651,11 +591,33 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
     return dict(state=state, stats=stats, seconds=time.time() - t0, loss_first=first, loss_last=last)
 
 
+def save_encoder(pre, kind, enc_name, D, args, log=print):
+    """--save-encoder: веса предобученного энкодера в <out-dir>/cvprobe_<tag>_enc_<mae|con>_<энкодер>.pt
+    и в HF под ENC_DIR. Формат читает offline_rl.py --encoder-init: state_dict энкодера, его вид и
+    статистики нормировки карт (1, C, 1, 1), с которыми шло предобучение."""
+    path = os.path.join(args.out_dir, f"cvprobe_{args.tag}_enc_{kind}_{enc_name}.pt")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    mean, std = (t.detach().float().cpu().numpy() for t in pre["stats"])
+    torch.save(dict(kind="ssl_encoder", encoder=enc_name, ssl=kind, in_ch=D.C, size=D.H,
+                    state_dict=pre["state"], mean=mean, std=std, tag=args.tag,
+                    ssl_epochs=int(args.ssl_epochs), loss_first=pre["loss_first"], loss_last=pre["loss_last"],
+                    pdes=list(D.names), fingerprint=D.fingerprint), path)
+    up = False
+    if not args.no_upload:
+        import agent_combo as AC
+        up = AC.hf_upload(path, f"{ENC_DIR}/{os.path.basename(path)}", f"rl_arch cv_probe encoder {args.tag}", tries=3)
+    log(f"  энкодер {kind}/{enc_name} сохранён: {path}"
+        + (f" (в HF: {ENC_DIR}/{os.path.basename(path)})" if up else " (только локально)"))
+    return path
+
+
 def get_pre(sp, D, args, dev, cache, log=print):
     key = (sp["ssl"], sp["encoder"])
     if key not in cache["pre"]:
         log(f"  предобучение {key[0]} энкодера {key[1]} на всех картах")
         cache["pre"][key] = pretrain(key[0], key[1], D, args, dev, log)
+        if getattr(args, "save_encoder", False):
+            cache["pre"][key]["file"] = save_encoder(cache["pre"][key], key[0], key[1], D, args, log)
     return cache["pre"][key]
 
 
@@ -1038,6 +1000,8 @@ def run_cv(name, sp, D, fold_row, args, dev, cache, log=print):
                ssl_loss=[pre["loss_first"], pre["loss_last"]] if pre else None,
                params=info["params"], params_trainable=info["params_trainable"], skipped_steps=skipped,
                epochs=args.epochs, folds=len(fold_r2))
+    if pre and pre.get("file"):
+        ent["encoder_file"] = f"{ENC_DIR}/{os.path.basename(pre['file'])}"
     ent.update(metrics(D, np.arange(D.n), oof))
     return ent, oof
 
@@ -1269,6 +1233,10 @@ def build_parser():
     g.add_argument("--resume", action="store_true")
     g.add_argument("--no-upload", action="store_true")
     g.add_argument("--save-preds", action="store_true", help="предсказания на отложенных фолдах в <out-dir>")
+    g.add_argument("--save-encoder", action="store_true",
+                   help="сохранять и заливать в HF веса энкодера после предобучения (ssl-mae, ssl-con, "
+                        "frozen): файл для offline_rl.py --encoder-init. Пишется, когда предобучение "
+                        "идёт в этом запуске (при --resume уже посчитанные конфиги его не повторяют)")
     g.add_argument("--smoke", action="store_true")
     return ap
 

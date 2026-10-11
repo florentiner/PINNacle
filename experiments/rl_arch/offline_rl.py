@@ -22,6 +22,18 @@ Metrics per (variant, seed), holdout = 20% of episodes (fixed split):
                       initial states, and CVaR@0.25 over holdout states
     agree_behavior    greedy-policy agreement with logged actions
 Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
+
+Приёмы для агента на картах (всё выключено по умолчанию; сочетаются между собой и с --aug,
+--n-step, --dqfd, --scalar-ctx):
+    --encoder resnet|vit            энкодер карт у вариантов с ConvNeXt (определения общие с cv_probe.py)
+    --encoder-init F                веса энкодера из файла (cv_probe.py --save-encoder или чекпоинт агента)
+    --freeze-encoder                учить только головы
+    --ens N --ens-min M             REDQ: N голов на общем энкодере, цель — минимум по M целевым головам
+    --mb-aux W --mb-h H --mb-lam L  модельные цели по всем 27 действиям из суррогата (mb_targets.py)
+    --pani-w W --pani-sigma S       шум на нормированных картах, штраф за изменение вектора Q
+    --distill-top P --distill-w W   отступ DQfD только на переходах лучших P% цепочек
+    --mask-schedule                 первую треть эпох max в цели видит грубую сетку действий
+Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
 
@@ -39,6 +51,8 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)   # RL.* / src.* imports when run as a script
 
 import torch  # module-level: QNet/soft_update/q_cvar are used by online_eval too
+import torch.nn as nn
+import torch.nn.functional as F
 
 GAMMA = 0.9   # их значение (rl_agent_params в poisson_boltzmann2d_chain.py)
 N_ACTIONS = 27
@@ -762,17 +776,9 @@ def teacher_q(path, data, device):
     if variant in ("cnx_smdp", "cnn_vqc") or ck.get("hl_gauss"):
         raise ValueError(f"учитель {variant}: дистилляция поддержана для обычных и квантильных Q-сетей")
     sd = ck["state_dict"]
-    in_ch = 4
-    for v in sd.values():
-        if hasattr(v, "dim") and v.dim() == 4 and v.shape[2] <= 7:
-            in_ch = int(v.shape[1]); break
-    if variant == "stat_dqn":
-        in_ch = int(sd["0.mlp.0.weight"].shape[1] // 8)
-    nq = 32
-    hw = sd.get("1.weight")
-    if hw is not None and hw.dim() == 2 and hw.shape[0] % N_ACTIONS == 0:
-        nq = max(1, hw.shape[0] // N_ACTIONS)
-    net = QNet(variant, device, n_quantiles=nq, in_ch=in_ch)
+    arch = ckpt_arch(ck)
+    in_ch = arch["in_ch"]
+    net = QNet(variant, device, **arch)
     net.model.load_state_dict(sd)
     net.model.eval()
     meta = ck.get("meta") or {}
@@ -824,9 +830,100 @@ def split_by_episode(data, test_frac=0.2, split_seed=0):
 # Models
 # --------------------------------------------------------------------------
 
-def make_encoder(kind: str, in_ch: int = 4):
+# Энкодеры карт из зонда CV (cv_probe.py импортирует их отсюда: определение одно). Имена
+# параметров менять нельзя — по ним читаются предобученные веса (--encoder-init) и чекпоинты.
+class _Res(nn.Module):
+    def __init__(self, cin, cout, stride):
+        super().__init__()
+        self.c1 = nn.Conv2d(cin, cout, 3, stride=stride, padding=1, bias=False)
+        self.b1 = nn.BatchNorm2d(cout)
+        self.c2 = nn.Conv2d(cout, cout, 3, padding=1, bias=False)
+        self.b2 = nn.BatchNorm2d(cout)
+        self.sc = None
+        if stride != 1 or cin != cout:
+            self.sc = nn.Sequential(nn.Conv2d(cin, cout, 1, stride=stride, bias=False), nn.BatchNorm2d(cout))
+
+    def forward(self, x):
+        y = self.b2(self.c2(F.relu(self.b1(self.c1(x)))))
+        return F.relu(y + (x if self.sc is None else self.sc(x)))
+
+
+class SmallResNet(nn.Module):
+    """Малый ResNet под 26x26: первые блоки без уменьшения, затем 13x13 и 7x7, среднее по карте."""
+    out_dim = 256
+
+    def __init__(self, in_ch):
+        super().__init__()
+        self.stem = nn.Sequential(nn.Conv2d(in_ch, 32, 3, padding=1, bias=False), nn.BatchNorm2d(32), nn.ReLU())
+        self.body = nn.Sequential(_Res(32, 32, 1), _Res(32, 64, 2), _Res(64, 64, 1), _Res(64, 128, 2))
+        self.head = nn.Sequential(nn.Linear(128, 256), nn.ReLU())
+
+    def forward(self, x):
+        return self.head(self.body(self.stem(x)).mean((2, 3)))
+
+
+class SmallResNetPos(SmallResNet):
+    """Тот же ResNet, но положение на карте не теряется: к входу добавлены два канала координат
+    (CoordConv, 1807.03247), а признаки 7x7 не усредняются по карте, а разворачиваются в вектор.
+    Центр карты — текущая точка обучения, и где впадина относительно неё, усреднение не видит."""
+
+    def __init__(self, in_ch, size=26):
+        super().__init__(in_ch + 2)
+        g = torch.linspace(-1.0, 1.0, size)
+        self.register_buffer("coord", torch.stack(torch.meshgrid(g, g, indexing="ij"))[None], persistent=False)
+        side = (size + 3) // 4                      # два уменьшения вдвое с округлением вверх: 26 -> 13 -> 7
+        self.head = nn.Sequential(nn.Linear(128 * side * side, 256), nn.ReLU())
+
+    def forward(self, x):
+        # координаты идут первыми: у входа с контекстом лишние каналы остаются в хвосте, и веса
+        # первой свёртки из --encoder-init ложатся на те же каналы, что при предобучении
+        x = torch.cat([self.coord.to(x.dtype).expand(x.shape[0], -1, -1, -1), x], dim=1)
+        return self.head(self.body(self.stem(x)).flatten(1))
+
+
+class _Block(nn.Module):
+    def __init__(self, dim, heads, mlp):
+        super().__init__()
+        self.n1, self.n2 = nn.LayerNorm(dim), nn.LayerNorm(dim)
+        self.attn = nn.MultiheadAttention(dim, heads, batch_first=True)
+        self.mlp = nn.Sequential(nn.Linear(dim, mlp), nn.GELU(), nn.Linear(mlp, dim))
+
+    def forward(self, x):
+        h = self.n1(x)
+        x = x + self.attn(h, h, h, need_weights=False)[0]
+        return x + self.mlp(self.n2(x))
+
+
+class TinyViT(nn.Module):
+    """ViT: патч 2 (13x13 = 169 токенов у карты 26x26), 4 слоя, среднее по токенам."""
+
+    def __init__(self, in_ch, size=26, patch=2, dim=96, depth=4, heads=4):
+        super().__init__()
+        self.out_dim = dim
+        self.patch = nn.Conv2d(in_ch, dim, patch, stride=patch)
+        self.pos = nn.Parameter(torch.zeros(1, (size // patch) ** 2, dim))
+        nn.init.trunc_normal_(self.pos, std=0.02)
+        self.blocks = nn.Sequential(*[_Block(dim, heads, 2 * dim) for _ in range(depth)])
+        self.norm = nn.LayerNorm(dim)
+
+    def forward(self, x):
+        t = self.patch(x).flatten(2).transpose(1, 2) + self.pos
+        return self.norm(self.blocks(t).mean(1))
+
+
+MAP_ENCODERS = ("convnext", "resnet", "resnetpos", "vit")      # что принимает --encoder у вариантов cnx_*
+
+
+def make_encoder(kind: str, in_ch: int = 4, size: int = 26):
     import torch
     import torch.nn as nn
+
+    if kind == "resnet":
+        return SmallResNet(in_ch)
+    if kind == "resnetpos":
+        return SmallResNetPos(in_ch, size)
+    if kind == "vit":
+        return TinyViT(in_ch, size)
 
     if kind == "cnn":
         class CNN(nn.Module):
@@ -974,25 +1071,50 @@ def make_head(variant: str, in_dim: int, n_quantiles: int):
     return nn.Linear(in_dim, N_ACTIONS)
 
 
-class QNet:
-    """Encoder + head with a target copy; variant-specific loss."""
+QUANTILE_VARIANTS = ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
+# варианты с энкодером ConvNeXt: только у них выбирается энкодер карт (--encoder)
+CNX_VARIANTS = ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling",
+                "cnx_bcq", "cnx_bbf", "cnx_qrdqn", "cnx_factored")
+NO_ENS_VARIANTS = ("cnn_iql", "cnn_vqc", "cnx_smdp")     # своя V-голова, квантовая голова, свой ансамбль
 
-    def __init__(self, variant, device, n_quantiles=32, in_ch=4):
+
+class QNet:
+    """Encoder + head with a target copy; variant-specific loss.
+
+    encoder — вид энкодера карт у вариантов с ConvNeXt ('auto' — прежний выбор по варианту,
+    иначе один из MAP_ENCODERS). ens > 1 — столько Q-голов на общем энкодере (REDQ, 2101.05982):
+    model[1] тогда список голов, q_online/q_target/q_scalar/q_cvar отдают СРЕДНЕЕ голов (у
+    квантильных — среднее квантилей с одним номером), q_heads — все головы по отдельности.
+    При значениях по умолчанию сеть и имена параметров прежние."""
+
+    def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1):
         import torch
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
             enc_kind = "their"
-        elif variant in ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling",
-                         "cnx_bcq", "cnx_bbf", "cnx_qrdqn", "cnx_factored"):
+        elif variant in CNX_VARIANTS:
             enc_kind = "convnext"
         elif variant == "stat_dqn":
             enc_kind = "stat"
         else:
             enc_kind = "cnn"
+        if encoder not in (None, "", "auto", enc_kind):
+            if enc_kind != "convnext" or encoder not in MAP_ENCODERS:
+                raise ValueError(f"энкодер {encoder!r} у варианта {variant}: выбор {MAP_ENCODERS} есть "
+                                 f"только у вариантов с ConvNeXt (здесь энкодер {enc_kind})")
+            enc_kind = encoder
+        self.ens = max(1, int(ens or 1))
+        if self.ens > 1 and variant in NO_ENS_VARIANTS:
+            raise ValueError(f"ансамбль голов (ens={self.ens}) не поддержан для варианта {variant}")
         self.variant = variant
+        self.enc_kind = enc_kind
         self.nq = n_quantiles
         self.enc = make_encoder(enc_kind, in_ch)
-        self.head = make_head(variant, self.enc.out_dim, n_quantiles)
+        if self.ens > 1:
+            self.head = nn.ModuleList([make_head(variant, self.enc.out_dim, n_quantiles)
+                                       for _ in range(self.ens)])
+        else:
+            self.head = make_head(variant, self.enc.out_dim, n_quantiles)
         self.v_head = nn.Linear(self.enc.out_dim, 1) if variant == "cnn_iql" else None
         mods = [self.enc, self.head] + ([self.v_head] if self.v_head is not None else [])
         self.model = nn.ModuleList(mods).to(device)
@@ -1001,6 +1123,12 @@ class QNet:
         for p in self.target.parameters():
             p.requires_grad_(False)
         self.device = device
+        # BatchNorm есть только у resnet: целевая сеть считается на накопленных статистиках
+        # (режим eval), статистики копируются из обучаемой сети в soft_update
+        self.has_bn = any(isinstance(m, nn.modules.batchnorm._BatchNorm) for m in self.enc.modules())
+        self.frozen = False
+        if self.has_bn:
+            self.target.eval()
 
     def params(self):
         return self.model.parameters()
@@ -1008,7 +1136,42 @@ class QNet:
     def n_params(self):
         return sum(p.numel() for p in self.model.parameters())
 
+    def set_train(self, on=True):
+        """Режим слоёв со статистиками (BatchNorm у resnet): обучение — статистики пачки, оценка —
+        накопленные. У энкодеров без таких слоёв ничего не делает (прежнее поведение)."""
+        if self.has_bn:
+            self.model.train(on)
+            if self.frozen:
+                self.model[0].eval()
+
+    def freeze_encoder(self, keep=()):
+        """--freeze-encoder: градиент идёт только в головы. keep — имена параметров энкодера,
+        которые остаются обучаемыми (первый слой, если у входа больше каналов, чем у
+        предобученных весов). Возвращает число замороженных параметров."""
+        n = 0
+        for name, p in self.model[0].named_parameters():
+            if name not in keep:
+                p.requires_grad_(False)
+                n += p.numel()
+        self.frozen = True
+        self.model[0].eval()
+        return n
+
+    def _heads(self, model, x):
+        """Все головы: (головы, B, A) или (головы, B, A, nq)."""
+        z = model[0](x)
+        hs = model[1] if self.ens > 1 else [model[1]]
+        out = torch.stack([h(z) for h in hs], 0)
+        if self.variant in QUANTILE_VARIANTS:
+            return out.view(len(hs), -1, N_ACTIONS, self.nq)
+        return out
+
+    def q_heads(self, x, target=False):
+        return self._heads(self.target if target else self.model, x)
+
     def _q(self, model, x):
+        if self.ens > 1:
+            return self._heads(model, x).mean(0)
         z = model[0](x)
         out = model[1](z)
         if self.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
@@ -1040,6 +1203,33 @@ class QNet:
         with torch.no_grad():
             for p, tp in zip(self.model.parameters(), self.target.parameters()):
                 tp.mul_(1 - tau).add_(tau * p)
+            if self.has_bn:
+                for b, tb in zip(self.model[0].buffers(), self.target[0].buffers()):
+                    tb.copy_(b)
+
+
+def ckpt_arch(ck):
+    """Аргументы QNet по чекпоинту: число входных каналов и квантилей выводится из весов (агенты
+    со скалярным контекстом ждут 4+5 каналов; у HL-Gauss 51 бин, у квантильных вариантов 32),
+    вид энкодера и число голов — из meta. У чекпоинтов без этих полей — прежняя сеть."""
+    sd = ck["state_dict"]
+    meta = ck.get("meta") or {}
+    ens = max(1, int(meta.get("ens", 1) or 1))
+    in_ch = 4
+    for v in sd.values():
+        if hasattr(v, "dim") and v.dim() == 4 and v.shape[2] <= 7:
+            in_ch = int(v.shape[1])
+            break
+    if meta.get("encoder") == "resnetpos":
+        in_ch -= 2                               # два канала координат сеть добавляет сама
+    if ck["variant"] == "stat_dqn":
+        # у кодировщика на статистиках свёрток нет: 8 признаков на канал
+        in_ch = int(sd["0.mlp.0.weight"].shape[1] // 8)
+    nq = 32
+    hw = sd.get("1.weight" if ens == 1 else "1.0.weight")
+    if hw is not None and hw.dim() == 2 and hw.shape[0] % N_ACTIONS == 0:
+        nq = max(1, hw.shape[0] // N_ACTIONS)
+    return dict(n_quantiles=nq, in_ch=in_ch, encoder=(meta.get("encoder") or "auto"), ens=ens)
 
 
 # --------------------------------------------------------------------------
@@ -1203,6 +1393,126 @@ def train_smdp(data, train_mask, args, seed):
     return agent, dict(mean=mean, std=std), time.time() - t0
 
 
+def load_encoder_init(net, path):
+    """--encoder-init: веса энкодера из файла (локальный путь или путь в HF-датасете результатов).
+    Форматы: файл зонда CV (cv_probe.py --save-encoder: encoder, ssl, state_dict, mean, std);
+    чекпоинт агента (variant + state_dict, берутся ключи '0.*' — энкодер другого агента); голый
+    state_dict энкодера. Если у сети больше входных каналов, чем у весов (скалярный контекст),
+    в первую свёртку копируются веса первых каналов, остальные каналы остаются со свежей
+    инициализацией (их имена — в partial). Возвращает dict(source, encoder, ssl, mean, std, partial)."""
+    src = path
+    if not os.path.exists(path):
+        from huggingface_hub import hf_hub_download
+        path = hf_hub_download(OUT_REPO, path, repo_type="dataset")
+    ck = torch.load(path, map_location="cpu", weights_only=False)
+    info = dict(source=os.path.basename(src), encoder=None, ssl=None, mean=None, std=None, partial=[])
+    if isinstance(ck, dict) and "state_dict" in ck and "variant" in ck:
+        sd = {k[2:]: v for k, v in ck["state_dict"].items() if k.startswith("0.")}
+        info.update(encoder=(ck.get("meta") or {}).get("encoder"), mean=ck.get("mean"), std=ck.get("std"))
+    elif isinstance(ck, dict) and "state_dict" in ck:
+        sd = ck["state_dict"]
+        info.update(encoder=ck.get("encoder"), ssl=ck.get("ssl"), mean=ck.get("mean"), std=ck.get("std"))
+    else:
+        sd = ck
+    if info["encoder"] not in (None, "auto", net.enc_kind):
+        raise ValueError(f"--encoder-init: в файле энкодер {info['encoder']!r}, у сети {net.enc_kind!r} "
+                         f"(задайте --encoder {info['encoder']})")
+    enc = net.model[0]
+    own = enc.state_dict()
+    if set(sd) != set(own):
+        raise ValueError(f"--encoder-init: имена параметров не совпали с энкодером {net.enc_kind}: "
+                         f"лишние {sorted(set(sd) - set(own))[:4]}, нет {sorted(set(own) - set(sd))[:4]}")
+    new = {}
+    for k, v in own.items():
+        w = torch.as_tensor(sd[k]).to(v.dtype)
+        if w.shape == v.shape:
+            new[k] = w
+        elif (w.dim() == 4 and v.dim() == 4 and w.shape[0] == v.shape[0] and w.shape[2:] == v.shape[2:]
+              and w.shape[1] < v.shape[1]):
+            m = v.detach().cpu().clone()
+            m[:, :w.shape[1]] = w
+            new[k] = m
+            info["partial"].append(k)
+        else:
+            raise ValueError(f"--encoder-init: {k}: форма в файле {tuple(w.shape)}, у сети {tuple(v.shape)}")
+    enc.load_state_dict(new)
+    net.target[0].load_state_dict(enc.state_dict())
+    return info
+
+
+def top_chain_rows(data, rows_mask, top_pct):
+    """--distill-top: строки лучших top_pct% цепочек — по ошибке после последнего шага цепочки
+    (с --episode-budget это ошибка в бюджете), в смеси УрЧП отдельно по каждой задаче. Ранжируются
+    только цепочки из rows_mask (обучающая часть). Возвращает (маска строк, сводка)."""
+    EP, ERR = data["EP"], data["ERR"]
+    pde = data["PDE"] if "PDE" in data else np.zeros(len(EP), dtype=np.int64)
+    last = np.r_[np.where(np.diff(EP) != 0)[0], len(EP) - 1]
+    last = last[rows_mask[last]]
+    top = []
+    for k in np.unique(pde[last]):
+        l = last[pde[last] == k]
+        top.append(EP[l][ERR[l] <= np.percentile(ERR[l], top_pct)])
+    top = np.concatenate(top) if top else np.zeros(0, dtype=EP.dtype)
+    demo = np.isin(EP, top) & rows_mask
+    return demo, dict(distill_chains=int(len(top)), distill_ranked=int(len(last)), distill_rows=int(demo.sum()))
+
+
+def coarse_actions(lr_idx=1):
+    """--mask-schedule: грубое подмножество действий — один шаг обучения (индекс lr_idx) на пару
+    «оптимизатор x длина», как agent_combo.coarse_mask без итоговой маски."""
+    return (np.arange(N_ACTIONS) % 9) // 3 == int(lr_idx)
+
+
+def ens_td_loss(net, variant, s, a, r, d, gm, s2, taus, cql_alpha, n_min, rng, ub=None, allow=None,
+                bcq_keep=None):
+    """TD-лосс ансамбля голов (REDQ, 2101.05982). Действие в s' — argmax СРЕДНЕГО обучаемых голов
+    (двойной DQN), цель — минимум по n_min случайным целевым головам, общая для всех голов; лосс
+    усредняется по головам, так что его масштаб тот же, что у одной головы. У квантильных голов
+    минимум берётся поквантильно после сортировки (квантили с одним номером у разных голов):
+    результат — снова квантильная функция, не выше каждой из взятых. CQL и штраф BCQ — на каждой
+    голове. ub — верхняя граница ценности (--value-bound), allow — действия, разрешённые в max
+    (--mask-schedule)."""
+    K = net.ens
+    quant = variant in QUANTILE_VARIANTS
+    qh = net.q_heads(s)                                               # (K,B,A[,nq])
+    with torch.no_grad():
+        q2m = net.q_heads(s2).mean(0)
+        if quant:
+            q2m = q2m.mean(-1)
+        if allow is not None:
+            q2m = q2m.masked_fill(~allow[None], -1e9)
+        a2 = q2m.argmax(1)
+        qt = net.q_heads(s2, target=True)
+        if n_min < K:
+            qt = qt[torch.as_tensor(rng.choice(K, n_min, replace=False), device=qt.device)]
+        M = len(qt)
+        if quant:
+            q2 = qt.gather(2, a2[None, :, None, None].expand(M, -1, 1, net.nq)).squeeze(2)   # (M,B,nq)
+            q2 = q2.sort(-1).values.min(0).values                                            # (B,nq)
+            tgt = r[:, None] + (gm * (1 - d))[:, None] * q2
+        else:
+            q2 = qt.gather(2, a2[None, :, None].expand(M, -1, 1)).squeeze(2).min(0).values   # (B,)
+            if ub is not None:
+                q2 = torch.minimum(q2.clamp_min(0.0), ub)
+            tgt = r + gm * (1 - d) * q2
+    ai = a[None, :, None].expand(K, -1, 1)
+    if quant:
+        q_data = qh.gather(2, ai[..., None].expand(-1, -1, -1, net.nq)).squeeze(2)           # (K,B,nq)
+        u = tgt[None, :, None, :] - q_data[:, :, :, None]                                    # (K,B,nq,nq)
+        huber = torch.where(u.abs() <= 1.0, 0.5 * u ** 2, u.abs() - 0.5)
+        loss = (torch.abs(taus[None, None, :, None] - (u.detach() < 0).float()) * huber).mean()
+        qv = qh.mean(-1)
+    else:
+        qv = qh
+        q = qv.gather(2, ai).squeeze(2)                                                      # (K,B)
+        loss = F.mse_loss(q, tgt[None].expand_as(q))
+    if bcq_keep is not None:
+        loss = loss + 0.5 * (qv.masked_fill(bcq_keep[None], 0.0).clamp_min(0) ** 2).mean()
+    if variant in ("cnn_cql", "cnx_cql", "their_cql", "cnx_cql_qr"):
+        loss = loss + cql_alpha * (torch.logsumexp(qv, dim=2) - qv.gather(2, ai).squeeze(2)).mean()
+    return loss
+
+
 def train_variant(variant, data, train_mask, args, seed):
     if variant == "cnx_smdp":
         return train_smdp(data, train_mask, args, seed)
@@ -1212,9 +1522,29 @@ def train_variant(variant, data, train_mask, args, seed):
     torch.manual_seed(seed); np.random.seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     in_ch = int(data["S"].shape[1])
-    net = QNet(variant, device, in_ch=in_ch)
-    opt = torch.optim.Adam(net.params(), lr=1e-3,
-                           weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
+    n_ens = max(1, int(getattr(args, "ens", 1) or 1))
+    ens_min = max(1, min(n_ens, int(getattr(args, "ens_min", 2) or 2)))
+
+    def mk_net():
+        return QNet(variant, device, in_ch=in_ch, encoder=getattr(args, "encoder", "auto"), ens=n_ens)
+
+    net = mk_net()
+    enc_info = None
+    if getattr(args, "encoder_init", ""):
+        enc_info = load_encoder_init(net, args.encoder_init)
+        print(f"  [{variant} s{seed}] энкодер {net.enc_kind} инициализирован из {enc_info['source']}"
+              + (f" (предобучение {enc_info['ssl']})" if enc_info["ssl"] else "")
+              + (f"; свежие входные каналы у {enc_info['partial']}" if enc_info["partial"] else ""),
+              flush=True)
+    if getattr(args, "freeze_encoder", False):
+        n_fr = net.freeze_encoder(keep=(enc_info["partial"] if enc_info else ()))
+        print(f"  [{variant} s{seed}] энкодер заморожен ({n_fr} параметров), учатся головы"
+              + ("" if enc_info else "; --encoder-init не задан: энкодер случайный"), flush=True)
+        opt = torch.optim.Adam([p for p in net.params() if p.requires_grad], lr=1e-3,
+                               weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
+    else:
+        opt = torch.optim.Adam(net.params(), lr=1e-3,
+                               weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
 
     idx = np.where(train_mask)[0]
     mean = data["S"][idx].mean(axis=(0, 2, 3), keepdims=True)
@@ -1227,6 +1557,16 @@ def train_variant(variant, data, train_mask, args, seed):
     flat_ch = std[0, :4, 0, 0] < 1e-5
     mean[0, :4][flat_ch] = 0.0
     std[0, :4][flat_ch] = 1.0
+    aux_info = {}
+    if (net.frozen and enc_info and enc_info["mean"] is not None
+            and getattr(args, "state_mode", "full") == "full"):
+        # замороженный энкодер ждёт вход в той нормировке, в которой предобучался: статистики
+        # карт берутся из файла весов (в чекпоинт агента пишутся они же)
+        m0 = np.asarray(enc_info["mean"], dtype=np.float32).reshape(1, -1, 1, 1)
+        s0 = np.asarray(enc_info["std"], dtype=np.float32).reshape(1, -1, 1, 1)
+        c = min(4, m0.shape[1], in_ch)
+        mean[:, :c], std[:, :c] = m0[:, :c], s0[:, :c]
+        aux_info["norm_from_encoder_init"] = True
 
     def to_t(x):
         return torch.as_tensor(x, device=device)
@@ -1251,6 +1591,28 @@ def train_variant(variant, data, train_mask, args, seed):
     QT = to_t(data["QT"]).float() if "QT" in data else None
     aug_n = 8 if getattr(args, "aug", "none") == "d4" else 1
     w_margin = float(getattr(args, "dqfd", 0.0) or 0.0)
+    # --- приёмы для агента на картах (по умолчанию выключены: прежний лосс) ---
+    # модельные цели: Q_mb(s, .) по всем 27 действиям, посчитаны заранее (mb_targets.py)
+    w_mb = float(getattr(args, "mb_aux", 0.0) or 0.0) if QT is None else 0.0
+    QMB = MBW = None
+    if w_mb:
+        if "QMB" not in data:
+            raise ValueError("--mb-aux: в наборе нет модельных целей QMB (их считает mb_targets.precompute)")
+        assert data["QMB"].shape == (len(data["A"]), N_ACTIONS), data["QMB"].shape
+        QMB = to_t(data["QMB"]).float()
+        MBW = to_t(data["MBW"].astype(np.float32))
+    w_pani = float(getattr(args, "pani_w", 0.0) or 0.0) if QT is None else 0.0
+    pani_sigma = float(getattr(args, "pani_sigma", 0.1) or 0.0)
+    w_demo = float(getattr(args, "distill_w", 0.0) or 0.0) if QT is None else 0.0
+    DEMO = None
+    if w_demo and float(getattr(args, "distill_top", 0.0) or 0.0) > 0:
+        demo_np, dinfo = top_chain_rows(data, train_mask, float(args.distill_top))
+        aux_info.update(dinfo)
+        DEMO = to_t(demo_np.astype(np.float32))
+    coarse = None
+    if getattr(args, "mask_schedule", False):
+        coarse = to_t(coarse_actions(getattr(args, "mask_coarse_lr", 1)))
+    aux_acc = {}
     ckpt_every = int(getattr(args, "ckpt_every", 0) or 0)
     ckpts = []
 
@@ -1275,8 +1637,12 @@ def train_variant(variant, data, train_mask, args, seed):
     rng = np.random.default_rng(seed)
     best_td, stall = float("inf"), 0
     test_idx = np.where(~train_mask)[0]
+    net.set_train(True)
     for epoch in range(n_epochs):
         order = rng.permutation(idx)
+        # --mask-schedule: первую треть обучения max в цели видит только грубую сетку действий
+        allow = coarse if (coarse is not None and epoch < n_epochs // 3) else None
+        aux_acc = {}
         for k in range(0, len(order), bs):
             b = to_t(order[k:k + bs]).long()
             # r/d/gm — n-шаговые: награда за m шагов, терминальность и дисконт
@@ -1290,6 +1656,14 @@ def train_variant(variant, data, train_mask, args, seed):
 
             if QT is not None:
                 loss = F.mse_loss(net.q_online(s), QT[b])
+            elif net.ens > 1:
+                keep = None
+                if variant == "cnx_bcq":
+                    with torch.no_grad():
+                        pb = bcq_behaviour(s_raw.flatten(1)).softmax(-1)
+                        keep = pb >= 0.3 * pb.max(-1, keepdim=True).values
+                loss = ens_td_loss(net, variant, s, a, r, d, gm, s2, taus, args.cql_alpha, ens_min, rng,
+                                   ub=(UB[b] if vbound else None), allow=allow, bcq_keep=keep)
             elif variant == "cnn_iql":
                 with torch.no_grad():
                     q_t = net.q_target(s)
@@ -1307,7 +1681,10 @@ def train_variant(variant, data, train_mask, args, seed):
                 q = net.q_online(s)                                   # (B,A,nq)
                 q_data = q.gather(1, a[:, None, None].expand(-1, 1, net.nq)).squeeze(1)
                 with torch.no_grad():
-                    a2 = net.q_online(s2).mean(-1).argmax(1)
+                    if allow is None:
+                        a2 = net.q_online(s2).mean(-1).argmax(1)
+                    else:
+                        a2 = net.q_online(s2).mean(-1).masked_fill(~allow[None], -1e9).argmax(1)
                     q2 = net.q_target(s2).gather(
                         1, a2[:, None, None].expand(-1, 1, net.nq)).squeeze(1)
                     tgt = r[:, None] + (gm * (1 - d))[:, None] * q2    # (B,nq)
@@ -1322,7 +1699,10 @@ def train_variant(variant, data, train_mask, args, seed):
             else:
                 q = net.q_online(s).gather(1, a[:, None]).squeeze(1)
                 with torch.no_grad():
-                    a2 = net.q_online(s2).argmax(1)
+                    if allow is None:
+                        a2 = net.q_online(s2).argmax(1)
+                    else:
+                        a2 = net.q_online(s2).masked_fill(~allow[None], -1e9).argmax(1)
                     q2 = net.q_target(s2).gather(1, a2[:, None]).squeeze(1)
                     if vbound:
                         q2 = torch.minimum(q2.clamp_min(0.0), UB[b])
@@ -1353,12 +1733,49 @@ def train_variant(variant, data, train_mask, args, seed):
                     (qs_m + marg).max(1).values
                     - qs_m.gather(1, a[:, None]).squeeze(1)).mean()
 
+            if w_mb or w_pani or DEMO is not None:
+                # плотные добавки считаются на каждой голове: (K,B,A), у квантильных — среднее квантилей
+                qv = net.q_heads(s)
+                if variant in QUANTILE_VARIANTS:
+                    qv = qv.mean(-1)
+                if w_mb:
+                    # W * Huber(Q(s, .) - Q_mb(s, .)) по всем 27 действиям; строки без модельной цели
+                    # (отложенная часть, оборванная цепочка) имеют вес 0
+                    wb = MBW[b]
+                    if wb.sum() > 0:
+                        hub = F.smooth_l1_loss(qv, QMB[b][None].expand_as(qv), reduction="none").mean((0, 2))
+                        l_mb = (hub * wb).sum() / wb.sum()
+                        loss = loss + w_mb * l_mb
+                        aux_acc.setdefault("mb_loss", []).append(l_mb.item())
+                if w_pani:
+                    # сглаживание по входу: шум на нормированных картах (каналы контекста не трогаем),
+                    # штраф за изменение вектора Q; чистый Q — цель без градиента
+                    sn = s.clone()
+                    sn[:, :4] = sn[:, :4] + pani_sigma * torch.randn_like(sn[:, :4])
+                    qn = net.q_heads(sn)
+                    if variant in QUANTILE_VARIANTS:
+                        qn = qn.mean(-1)
+                    l_pani = F.smooth_l1_loss(qn, qv.detach())
+                    loss = loss + w_pani * l_pani
+                    aux_acc.setdefault("pani_loss", []).append(l_pani.item())
+                if DEMO is not None:
+                    # отступ DQfD только на строках лучших цепочек (у --dqfd — на всех переходах)
+                    wd = DEMO[b]
+                    if wd.sum() > 0:
+                        ai = a[None, :, None].expand(len(qv), -1, 1)
+                        marg = torch.full_like(qv, float(args.dqfd_margin))
+                        marg.scatter_(2, ai, 0.0)
+                        jm = ((qv + marg).max(2).values - qv.gather(2, ai).squeeze(2)).mean(0)
+                        l_demo = (jm * wd).sum() / wd.sum()
+                        loss = loss + w_demo * l_demo
+                        aux_acc.setdefault("distill_top_loss", []).append(l_demo.item())
+
             opt.zero_grad(); loss.backward(); opt.step()
             net.soft_update()
             if variant == "cnx_bbf" and (epoch * 1000 + k) % 4000 == 3999:
                 # BBF: shrink-and-perturb — ствол сохраняет 50%, головы заново
                 import copy as _copy
-                fresh = QNet(variant, device, in_ch=in_ch)
+                fresh = mk_net()
                 with torch.no_grad():
                     for (nm, p), pf in zip(net.model.named_parameters(),
                                            fresh.model.parameters()):
@@ -1369,6 +1786,7 @@ def train_variant(variant, data, train_mask, args, seed):
         if (epoch + 1) % max(1, n_epochs // 5) == 0:
             print(f"  [{variant} s{seed}] epoch {epoch+1}/{n_epochs} loss={loss.item():.4f}", flush=True)
         if args.plateau_patience and (epoch + 1) % 25 == 0:
+            net.set_train(False)
             with torch.no_grad():
                 b = to_t(test_idx).long()
                 qs = net.q_scalar(S[b]).gather(1, A[b][:, None]).squeeze(1)
@@ -1376,6 +1794,7 @@ def train_variant(variant, data, train_mask, args, seed):
                 q2 = (net.q_target(S2[b]).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
                       else net.q_target(S2[b])).gather(1, a2[:, None]).squeeze(1)
                 td = float(((qs - (R[b] + GAMMA * (1 - D[b]) * q2)) ** 2).mean().sqrt())
+            net.set_train(True)
             if td < best_td - 1e-3:
                 best_td, stall = td, 0
             else:
@@ -1389,6 +1808,8 @@ def train_variant(variant, data, train_mask, args, seed):
             ckpts.append((epoch + 1, _c.deepcopy(net.model.state_dict())))
 
     train_time = time.time() - t0
+    net.set_train(False)
+    aux_info.update({k: float(np.mean(v)) for k, v in aux_acc.items()})   # средние последней эпохи
     net.extra = {}
     if QT is not None:
         with torch.no_grad():
@@ -1434,6 +1855,7 @@ def train_variant(variant, data, train_mask, args, seed):
                      "fqe_select_pool": [pool[pi][0] for _, pi in scored]}
         print(f"  [{variant} s{seed}] выбран чекпоинт эпохи {best_ep} (FQE={best_v:.4f})",
               flush=True)
+    net.extra.update(aux_info)
     return net, dict(mean=mean, std=std), train_time
 
 
@@ -1580,6 +2002,51 @@ def upload_result(row: dict, name: str):
             time.sleep(5)
 
 
+def run_suffix(args, subdir=None):
+    """Суффикс имён результата и чекпоинта (его же повторяет queue/make_queue.py: off_model)."""
+    subdir = args.subdir if subdir is None else subdir
+    return (("_fixns" if args.fix_next_state else "")
+            + ("_cfix" if args.chain_fix else "")
+            + (("_r" + args.reward_form) if args.reward_form != "logged" else "")
+            + ("_vb" if args.value_bound else "")
+            + ("" if subdir == SUBDIR else "_" + subdir.split("_")[0])
+            + (("_" + args.model_tag) if args.model_tag else ""))
+
+
+def verify_ckpt(path, net, n=4):
+    """Чекпоинт глазами оценки (как agent_combo.verify_ckpt): online_eval_env.load_agent строит ту
+    же сеть (энкодер, число голов, каналы), q_values на нулевом (старт цепочки) и случайных
+    состояниях отдаёт 27 конечных чисел и совпадает с обучавшейся сетью."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    import online_eval_env as E
+    # импорт среды тянет deepxde, а он на GPU делает тензором по умолчанию cuda: возвращаем
+    # умолчание обратно, иначе входы CPU-сети создаются на cuda (см. agent_combo.verify_ckpt)
+    torch.set_default_tensor_type(torch.FloatTensor)
+    ag, mean, std, variant = E.load_agent(path)
+    in_ch = int(np.asarray(mean).shape[1])
+    out = dict(variant=variant, in_ch=in_ch, encoder=getattr(ag, "enc_kind", None),
+               ens=int(getattr(ag, "ens", 1)))
+    rng = np.random.default_rng(0)
+    worst, scale, finite = 0.0, 1.0, True
+    for k in range(n):
+        st = np.zeros((in_ch, 26, 26), dtype=np.float32)
+        if k:
+            st = (np.asarray(mean)[0] + np.asarray(std)[0]
+                  * rng.normal(size=st.shape)).astype(np.float32)
+        q = E.q_values(ag, st, mean, std, variant)
+        finite = finite and q.shape == (N_ACTIONS,) and bool(np.isfinite(q).all())
+        if finite:
+            scale = max(scale, float(np.abs(q).max()))
+            worst = max(worst, float(np.abs(q - E.q_values(net, st, mean, std, variant)).max()))
+    # допуск относительный: обучавшаяся сеть может жить на GPU, загруженная — на CPU
+    out.update(max_abs_dq=worst, finite=finite,
+               ok=bool(finite and worst <= 1e-3 * scale and out["encoder"] == getattr(net, "enc_kind", None)
+                       and out["ens"] == int(getattr(net, "ens", 1))))
+    return out
+
+
 def main():
     global GAMMA
     ap = argparse.ArgumentParser()
@@ -1679,6 +2146,54 @@ def main():
                          "совпадения жадных действий. Нужен --chain-fix")
     ap.add_argument("--model-tag", default="",
                     help="Суффикс в именах результатов и чекпоинта: арм не перетирает базу")
+    # --- приёмы для агента на картах (по умолчанию всё выключено: прежняя сеть и прежний лосс) ---
+    ap.add_argument("--encoder", default="auto", choices=["auto"] + list(MAP_ENCODERS),
+                    help="Энкодер карт у вариантов с ConvNeXt (convnext_dqn, cnx_*): auto — как раньше "
+                         "(convnext); resnet — малый ResNet под 26x26; resnetpos — он же с каналами координат и "
+                         "без усреднения по карте; vit — ViT с патчем 2 "
+                         "(определения общие с cv_probe.py). Вид энкодера пишется в meta чекпоинта")
+    ap.add_argument("--encoder-init", default="",
+                    help="Веса энкодера для старта: локальный путь или путь в HF-датасете результатов. "
+                         "Файл зонда CV (cv_probe.py --save-encoder), чекпоинт агента или state_dict")
+    ap.add_argument("--freeze-encoder", action="store_true",
+                    help="Заморозить энкодер, учить только головы. С --encoder-init и режимом full "
+                         "нормировка карт берётся из файла весов")
+    ap.add_argument("--ens", type=int, default=1,
+                    help="REDQ: число Q-голов на общем энкодере (1 = одна голова, как раньше). "
+                         "Действие и Q на оценке — по среднему голов")
+    ap.add_argument("--ens-min", type=int, default=2,
+                    help="REDQ: цель TD — минимум по стольким случайным целевым головам")
+    ap.add_argument("--mb-aux", type=float, default=0.0,
+                    help="Вес модельных целей (0 = выключено): W * Huber(Q(s,.) - Q_mb(s,.)) по всем 27 "
+                         "действиям; Q_mb считает ансамбль суррогата (mb_targets.py) один раз до "
+                         "обучения. Нужны --chain-fix и --reward-form delta или dlog")
+    ap.add_argument("--mb-h", type=int, default=3,
+                    help="Модельные цели: глубина жадного просмотра вперёд в суррогате (1 = одно действие)")
+    ap.add_argument("--mb-lam", type=float, default=0.5,
+                    help="Модельные цели: награда = среднее по членам ансамбля - L * разброс (MOPO)")
+    ap.add_argument("--mb-subdirs", default="all",
+                    help="Модельные цели: буферы, на которых учится суррогат (all | solvable | список)")
+    ap.add_argument("--mb-table", default="",
+                    help="Модельные цели: готовая таблица переходов npz (локально или в HF) вместо сборки")
+    ap.add_argument("--mb-members", type=int, default=5, help="Модельные цели: членов ансамбля суррогата")
+    ap.add_argument("--mb-work", default="agent_combo_work",
+                    help="Модельные цели: кэш таблицы и суррогата (общий с agent_combo.py)")
+    ap.add_argument("--pani-w", type=float, default=0.0,
+                    help="Вес сглаживания по входу (0 = выключено): шум на нормированных картах, штраф "
+                         "за изменение вектора Q")
+    ap.add_argument("--pani-sigma", type=float, default=0.1,
+                    help="Разброс шума --pani-w в единицах нормированной карты")
+    ap.add_argument("--distill-top", type=float, default=0.0,
+                    help="Лучшие P%% цепочек буфера (по ошибке в конце цепочки, по каждой задаче): "
+                         "отступ DQfD только на их переходах (--dqfd действует на все). Нужен --chain-fix")
+    ap.add_argument("--distill-w", type=float, default=0.0,
+                    help="Вес отступа на лучших цепочках (отступ — --dqfd-margin)")
+    ap.add_argument("--mask-schedule", action="store_true",
+                    help="От грубого к точному: первую треть эпох max в цели TD видит один шаг обучения "
+                         "на пару «оптимизатор x длина», дальше все 27 действий")
+    ap.add_argument("--mask-coarse-lr", type=int, default=1, choices=[0, 1, 2])
+    ap.add_argument("--no-verify", action="store_true",
+                    help="Не проверять сохранённый чекпоинт через online_eval_env.load_agent")
     args = ap.parse_args()
     if args.fqe_select and not args.ckpt_every:
         ap.error("--fqe-select требует --ckpt-every N")
@@ -1686,6 +2201,40 @@ def main():
         ap.error("--n-step должен быть >= 1")
     if args.smoke:
         args.epochs, args.fqe_epochs = 2, 2
+    # выключатель задач: тег — имя результата без сида (вариант + суффикс + --model-tag)
+    from killswitch import exit_if_killed
+    kill_tag = f"offline_{args.variant}" + run_suffix(args, "multi" if args.subdirs else args.subdir)
+    exit_if_killed(kill_tag, remote=True, what="обучение")
+    new_arch = args.encoder != "auto" or args.ens != 1 or args.encoder_init or args.freeze_encoder
+    new_loss = (args.mb_aux > 0 or args.pani_w > 0 or args.distill_w > 0 or args.distill_top > 0
+                or args.mask_schedule)
+    if args.ens < 1 or (args.ens > 1 and not 1 <= args.ens_min <= args.ens):
+        ap.error("--ens >= 1 и 1 <= --ens-min <= --ens")
+    if args.variant == "cnx_smdp" and (new_arch or new_loss):
+        ap.error("cnx_smdp — отдельный тренер (advanced_agents.SmdpAgent): --encoder, --encoder-init, "
+                 "--freeze-encoder, --ens, --mb-aux, --pani-w, --distill-top, --mask-schedule не поддержаны")
+    if args.encoder != "auto" and args.variant not in CNX_VARIANTS:
+        ap.error(f"--encoder задаётся только у вариантов с ConvNeXt: {', '.join(CNX_VARIANTS)}")
+    if args.ens > 1 and args.variant in NO_ENS_VARIANTS:
+        ap.error(f"--ens не поддержан для {args.variant}: у cnn_iql своя V-голова, у cnn_vqc квантовая")
+    if (args.encoder_init or args.freeze_encoder) and args.variant == "cnx_bbf":
+        ap.error("--encoder-init и --freeze-encoder несовместимы с cnx_bbf (он заново создаёт сеть)")
+    if args.variant == "cnn_iql" and args.mask_schedule:
+        ap.error("--mask-schedule не поддержан для cnn_iql: в его цели нет max по действиям")
+    if (args.distill_w > 0) != (args.distill_top > 0):
+        ap.error("--distill-top и --distill-w задаются вместе")
+    if args.distill_top > 100:
+        ap.error("--distill-top — проценты цепочек, не больше 100")
+    if args.distill_from and (args.ens > 1 or new_loss):
+        ap.error("--distill-from (регрессия Q учителя) несовместим с --ens, --mb-aux, --pani-w, "
+                 "--distill-top и --mask-schedule")
+    if args.mb_aux > 0:
+        if args.mb_h < 1 or args.mb_lam < 0 or args.mb_members < 1:
+            ap.error("--mb-h >= 1, --mb-lam >= 0, --mb-members >= 1")
+        if args.pbrs:
+            ap.error("--mb-aux несовместим с --pbrs: модельная цель считается в исходной награде")
+        if args.extra_buffers:
+            ap.error("--mb-aux несовместим с --extra-buffers: у онлайновых цепочек своя среда и бюджет")
 
     GAMMA = args.gamma
     print(f"loading episodes... (gamma={GAMMA})", flush=True)
@@ -1718,6 +2267,12 @@ def main():
         ap.error("--value-bound требует --chain-fix --reward-form delta и несовместим с --pbrs")
     if args.value_bound and multi and args.err_norm != "init":
         ap.error("--value-bound на смеси УрЧП требует --err-norm init: граница выведена в единицах ошибки")
+    if args.mb_aux > 0 and (not args.chain_fix or args.reward_form not in ("delta", "dlog")):
+        ap.error("--mb-aux требует --chain-fix и --reward-form delta или dlog: суррогат предсказывает "
+                 "ошибку после действия, а сумма наград-уровней (logged, level) за горизонт --mb-h "
+                 "не равна ценности")
+    if args.distill_top > 0 and not args.chain_fix:
+        ap.error("--distill-top требует --chain-fix (нужны границы цепочек и ошибка в их конце)")
     if multi:
         data = load_multi(multi, reward_form=args.reward_form, err_norm=args.err_norm,
                           budget=args.episode_budget, max_files=args.per_pde_files,
@@ -1803,6 +2358,40 @@ def main():
     train_mask, test_mask = split_by_episode(data)
     print(f"episodes={len(episodes)} transitions={len(data['A'])} "
           f"train={int(train_mask.sum())} test={int(test_mask.sum())}", flush=True)
+    # новые флаги — в meta чекпоинта и в строку результата
+    arm = dict(encoder_init=os.path.basename(args.encoder_init), freeze_encoder=bool(args.freeze_encoder),
+               ens_min=int(args.ens_min), mb_aux=float(args.mb_aux), mb_h=int(args.mb_h),
+               mb_lam=float(args.mb_lam), mb_subdirs=args.mb_subdirs, mb_members=int(args.mb_members),
+               mb_table=os.path.basename(args.mb_table), pani_w=float(args.pani_w),
+               pani_sigma=float(args.pani_sigma), distill_top=float(args.distill_top),
+               distill_w=float(args.distill_w), mask_schedule=bool(args.mask_schedule),
+               mask_coarse_lr=int(args.mask_coarse_lr))
+    run_meta.update(arm)
+    mb_info = {}
+    if args.mb_aux > 0:
+        # модельные цели Q_mb(s, .) для обучающих переходов: один расчёт на все сиды
+        import mb_targets as MB
+        names = list(data["PDE_NAMES"]) if multi else [subdir_to_pde(args.subdir)]
+        e0 = np.array([float(pde_meta()[n]["init_err"]) for n in names])
+        # единицы награды — те же, что дал загрузчик: в смеси с --err-norm init ошибки поделены на
+        # E0 задачи и первый шаг считается от 1.0 (load_multi); у одного УрЧП ошибки как есть, а
+        # первый шаг — от --init-err (не задан: награда первого шага 0)
+        if multi and args.err_norm == "init":
+            mb_scale, mb_init = e0, np.ones(len(names))
+        elif multi:
+            mb_scale, mb_init = np.ones(len(names)), e0
+        else:
+            mb_scale = np.ones(1)
+            mb_init = None if args.init_err is None else np.array([float(args.init_err)])
+        data["QMB"], data["MBW"], mb_info = MB.precompute(
+            data, train_mask, names=names, reward_form=args.reward_form,
+            err_scale=mb_scale, init_err=mb_init,
+            gamma=float(GAMMA), h=args.mb_h, lam=args.mb_lam, budget=int(args.episode_budget),
+            smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0),
+            subdirs=args.mb_subdirs, table=args.mb_table, members=args.mb_members,
+            work=args.mb_work, quick=bool(args.smoke))
+        run_meta["mb"] = dict(mb_info)
+    verify_bad = False
 
     for seed in [int(s) for s in args.seeds.split(",")]:
         t0 = time.time()
@@ -1821,31 +2410,40 @@ def main():
                        l2=args.l2, pbrs=args.pbrs, smdp=bool(args.smdp),
                        model_tag=args.model_tag, state_mode=args.state_mode,
                        scalar_ctx=bool(args.scalar_ctx), ctx_err=bool(args.ctx_err),
+                       encoder=getattr(net, "enc_kind", "convnext"), ens=int(getattr(net, "ens", 1)), **arm,
+                       **{"mb_" + k: v for k, v in mb_info.items()},
                        **getattr(net, "extra", {}), **m, **fq)
             print(json.dumps(row), flush=True)
             if not args.smoke:
-                tag = ("_fixns" if args.fix_next_state else "") + \
-                      ("_cfix" if args.chain_fix else "") + \
-                      (("_r" + args.reward_form) if args.reward_form != "logged" else "") + \
-                      ("_vb" if args.value_bound else "") + \
-                      ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0]) + \
-                      (("_" + args.model_tag) if args.model_tag else "")
+                tag = run_suffix(args)
                 upload_result(row, f"{args.variant}{tag}_{pol}_seed{seed}")
         if args.save_model and not args.smoke:
             import torch as _t
+            # архитектура — в meta: по ней load_agent строит ту же сеть (у старых чекпоинтов
+            # этих полей нет, они читаются как раньше)
             ckpt = {"variant": args.variant, "seed": seed,
                     "state_dict": {k: v.cpu() for k, v in net.model.state_dict().items()},
-                    "mean": stats["mean"], "std": stats["std"], "meta": run_meta}
-            sfx = ("_fixns" if args.fix_next_state else "") + \
-                  ("_cfix" if args.chain_fix else "") + \
-                  (("_r" + args.reward_form) if args.reward_form != "logged" else "") + \
-                  ("_vb" if args.value_bound else "") + \
-                  ("" if args.subdir == SUBDIR else "_" + args.subdir.split("_")[0]) + \
-                  (("_" + args.model_tag) if args.model_tag else "")
+                    "mean": stats["mean"], "std": stats["std"],
+                    "meta": dict(run_meta, encoder=getattr(net, "enc_kind", "convnext"),
+                                 ens=int(getattr(net, "ens", 1)),
+                                 n_quantiles=int(getattr(net, "nq", 0) or 0),
+                                 in_ch=int(data["S"].shape[1]))}
+            sfx = run_suffix(args)
             fn = f"/tmp/agent_{args.variant}{sfx}_seed{seed}.pt"
             _t.save(ckpt, fn)
+            verify = None
+            if not args.no_verify and args.variant != "cnx_smdp":
+                try:
+                    verify = verify_ckpt(fn, net)
+                except Exception as e:      # noqa: BLE001 — чекпоинт уже сохранён
+                    verify = dict(ok=False, error=f"{type(e).__name__}: {str(e)[:200]}")
+                print(f"проверка загрузки через online_eval_env: {verify}", flush=True)
+                if not verify.get("ok"):
+                    verify_bad = True
+                    print("ПРОВЕРКА НЕ ПРОШЛА: чекпоинт в HF не заливается, код возврата 3 "
+                          "(оценку не запускать)", flush=True)
             tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
-            if tok:
+            if tok and not (verify is not None and not verify.get("ok")):
                 # выгрузка НЕ критична: локальный чекпоинт уже сохранён и его
                 # достаточно для онлайн-оценки в этом же кернеле. При параллельной
                 # записи из десятков кернелов HF отдаёт 429/конфликт коммита —
@@ -1867,6 +2465,8 @@ def main():
                 else:
                     print(f"model kept locally only: {fn}", flush=True)
         print(f"seed {seed} done in {time.time()-t0:.0f}s", flush=True)
+    if verify_bad:
+        sys.exit(3)         # следующий шаг задачи (оценка на GPU) не должен стартовать с таким чекпоинтом
 
 
 if __name__ == "__main__":

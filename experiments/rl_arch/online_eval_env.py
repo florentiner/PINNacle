@@ -208,7 +208,7 @@ def add_scalar_ctx(state, step, k_max, spent, budget, last_action, err):
 
 
 def load_agent(model_file):
-    from offline_rl import QNet
+    from offline_rl import QNet, ckpt_arch
 
     if model_file and os.path.exists(model_file):
         path = model_file
@@ -223,22 +223,11 @@ def load_agent(model_file):
         net.net.eval()
     else:
         # число входных каналов выводим из самого чекпоинта: агенты, обученные
-        # со скалярным контекстом, ждут 4+5 каналов вместо четырёх
-        in_ch = 4
-        for k, v in ckpt["state_dict"].items():
-            if hasattr(v, "dim") and v.dim() == 4 and v.shape[2] <= 7:
-                in_ch = v.shape[1]
-                break
-        if ckpt["variant"] == "stat_dqn":
-            # у кодировщика на статистиках свёрток нет: 8 признаков на канал
-            in_ch = ckpt["state_dict"]["0.mlp.0.weight"].shape[1] // 8
-        # число квантилей/бинов тоже выводим из чекпоинта: у HL-Gauss их 51,
-        # у квантильных вариантов 32 — иначе голова не совпадёт по форме
-        nq = 32
-        hw = ckpt["state_dict"].get("1.weight")
-        if hw is not None and hw.dim() == 2 and hw.shape[0] % 27 == 0:
-            nq = max(1, hw.shape[0] // 27)
-        net = QNet(ckpt["variant"], torch.device("cpu"), n_quantiles=nq, in_ch=in_ch)
+        # со скалярным контекстом, ждут 4+5 каналов вместо четырёх. Число квантилей/бинов
+        # тоже: у HL-Gauss их 51, у квантильных вариантов 32 — иначе голова не совпадёт по
+        # форме. Вид энкодера карт (--encoder) и число голов ансамбля (--ens) берутся из meta;
+        # у чекпоинтов без этих полей сеть прежняя (разбор — offline_rl.ckpt_arch)
+        net = QNet(ckpt["variant"], torch.device("cpu"), **ckpt_arch(ckpt))
         net.model.load_state_dict(ckpt["state_dict"])
         net.model.eval()
     hg = ckpt.get("hl_gauss")
@@ -540,6 +529,11 @@ def run_seed(seed, args, progress_cb=None):
     def _wants_ctx(ag, var):
         # каналов наблюдения до контекста: 4 карты, у режима tele — TELE_CH (из meta агента)
         base = state_channels((getattr(ag, "_meta", {}) or {}).get("state_mode", "full"))
+        n_in = (getattr(ag, "_meta", {}) or {}).get("in_ch")
+        if n_in:
+            # новые офлайновые чекпоинты: число каналов записано в meta (у ViT первый параметр
+            # сети — позиционное вложение, а не свёртка)
+            return int(n_in) > base
         return (next(ag.model.parameters()).shape[1] > base if var != "stat_dqn"
                 else next(ag.model.parameters()).shape[1] > 8 * base)
     ctx_meta = meta
