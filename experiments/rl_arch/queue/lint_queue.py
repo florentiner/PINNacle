@@ -186,15 +186,17 @@ def lint_branch(argv):
 def lint_combo(argv):
     """Обучение полной комбинации: разбор аргументов до построения таблицы буферов."""
     import agent_combo as C
-    saved = C.get_table
+    import killswitch as K
+    saved = C.get_table, K.killed
 
     def reached(*a, **k):
         raise Reached()
     C.get_table = reached
+    K.killed = lambda *a, **k: None       # отменённая задача остаётся в очереди и должна разбираться
     try:
         C.main(list(argv) + ["--no-upload", "--out-dir", tempfile.mkdtemp(prefix="lint_combo_")])
     finally:
-        C.get_table = saved
+        C.get_table, K.killed = saved
     if "--guide" in argv:
         import online_eval_env as E
         E.parse_chain(argv[argv.index("--guide") + 1])
@@ -220,7 +222,23 @@ def lint_collect(argv):
         A.run_seed, A.load_state, A.base_table = saved
 
 
-LINTERS = {"agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+def lint_cvprobe(argv):
+    """CV-проба: разбор аргументов до загрузки буферов."""
+    import cv_probe as V
+    import killswitch as K
+    saved = V.load_data, K.killed
+
+    def reached(*a, **k):
+        raise Reached()
+    V.load_data = reached
+    K.killed = lambda *a, **k: None
+    try:
+        V.main(list(argv) + ["--no-upload", "--out-dir", tempfile.mkdtemp(prefix="lint_cv_")])
+    finally:
+        V.load_data, K.killed = saved
+
+
+LINTERS = {"cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}

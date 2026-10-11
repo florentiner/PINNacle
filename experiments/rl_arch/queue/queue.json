@@ -6313,6 +6313,24 @@
    ]
   },
   {
+   "id": "w20-cvprobe",
+   "wave": 20,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "CV-проба на картах: смоук, затем полная сетка входов, кодировщиков и методов CV",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w20cv_smoke --smoke"
+    },
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w20cv --hours 4.5 --resume --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
    "id": "w16-l1-keep",
    "wave": 16,
    "group": "H16",
