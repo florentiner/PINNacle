@@ -910,6 +910,34 @@ add("w21-smoke2", 21, "H06",
 for nm, variant, flags, needs, note in MAP_ARMS:
     map_job(f"w21-m-{nm}", variant, flags, f"m{nm}", note, needs=needs)
 
+# ---------------------------------------------------------------- волна 22
+# Комбинации победителей волны 21 на pb2d (медианы 5 сидов: модельные цели 0.045, замороженный
+# предобученный кодировщик 0.051, предобучение восстановлением блоков 0.073, база 0.28; ансамбль,
+# отступ к лучшим цепочкам, CQL+QR и ResNet без предобучения базу не улучшили). У каждого чекпоинта
+# две оценки: как в волне 21 и с общими для всех уравнений правилами развёртывания — маска лучшего
+# агента с картами (без Adam 1e-2 и PSO с ненулевым шагом) и страж с откатом при росте лосса.
+MB = "--mb-aux 0.5 --mb-h 3 --mb-lam 0.5"
+DEPLOY = f"{MASK} --guard-rollback 1.0 --guard-fallback LBFGS:1:500"
+MAP_COMBOS = (
+    ("mbfrz", f"--encoder resnet --encoder-init {ENC_CON} --freeze-encoder {MB}", (ENC_CON,), True,
+     "модельные цели + замороженный контрастно предобученный ResNet"),
+    ("mbmae", f"--encoder resnet --encoder-init {ENC_MAE} {MB}", (ENC_MAE,), True,
+     "модельные цели + ResNet, предобученный восстановлением блоков"),
+    ("mb2", "--mb-aux 2.0 --mb-h 3 --mb-lam 0.5", (), True, "модельные цели с весом 2 вместо 0.5"),
+    ("mbd", MB, (), False, "модельные цели волны 21: только оценка с правилами развёртывания"),
+    ("frzd", f"--encoder resnet --encoder-init {ENC_CON} --freeze-encoder", (ENC_CON,), False,
+     "замороженный кодировщик волны 21: только оценка с правилами развёртывания"),
+)
+for nm, flags, needs, plain, note in MAP_COMBOS:
+    model = off_model("convnext_dqn", f"c{nm}")
+    steps = [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {flags} --seeds 1 --model-tag c{nm}")]
+    if plain:
+        steps.append((EVAL, f"--policy agent --model-file {model} --stop-on-noop {KEEPS} "
+                            + t3ev(f"t3m_c{nm}", S5, hours=2.0)))
+    steps.append((EVAL, f"--policy agent --model-file {model} --stop-on-noop {DEPLOY} {KEEPS} "
+                        + t3ev(f"t3m_c{nm}_dep", S5, hours=2.0)))
+    add(f"w22-c-{nm}", 22, "H06", steps, 4.0 if plain else 2.5, needs=needs, note=note)
+
 # ---------------------------------------------------------------- развёртывание лидеров
 # Лидеры треков 1-2 на ns2d в среде без сбросов оптимизатора и со стражем, без нового обучения:
 # в их цепочках идут подряд действия L-BFGS, а на pb2d и ns2d L-BFGS без сброса истории на 20-30%

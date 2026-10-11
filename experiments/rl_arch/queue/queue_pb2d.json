@@ -6253,6 +6253,114 @@
    ]
   },
   {
+   "id": "pb2d-w22-c-mbfrz",
+   "wave": 22,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt"
+   ],
+   "note": "модельные цели + замороженный контрастно предобученный ResNet",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --freeze-encoder --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --seeds 1 --model-tag cmbfrz"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbfrz_seed1.pt --stop-on-noop --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbfrz"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbfrz_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbfrz_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w22-c-mbmae",
+   "wave": 22,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "модельные цели + ResNet, предобученный восстановлением блоков",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --seeds 1 --model-tag cmbmae"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbmae_seed1.pt --stop-on-noop --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbmae"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbmae_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbmae_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w22-c-mb2",
+   "wave": 22,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "модельные цели с весом 2 вместо 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --mb-aux 2.0 --mb-h 3 --mb-lam 0.5 --seeds 1 --model-tag cmb2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmb2_seed1.pt --stop-on-noop --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmb2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmb2_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmb2_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w22-c-mbd",
+   "wave": 22,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [],
+   "note": "модельные цели волны 21: только оценка с правилами развёртывания",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --seeds 1 --model-tag cmbd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbd_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbd_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w22-c-frzd",
+   "wave": 22,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt"
+   ],
+   "note": "замороженный кодировщик волны 21: только оценка с правилами развёртывания",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --freeze-encoder --seeds 1 --model-tag cfrzd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cfrzd_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cfrzd_dep"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w13-of-g0",
    "wave": 13,
    "group": "H08",
