@@ -1340,6 +1340,8 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(argv)
     args._argv = argv
+    from killswitch import exit_if_killed
+    exit_if_killed(args.tag, remote=True, what="обучение")
     report = run(args)
     if report["verify"] is not None and not report["verify"].get("ok"):
         sys.exit(3)         # следующий шаг задачи (оценка на GPU) не должен стартовать с таким чекпоинтом
