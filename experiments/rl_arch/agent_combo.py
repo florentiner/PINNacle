@@ -437,6 +437,15 @@ def extra_rows(tab, records, pi, err_scale=None):
 # ансамбли модели одного шага (surrogate.Ensemble), кэш в --work
 # --------------------------------------------------------------------------------------------
 
+def fit_features(tab, rows):
+    """Вход ансамбля для строк таблицы: как surrogate.table_features, но с фактическими эпохами
+    (обрезанные действия новых цепочек) и шагом, ограниченным как в прогонах модели. То же
+    выражение собирает mb_targets.step_features из состояния (модельные цели, щит оценки)."""
+    t, r = tab, rows
+    return S.featurize(t["CTX"][t["PDE"][r]], np.minimum(t["STEP"][r], KMAX - 1), t["SPENT"][r],
+                       t["SPF"][r], t["PA"][r], t["L"][r], t["A"][r], ep=t["EPA"][r])
+
+
 class Models:
     """'full' — все цепочки, 'half0' / 'half1' — половины цепочек (то же разбиение, что
     surrogate.Work.half_model). Имя кэша содержит отпечаток данных: чужая таблица не подхватится."""
@@ -457,21 +466,22 @@ class Models:
             return np.arange(len(self.tab["A"]))
         return np.where(self.half_of_row == int(key[4]))[0]
 
+    def path(self, key):
+        """Файл ансамбля в кэше (его же читает щит оценки: online_eval_env.py --shield)."""
+        return os.path.join(self.work, f"combo_surr_{self.sig}_{key}_m{self.members}"
+                                       f"{'_q' if self.quick else ''}_s{self.seed}.pkl")
+
     def get(self, key):
         if key in self._m:
             return self._m[key]
-        p = os.path.join(self.work, f"combo_surr_{self.sig}_{key}_m{self.members}"
-                                    f"{'_q' if self.quick else ''}_s{self.seed}.pkl")
+        p = self.path(key)
         if os.path.exists(p):
             with open(p, "rb") as f:
                 self._m[key] = pickle.load(f)
             return self._m[key]
         t0 = time.time()
         t, r = self.tab, self.rows(key)
-        # как surrogate.table_features, но с фактическими эпохами (обрезанные действия новых
-        # цепочек) и шагом, ограниченным как в прогонах модели
-        X = S.featurize(t["CTX"][t["PDE"][r]], np.minimum(t["STEP"][r], KMAX - 1), t["SPENT"][r],
-                        t["SPF"][r], t["PA"][r], t["L"][r], t["A"][r], ep=t["EPA"][r])
+        X = fit_features(t, r)
         hp = dict(max_iter=60, learning_rate=0.15) if self.quick else {}
         seed = self.seed if key == "full" else self.seed + 10 * int(key[4]) + 1
         ens = S.Ensemble(members=self.members, seed=seed, **hp).fit(X, t["L"][r], t["LN"][r], t["CH"][r])

@@ -85,14 +85,22 @@ def lint_offline(argv):
     def fake_teacher(path, data, device):
         return np.zeros((len(data["A"]), O.N_ACTIONS), dtype=np.float32), {}
 
-    saved = (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers)
+    def fake_teacher_targets(path, data, **kw):
+        # чекпоинт учителя появляется в кернеле шагом раньше (agent_combo.py): при проверке его нет
+        n = len(data["A"])
+        return (np.zeros((n, O.N_ACTIONS), dtype=np.float32), np.ones(n, dtype=bool),
+                dict(mask=[], rows=n, units="lint"))
+
+    saved = (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers, O.teacher_targets)
     O.load_episodes, O.train_variant, O.teacher_q = fake_episodes, _stop, fake_teacher
     O.merge_online_buffers = lambda data, paths, **k: data
+    O.teacher_targets = fake_teacher_targets
     try:
         sys.argv = ["offline_rl.py"] + argv
         O.main()
     finally:
-        O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers = saved
+        (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers,
+         O.teacher_targets) = saved
 
 
 def lint_train(argv):

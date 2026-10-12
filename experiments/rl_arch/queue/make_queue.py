@@ -979,6 +979,49 @@ for nm, flags, needs, note in (
          (EVAL, f"--policy agent --model-file {model} {DEPLOY2} {KEEPS} " + t3ev(f"t3m_d{nm}_dep2", S5, hours=MAP_EH))],
         1.0 + MAP_EH, needs=needs, note=note + ": оценка без пустого действия и PSO, со стражем")
 
+# ---------------------------------------------------------------- волна 25
+# Два метода поверх рецепта волны 24 (предобученный ResNet + модельные цели + правила без пустого
+# действия). Щит: модель среды до выбора действия запрещает те, что по её пессимистичному прогнозу
+# поднимут ошибку (на ns2d страж тратит на такие действия 2600-5100 эпох из 7000). Текущую ошибку
+# щит берёт из собственного прогноза по исполненной цепочке (--shield-err model); вариант с
+# измеренной ошибкой привилегирован и идёт только как верхняя оценка. Учитель: агент на скалярах с
+# полными прогонами MBPO, его Q добавлены к целям сети на картах; сам ученик ошибки не видит.
+RECIPE = f"--encoder resnet --encoder-init {ENC_MAE} {MB}"
+SHIELD = "--shield auto --shield-lam 0.5 --shield-keep 3"
+TEACH = f"{Q}_teach_mbpo"
+TEACH_CK = f"rl_arch/agents_online/{TEACH}.pt"
+TEACH_TR = f"--pde {PDE} --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none"
+
+
+def w25_eval(model, tag, extra, sd=S5, hours=None, budget=BUDGET):
+    return (EVAL, f"--policy agent --model-file {model} {DEPLOY2} {extra} {KEEPS} "
+                  + t3ev(tag, sd, hours=MAP_EH if hours is None else hours, budget=budget))
+
+
+_m = off_model("convnext_dqn", "esmoke")
+add("w25-smoke", 25, "H06",
+    [(COMBO, f"{TEACH_TR} --smoke --tag {TEACH}_smoke"),
+     (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --epochs 2 --fqe-epochs 2 "
+               f"--teacher-from rl_arch/agents_online/{TEACH}_smoke.pt --teacher-w 0.5 --seeds 1 --model-tag esmoke"),
+     w25_eval(_m, "t3m_esmoke", f"{SHIELD} --shield-err model", sd="42", hours=0.5, budget=1500)],
+    1.5, needs=[ENC_MAE], note="смоук: учитель MBPO, ученик на картах с его целями, оценка со щитом")
+_m = off_model("convnext_dqn", "esh")
+add("w25-sh", 25, "H06",
+    [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --seeds 1 --model-tag esh"),
+     w25_eval(_m, "t3m_esh_shm", f"{SHIELD} --shield-err model"),
+     w25_eval(_m, "t3m_esh_sht", f"{SHIELD} --shield-err true")],
+    1.0 + 2 * MAP_EH, needs=[ENC_MAE],
+    note="рецепт волны 24 со щитом: по прогнозу модели и (верхняя оценка) по измеренной ошибке")
+_m = off_model("convnext_dqn", "ete")
+add("w25-te", 25, "H06",
+    [(COMBO, f"{TEACH_TR} --tag {TEACH}"),
+     (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --teacher-from {TEACH_CK} --teacher-w 0.5 "
+               "--seeds 1 --model-tag ete"),
+     w25_eval(_m, "t3m_ete_dep2", ""),
+     w25_eval(_m, "t3m_ete_shm", f"{SHIELD} --shield-err model")],
+    1.5 + 2 * MAP_EH, needs=[ENC_MAE],
+    note="рецепт волны 24 с целями учителя MBPO: без щита и со щитом по прогнозу модели")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

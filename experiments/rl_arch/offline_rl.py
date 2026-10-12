@@ -30,6 +30,7 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
     --freeze-encoder                учить только головы
     --ens N --ens-min M             REDQ: N голов на общем энкодере, цель — минимум по M целевым головам
     --mb-aux W --mb-h H --mb-lam L  модельные цели по всем 27 действиям из суррогата (mb_targets.py)
+    --teacher-from F --teacher-w W  добавка к TD: Q учителя на скалярах (agent_combo.py) по всем 27 действиям
     --pani-w W --pani-sigma S       шум на нормированных картах, штраф за изменение вектора Q
     --distill-top P --distill-w W   отступ DQfD только на переходах лучших P% цепочек
     --mask-schedule                 первую треть эпох max в цели видит грубую сетку действий
@@ -810,6 +811,142 @@ def teacher_q(path, data, device):
             x = torch.as_tensor((S[k:k + 512] - mean) / std, device=device).float()
             out[k:k + 512] = net.q_scalar(x).float().cpu().numpy()
     return out, meta
+
+
+# нижний предел Q учителя (в декадах ошибки) при переводе в награду-разность: 10^(-Q) растёт
+# экспоненциально, и без предела цель расходящегося действия (Q около -4) была бы -10^4 ошибок и
+# забила бы остальные. -1 — «ошибка выросла вдесятеро», цель не ниже -9 текущих ошибок
+TEACHER_QMIN = -1.0
+
+
+def teacher_scalar_q(ck, data, device, names, err_scale):
+    """Q учителя на скалярах (agent_combo.py: stat_dqn, state_mode=loss) на строках набора тренера.
+
+    Состояние такого учителя — 15 чисел: 4 канала обучающих лоссов (их веса в первом слое нулевые
+    — agent_combo.to_stat_dqn, учитель от них не зависит), шаг, эпохи, семейство и длина прошлого
+    действия, log10((rmse+brmse)/E0) и описатель задачи. Обучающих лоссов в буферах нет, но они и
+    не нужны; остальное восстанавливается из массивов тренера (STEP, SPENT, A, ERR) теми же
+    функциями, какими учитель учился: состояние — mb_targets.chain_states (правило
+    surrogate.build_table), наблюдение — agent_combo.agent_obs. Строки тренера при этом ни с какой
+    внешней таблицей не выравниваются. Возвращает (Q (N, 27), valid, first, log10 текущей ошибки
+    глазами учителя в исходных единицах): valid — у строки известны прошлая ошибка и расход эпох
+    (цепочка идёт подряд с шага 0) и бюджет учителя не выбран."""
+    import mb_targets as MB
+    import agent_combo as AC
+    S_ = MB.S
+    meta = ck.get("meta") or {}
+    sd = ck["state_dict"]
+    arch = ckpt_arch(ck)
+    in_ch = arch["in_ch"]
+    if ck["variant"] != "stat_dqn" or in_ch != AC.N_IN or ck.get("hl_gauss"):
+        raise ValueError(f"учитель режима loss: ждём stat_dqn с {AC.N_IN} каналами от agent_combo.py, "
+                         f"в чекпоинте {ck['variant']} с {in_ch}")
+    w0 = sd["0.mlp.0.weight"]
+    cols = [b * in_ch + c for b in range(w0.shape[1] // in_ch) for c in range(AC.N_LOSS)]
+    if float(w0[:, cols].abs().max()) != 0.0:
+        raise ValueError("учитель режима loss смотрит на обучающие лоссы (веса первого слоя на каналах "
+                         "0-3 не нулевые), а в офлайновых буферах их нет: Q на строках буфера не посчитать")
+    want = dict(ctx_err="err", err_norm="init", pde_ctx=True, ctx_kmax=AC.KMAX, ctx_budget=AC.BUDGET)
+    bad = {k: meta.get(k) for k, v in want.items() if meta.get(k) != v}
+    if bad:
+        raise ValueError(f"учитель режима loss: состояние собрано не как у agent_combo.py (ждём {want}, "
+                         f"в meta {bad})")
+    rows = pde_meta()
+    miss = [n for n in names if n not in rows]
+    if miss:
+        raise ValueError(f"учитель: задач {miss} нет в track3/pde_meta.json")
+    tab = dict(CTX=np.stack([S_.pde_ctx(rows[n]) for n in names]), NAMES=list(names))
+    st, valid, first = MB.chain_states(data, tab, np.arange(len(names)), err_scale, budget=AC.BUDGET)
+    obs = AC.agent_obs(tab["CTX"][st["pde"]], st["step"], st["spent"], st["pa"], st["l"])
+    net = QNet("stat_dqn", device, **arch)
+    net.model.load_state_dict(sd)
+    net.model.eval()
+    mean = np.asarray(ck["mean"], np.float32).reshape(1, in_ch)
+    std = np.asarray(ck["std"], np.float32).reshape(1, in_ch)
+    out = np.zeros((len(obs), N_ACTIONS), dtype=np.float32)
+    with torch.no_grad():
+        for k in range(0, len(obs), 512):
+            # постоянные плоскости, как их подаёт оценка (add_scalar_ctx + описатель задачи)
+            x = torch.as_tensor((obs[k:k + 512] - mean) / std, device=device).float()
+            out[k:k + 512] = net.q_scalar(x[:, :, None, None].expand(-1, -1, 26, 26)).float().cpu().numpy()
+    return out, valid, first, st["l"]
+
+
+def teacher_targets(path, data, names, reward_form, err_scale, init_err, gamma, device, budget=0, log=None):
+    """--teacher-w: Q учителя в единицах награды тренера на строках его набора.
+
+    Учитель agent_combo.py учится на награде «убыль log10 ошибки за действие» с дисконтом 1:
+    Q(s, a) — на сколько декад упадёт ошибка от текущей до конца эпизода (со штрафом MOPO), то есть
+    учитель предсказывает итоговую ошибку E_кон = 10^(l - Q), l — log10 текущей ошибки. Цель ученика
+    — награда ЕГО формы за переход от текущей ошибки (у первого шага — от init_err тренера) к E_кон:
+        dlog    log10 E - log10 E_кон   (у не первых шагов это само Q учителя);
+        delta   (E - E_кон) / масштаб ошибки тренера, Q учителя снизу обрезано TEACHER_QMIN.
+    Допущение: суммы наград складываются без дисконта (как у учителя). При gamma ученика < 1 и
+    неотрицательных наградах цель завышена не больше чем в 1/gamma^(число оставшихся действий) раз
+    (0.99 и 12 действий — до 13%). Формы logged, level и model не переводятся (отказ).
+    names — задачи набора (в порядке data['PDE']), err_scale и init_err — по задачам в единицах
+    тренера, как у mb_targets.precompute. Возвращает (Q float32 (N, 27), у каких строк цель есть
+    bool (N,), сводка). Цель есть не у всех: строка вне цепочки с началом, расход не меньше бюджета
+    учителя, строка до каркаса учителя (--guide: он решает только после каркаса), чужая задача."""
+    log = log or (lambda *a: print(*a, flush=True))
+    t0 = time.time()
+    if reward_form not in ("delta", "dlog"):
+        raise ValueError(f"--teacher-w: Q учителя — убыль log10 ошибки до конца эпизода; в награду "
+                         f"{reward_form!r} она не переводится (нужна delta или dlog)")
+    for k in ("EP", "STEP", "SPENT", "ERR"):
+        if k not in data:
+            raise ValueError("--teacher-w требует набор, загруженный с --chain-fix")
+    if init_err is None:
+        raise ValueError("--teacher-w требует --init-err: без него награда первого шага у тренера ноль, "
+                         "а учитель считает первый шаг от ошибки необученной сети")
+    if not os.path.exists(path):
+        from huggingface_hub import hf_hub_download
+        path = hf_hub_download(OUT_REPO, path, repo_type="dataset")
+    ck = torch.load(path, map_location="cpu", weights_only=False)
+    meta = ck.get("meta") or {}
+    if meta.get("state_mode") != "loss":
+        raise ValueError(f"--teacher-from: поддержан учитель на скалярах от agent_combo.py (state_mode=loss), "
+                         f"в чекпоинте {meta.get('state_mode', 'full')!r}; учителя на картах берёт --distill-from")
+    n = len(data["A"])
+    err_scale = np.asarray(err_scale, dtype=np.float64)
+    init_err = np.asarray(init_err, dtype=np.float64)
+    assert err_scale.shape == (len(names),) and init_err.shape == (len(names),), (err_scale.shape, init_err.shape)
+    q, valid, first, l = teacher_scalar_q(ck, data, device, names, err_scale)
+    assert q.shape == (n, N_ACTIONS) and valid.shape == (n,) and l.shape == (n,)
+    pl = np.asarray(data["PDE"], dtype=np.int64) if "PDE" in data else np.zeros(n, dtype=np.int64)
+    guide_ep = int(meta.get("guide_epochs", 0) or 0)
+    valid = valid & (np.asarray(data["SPENT"]) >= guide_ep)
+    known = meta.get("train_pdes")
+    if known:
+        valid &= np.isin(pl, [k for k, nm in enumerate(names) if nm in known])
+    # текущая ошибка в единицах тренера: у первого шага — init_err, дальше — ошибка после прошлого действия
+    base = np.where(first, init_err[pl], np.r_[1.0, np.asarray(data["ERR"], dtype=np.float64)[:-1]])
+    q64 = q.astype(np.float64)
+    if reward_form == "dlog":
+        out = (np.log10(np.maximum(base, 1e-8)) - (l - np.log10(err_scale[pl])))[:, None] + q64
+    else:
+        out = base[:, None] - 10.0 ** (l[:, None] - np.maximum(q64, TEACHER_QMIN)) / err_scale[pl][:, None]
+    valid &= np.isfinite(out).all(1)
+    out = np.where(valid[:, None], out, 0.0).astype(np.float32)
+    g_t = float(meta.get("gamma", 1.0))
+    info = dict(rows=int(valid.sum()), skipped=int(n - valid.sum()), units=f"dlog->{reward_form}",
+                gamma=g_t, guide_epochs=guide_ep, mask_n=len(meta.get("mask", [])),
+                q_mean=float(out[valid].mean()) if valid.any() else 0.0,
+                q_best_mean=float(out[valid].max(1).mean()) if valid.any() else 0.0,
+                sec=round(time.time() - t0, 1))
+    log(f"учитель {os.path.basename(path)}: цель у {info['rows']} строк из {n} (каркас учителя {guide_ep} "
+        f"эпох, маска {info['mask_n']} действий), единицы {info['units']}: средний Q {info['q_mean']:.4f}, "
+        f"лучшего действия {info['q_best_mean']:.4f}, {info['sec']} с")
+    if int(budget) != int(meta.get("ctx_budget", 0) or 0):
+        log(f"ВНИМАНИЕ: учитель обучен на эпизодах в {meta.get('ctx_budget')} эпох, цепочки ученика обрезаны по "
+            f"{budget or 'без бюджета'}: Q учителя считает остаток своего бюджета")
+    if abs(g_t - float(gamma)) > 1e-9:
+        log(f"учитель: дисконт учителя {g_t:g}, ученика {float(gamma):g} — цель переведена как сумма наград "
+            "без дисконта (см. teacher_targets)")
+    if not valid.any():
+        raise ValueError("--teacher-w: ни у одной строки набора нет цели учителя (каркас длиннее цепочек, "
+                         "чужая задача или цепочки без начала)")
+    return out, valid, dict(info, mask=[int(i) for i in meta.get("mask", [])])
 
 
 def split_by_episode(data, test_frac=0.2, split_seed=0):
@@ -1601,6 +1738,15 @@ def train_variant(variant, data, train_mask, args, seed):
         assert data["QMB"].shape == (len(data["A"]), N_ACTIONS), data["QMB"].shape
         QMB = to_t(data["QMB"]).float()
         MBW = to_t(data["MBW"].astype(np.float32))
+    # Q учителя на скалярах в единицах награды тренера (teacher_targets): добавка к TD, не замена
+    w_te = float(getattr(args, "teacher_w", 0.0) or 0.0) if QT is None else 0.0
+    QTE = TEW = None
+    if w_te:
+        if "QTE" not in data:
+            raise ValueError("--teacher-w: в наборе нет целей учителя QTE (их считает teacher_targets)")
+        assert data["QTE"].shape == (len(data["A"]), N_ACTIONS), data["QTE"].shape
+        QTE = to_t(data["QTE"]).float()
+        TEW = to_t((data["TEV"] & train_mask).astype(np.float32))
     w_pani = float(getattr(args, "pani_w", 0.0) or 0.0) if QT is None else 0.0
     pani_sigma = float(getattr(args, "pani_sigma", 0.1) or 0.0)
     w_demo = float(getattr(args, "distill_w", 0.0) or 0.0) if QT is None else 0.0
@@ -1733,7 +1879,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     (qs_m + marg).max(1).values
                     - qs_m.gather(1, a[:, None]).squeeze(1)).mean()
 
-            if w_mb or w_pani or DEMO is not None:
+            if w_mb or w_pani or DEMO is not None or w_te:
                 # плотные добавки считаются на каждой голове: (K,B,A), у квантильных — среднее квантилей
                 qv = net.q_heads(s)
                 if variant in QUANTILE_VARIANTS:
@@ -1747,6 +1893,14 @@ def train_variant(variant, data, train_mask, args, seed):
                         l_mb = (hub * wb).sum() / wb.sum()
                         loss = loss + w_mb * l_mb
                         aux_acc.setdefault("mb_loss", []).append(l_mb.item())
+                if w_te:
+                    # W * Huber(Q(s, .) - Q_учителя(s, .)) по всем 27 действиям на строках с целью учителя
+                    wt = TEW[b]
+                    if wt.sum() > 0:
+                        hub = F.smooth_l1_loss(qv, QTE[b][None].expand_as(qv), reduction="none").mean((0, 2))
+                        l_te = (hub * wt).sum() / wt.sum()
+                        loss = loss + w_te * l_te
+                        aux_acc.setdefault("teacher_loss", []).append(l_te.item())
                 if w_pani:
                     # сглаживание по входу: шум на нормированных картах (каналы контекста не трогаем),
                     # штраф за изменение вектора Q; чистый Q — цель без градиента
@@ -1811,6 +1965,21 @@ def train_variant(variant, data, train_mask, args, seed):
     net.set_train(False)
     aux_info.update({k: float(np.mean(v)) for k, v in aux_acc.items()})   # средние последней эпохи
     net.extra = {}
+    if w_te:
+        # совпадение жадных действий ученика и учителя на отложенных строках с целью учителя
+        # (среди действий, разрешённых учителю его маской)
+        tv = np.where(~train_mask & data["TEV"])[0]
+        allow = torch.ones(N_ACTIONS, dtype=torch.bool, device=device)
+        for i in (getattr(args, "_teacher_soft_mask", None) or []):
+            allow[int(i)] = False
+        same = 0
+        with torch.no_grad():
+            for k in range(0, len(tv), 512):
+                b = to_t(tv[k:k + 512]).long()
+                same += int((net.q_scalar(S[b]).masked_fill(~allow[None], -1e9).argmax(1)
+                             == QTE[b].masked_fill(~allow[None], -1e9).argmax(1)).sum())
+        aux_info["teacher_agree"] = round(same / len(tv), 4) if len(tv) else None
+        aux_info["teacher_agree_rows"] = int(len(tv))
     if QT is not None:
         with torch.no_grad():
             b = to_t(test_idx).long()
@@ -2178,6 +2347,16 @@ def main():
     ap.add_argument("--mb-members", type=int, default=5, help="Модельные цели: членов ансамбля суррогата")
     ap.add_argument("--mb-work", default="agent_combo_work",
                     help="Модельные цели: кэш таблицы и суррогата (общий с agent_combo.py)")
+    ap.add_argument("--teacher-from", default="",
+                    help="Чекпоинт учителя на скалярах от agent_combo.py (локальный путь или путь в "
+                         "HF-датасете результатов), например rl_arch/agents_online/<тег>.pt. Его состояние "
+                         "(шаг, эпохи, прошлое действие, rmse+brmse, описатель задачи) восстанавливается из "
+                         "строк буфера; задаётся вместе с --teacher-w")
+    ap.add_argument("--teacher-w", type=float, default=0.0,
+                    help="Вес дистилляции учителя (0 = выключено): W * Huber(Q(s,.) - Q_учителя(s,.)) по "
+                         "всем 27 действиям ДОБАВЛЯЕТСЯ к TD и --mb-aux (у --distill-from регрессия "
+                         "заменяет TD). Q учителя переводится в единицы награды тренера; нужны --chain-fix, "
+                         "--reward-form delta или dlog и --init-err (на смеси УрЧП E0 берётся сам)")
     ap.add_argument("--pani-w", type=float, default=0.0,
                     help="Вес сглаживания по входу (0 = выключено): шум на нормированных картах, штраф "
                          "за изменение вектора Q")
@@ -2207,12 +2386,13 @@ def main():
     exit_if_killed(kill_tag, remote=True, what="обучение")
     new_arch = args.encoder != "auto" or args.ens != 1 or args.encoder_init or args.freeze_encoder
     new_loss = (args.mb_aux > 0 or args.pani_w > 0 or args.distill_w > 0 or args.distill_top > 0
-                or args.mask_schedule)
+                or args.mask_schedule or args.teacher_w > 0)
     if args.ens < 1 or (args.ens > 1 and not 1 <= args.ens_min <= args.ens):
         ap.error("--ens >= 1 и 1 <= --ens-min <= --ens")
     if args.variant == "cnx_smdp" and (new_arch or new_loss):
         ap.error("cnx_smdp — отдельный тренер (advanced_agents.SmdpAgent): --encoder, --encoder-init, "
-                 "--freeze-encoder, --ens, --mb-aux, --pani-w, --distill-top, --mask-schedule не поддержаны")
+                 "--freeze-encoder, --ens, --mb-aux, --pani-w, --distill-top, --mask-schedule, --teacher-w "
+                 "не поддержаны")
     if args.encoder != "auto" and args.variant not in CNX_VARIANTS:
         ap.error(f"--encoder задаётся только у вариантов с ConvNeXt: {', '.join(CNX_VARIANTS)}")
     if args.ens > 1 and args.variant in NO_ENS_VARIANTS:
@@ -2227,7 +2407,12 @@ def main():
         ap.error("--distill-top — проценты цепочек, не больше 100")
     if args.distill_from and (args.ens > 1 or new_loss):
         ap.error("--distill-from (регрессия Q учителя) несовместим с --ens, --mb-aux, --pani-w, "
-                 "--distill-top и --mask-schedule")
+                 "--distill-top, --mask-schedule и --teacher-w")
+    if (args.teacher_w > 0) != bool(args.teacher_from) or args.teacher_w < 0:
+        ap.error("--teacher-from и --teacher-w > 0 задаются вместе")
+    if args.teacher_w > 0 and (args.pbrs or args.extra_buffers):
+        ap.error("--teacher-w несовместим с --pbrs (цель учителя считается в исходной награде) и с "
+                 "--extra-buffers (у онлайновых цепочек своя среда и бюджет)")
     if args.mb_aux > 0:
         if args.mb_h < 1 or args.mb_lam < 0 or args.mb_members < 1:
             ap.error("--mb-h >= 1, --mb-lam >= 0, --mb-members >= 1")
@@ -2273,6 +2458,11 @@ def main():
                  "не равна ценности")
     if args.distill_top > 0 and not args.chain_fix:
         ap.error("--distill-top требует --chain-fix (нужны границы цепочек и ошибка в их конце)")
+    if args.teacher_w > 0 and (not args.chain_fix or args.reward_form not in ("delta", "dlog")
+                               or (not multi and args.init_err is None)):
+        ap.error("--teacher-w требует --chain-fix, --reward-form delta или dlog и --init-err: Q учителя — "
+                 "убыль log10 ошибки от текущей до конца эпизода, считая первый шаг от ошибки "
+                 "необученной сети; в награды logged, level и model она не переводится")
     if multi:
         data = load_multi(multi, reward_form=args.reward_form, err_norm=args.err_norm,
                           budget=args.episode_budget, max_files=args.per_pde_files,
@@ -2365,12 +2555,12 @@ def main():
                mb_table=os.path.basename(args.mb_table), pani_w=float(args.pani_w),
                pani_sigma=float(args.pani_sigma), distill_top=float(args.distill_top),
                distill_w=float(args.distill_w), mask_schedule=bool(args.mask_schedule),
-               mask_coarse_lr=int(args.mask_coarse_lr))
+               mask_coarse_lr=int(args.mask_coarse_lr), teacher_w=float(args.teacher_w),
+               teacher_from=os.path.basename(args.teacher_from))
     run_meta.update(arm)
-    mb_info = {}
-    if args.mb_aux > 0:
-        # модельные цели Q_mb(s, .) для обучающих переходов: один расчёт на все сиды
-        import mb_targets as MB
+    mb_info, te_info = {}, {}
+    if args.mb_aux > 0 or args.teacher_w > 0:
+        # модельные цели Q_mb(s, .) для обучающих переходов и цели учителя: один расчёт на все сиды
         names = list(data["PDE_NAMES"]) if multi else [subdir_to_pde(args.subdir)]
         e0 = np.array([float(pde_meta()[n]["init_err"]) for n in names])
         # единицы награды — те же, что дал загрузчик: в смеси с --err-norm init ошибки поделены на
@@ -2383,6 +2573,8 @@ def main():
         else:
             mb_scale = np.ones(1)
             mb_init = None if args.init_err is None else np.array([float(args.init_err)])
+    if args.mb_aux > 0:
+        import mb_targets as MB
         data["QMB"], data["MBW"], mb_info = MB.precompute(
             data, train_mask, names=names, reward_form=args.reward_form,
             err_scale=mb_scale, init_err=mb_init,
@@ -2391,6 +2583,17 @@ def main():
             subdirs=args.mb_subdirs, table=args.mb_table, members=args.mb_members,
             work=args.mb_work, quick=bool(args.smoke))
         run_meta["mb"] = dict(mb_info)
+    args._teacher_soft_mask = []
+    if args.teacher_w > 0:
+        import torch as _t
+        data["QTE"], data["TEV"], te_info = teacher_targets(
+            args.teacher_from, data, names=names, reward_form=args.reward_form, err_scale=mb_scale,
+            init_err=mb_init, gamma=float(GAMMA), budget=int(args.episode_budget),
+            device=_t.device("cuda" if _t.cuda.is_available() and not args.cpu else "cpu"))
+        # маску учителя ученик НЕ наследует (у него свой TD по всем действиям); она только в meta
+        args._teacher_soft_mask = te_info.pop("mask")
+        te_info["train_rows"] = int((data["TEV"] & train_mask).sum())
+        run_meta["teacher"] = dict(te_info, mask=list(args._teacher_soft_mask))
     verify_bad = False
 
     for seed in [int(s) for s in args.seeds.split(",")]:
@@ -2412,6 +2615,7 @@ def main():
                        scalar_ctx=bool(args.scalar_ctx), ctx_err=bool(args.ctx_err),
                        encoder=getattr(net, "enc_kind", "convnext"), ens=int(getattr(net, "ens", 1)), **arm,
                        **{"mb_" + k: v for k, v in mb_info.items()},
+                       **{"teacher_" + k: v for k, v in te_info.items()},
                        **getattr(net, "extra", {}), **m, **fq)
             print(json.dumps(row), flush=True)
             if not args.smoke:

@@ -574,6 +574,16 @@ def run_seed(seed, args, progress_cb=None):
     build_maps = (not args.no_state) and (not mapless or args.state_compare or not needs_agent)
     guard_fb = parse_action_spec(args.guard_fallback) if args.guard_rollback else None
     guard_log, guard_spent = [], 0
+    # щит (--shield): ансамбль суррогата среды запрещает агенту действия, у которых пессимистичный
+    # прогноз изменения log10 ошибки не отрицателен; агент выбирает по своим Q среди оставшихся
+    shield, shield_log = None, []
+    if getattr(args, "shield", "") and needs_agent:
+        import mb_targets as MB
+        shield = MB.load_shield(args.shield, args.pde, meta)
+        print(f"щит: ансамбль {shield[2]} ({shield[1].members} членов), lam={args.shield_lam}, "
+              f"не меньше {args.shield_keep} действий, текущая ошибка: "
+              + ("измеренная rmse+brmse (привилегированная информация)" if args.shield_err == "true"
+                 else "оценка модели по исполненной цепочке"), flush=True)
     guide_stat = [0, 0]              # комитет с проводником: [следовал проводнику, отошёл]
     opt_cache = {}                   # --keep-opt: оптимизатор прошлого действия
     # агент, обученный в среде без сбросов оптимизатора, оценивается в ней же
@@ -669,6 +679,7 @@ def run_seed(seed, args, progress_cb=None):
         prev_loss_tot = t3.get("prev_loss_tot")
         tele_log = t3.get("tele_log", [])
         guard_log, guard_spent = t3.get("guard_log", []), t3.get("guard_spent", 0)
+        shield_log = t3.get("shield_log", [])
         prev_raw2, stale_maps = t3.get("prev_raw2"), t3.get("stale_maps")
         agree, hist = t3.get("agree", []), t3.get("hist", [])
         true_state = t3.get("true_state")
@@ -692,6 +703,7 @@ def run_seed(seed, args, progress_cb=None):
             t3=dict(agree=agree, hist=hist, true_state=true_state, prev_loss_tot=prev_loss_tot,
                     tele_log=tele_log,
                     guard_log=guard_log, guard_spent=guard_spent, stale_maps=stale_maps,
+                    shield_log=shield_log,
                     prev_raw2=({k: v.detach().cpu() for k, v in prev_raw2.items()}
                                if prev_raw2 is not None else None),
                     times=(t_ae_tot, t_srf_tot, t_opt_tot), bd=bd,
@@ -776,22 +788,43 @@ def run_seed(seed, args, progress_cb=None):
                 print(f"[seed {seed}] разведка: лоссы {['%.3e' % v for v in losses]} -> "
                       f"{ALL_ACTIONS[a][0]} lr={ALL_ACTIONS[a][1]} ep={ALL_ACTIONS[a][2]}", flush=True)
         if use_agent:
+            allow_now, sh = allowed, None      # без щита — прежняя маска и прежний путь выбора
+            if shield is not None:
+                # состояние суррогата живого прогона: оставленные действия цепочки (откаченные стражем
+                # в неё не попадают) и текущая rmse+brmse — измеренная либо оценка самой модели
+                # (--shield-err); до первого действия — E0 задачи
+                a_free = int(greedy_on(state))      # выбор агента без щита (с маской)
+                err_sh = (rmse + brmse if args.shield_err == "true"
+                          else MB.model_err(shield[1], shield[0], chain))
+                allow_now, sh = MB.shield_step(shield[1], shield[0], chain, err_sh, allowed, a_free,
+                                               args.shield_lam, args.shield_keep,
+                                               left=args.budget - spent, spent=spent)
             if len(agents) > 1 and guide:
                 g = guide[len(chain)] if len(chain) < len(guide) else None
                 k_agree = args.guide_agree if args.guide_agree > 0 else len(agents)
-                a, dev = committee_with_guide(agents, state, allowed, g, k_agree, args.guide_bonus)
+                a, dev = committee_with_guide(agents, state, allow_now, g, k_agree, args.guide_bonus)
                 guide_stat[1 if dev else 0] += 1
             elif len(agents) > 1:
-                a = ensemble_action(agents, state, allowed, args.ensemble)
-            elif allowed.all() and not guide:
+                a = ensemble_action(agents, state, allow_now, args.ensemble)
+            elif allow_now.all() and not guide:
                 a = pick_action(agent, state, mean, std, variant)     # прежний путь
             else:
                 q = q_values(agent, state, mean, std, variant).astype(np.float64)
-                q[~allowed] = -np.inf
+                q[~allow_now] = -np.inf
                 a = int(np.argmax(q))
                 g = guide[len(chain)] if len(chain) < len(guide) else None
                 if g is not None and a != g and q[g] + args.guide_bonus >= q[a]:
                     a = g       # от эвристики отходим только при явном выигрыше по Q
+            if sh is not None:
+                MB.shield_chosen(sh, a)
+                if not sh["skip"]:
+                    print(f"[seed {seed}] щит: запрещено {sh['vetoed']} из {sh['n_allowed']}"
+                          + (" (улучшение обещают меньше --shield-keep действий: оставлены лучшие по "
+                             "прогнозу)" if sh["forced"] else "")
+                          + (f", выбор агента {ALL_ACTIONS[a_free][0]}:{ALL_ACTIONS[a_free][1]:g}:"
+                             f"{ALL_ACTIONS[a_free][2]} запрещён" if sh["free_vetoed"] else "")
+                          + f"; прогноз изменения log10 ошибки {sh['pred']:+.3f}", flush=True)
+                shield_log.append(sh)
             if args.state_compare and true_state is not None:
                 agree.append([len(chain) + 1, int(a), int(greedy_on(true_state))])
             if (args.stop_on_noop and a in NOOP_ACTIONS
@@ -1065,6 +1098,12 @@ def run_seed(seed, args, progress_cb=None):
             print(f"[seed {seed}] завершающий шаг LS ({args.finish_ls}): l2re "
                   f"{l2_pre:.4e} -> {ls_info['l2re_after']:.4e}", flush=True)
     l2re = math.hypot(l2re_op, l2re_bnd)
+    sh_row = {}
+    if shield is not None:
+        # shield_veto_rate — доля решений, где щит запретил собственный выбор агента
+        sh_row = dict(shield=os.path.basename(shield[2]), shield_lam=float(args.shield_lam),
+                      shield_keep=int(args.shield_keep), shield_err=args.shield_err, shield_log=shield_log,
+                      **MB.shield_summary(shield_log))
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
                 stop_reason=stop_reason, spent=spent, ls=ls_info,
                 lbfgs_tol=(None if args.lbfgs_tol is None or args.lbfgs_tol < 0 else args.lbfgs_tol),
@@ -1084,7 +1123,7 @@ def run_seed(seed, args, progress_cb=None):
                 guide_follow=int(guide_stat[0]), guide_deviate=int(guide_stat[1]),
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
                 keep_opt_mode=(keep_mode if keep_opt else None),
-                elapsed_s=round(time.time() - t0, 1))
+                elapsed_s=round(time.time() - t0, 1), **sh_row)
 
 
 def result_done(name):
@@ -1144,6 +1183,26 @@ def build_parser():
                          "--guard-fallback. Потраченные эпохи остаются в счёте бюджета. 0 = выключено")
     ap.add_argument("--guard-fallback", default="LBFGS:1:500",
                     help="запасное действие стража")
+    ap.add_argument("--shield", default="",
+                    help="Щит: суррогат среды запрещает агенту действия без предсказанного улучшения ДО "
+                         "их исполнения (страж откатывает после и тратит эпохи). Значение — файл ансамбля "
+                         "combo_surr_*_full_*.pkl из кэша шага обучения (offline_rl.py --mb-work / "
+                         "agent_combo.py --work), папка кэша с одним таким файлом или auto — путь из meta "
+                         "чекпоинта (агент, обученный с --mb-aux). Перед каждым решением агента ансамбль "
+                         "предсказывает изменение log10 ошибки для каждого разрешённого действия; действие "
+                         "запрещено, если среднее + --shield-lam * разброс >= 0. Агент выбирает по своим Q "
+                         "среди оставшихся. Состояние суррогата содержит текущую rmse+brmse (см. --shield-err). "
+                         "Суррогат обучен на буферах со сбросом оптимизатора. Пусто = выключено")
+    ap.add_argument("--shield-err", default="true", choices=["true", "model"],
+                    help="щит: откуда текущая ошибка в состоянии суррогата. true — измеренная rmse+brmse "
+                         "(истинная ошибка: привилегированная информация, которой агент без --ctx-err не "
+                         "видит); model — оценка самого суррогата открытым прогоном по исполненной цепочке "
+                         "от E0 (без привилегированной информации, грубее с каждым шагом)")
+    ap.add_argument("--shield-lam", type=float, default=0.5,
+                    help="щит: пессимизм — множитель разброса ансамбля в оценке действия")
+    ap.add_argument("--shield-keep", type=int, default=3,
+                    help="щит: если улучшение обещают меньше стольких действий, остаются столько лучших "
+                         "по пессимистичному прогнозу (агенту всегда есть из чего выбрать)")
     ap.add_argument("--state-mode", default="auto",
                     choices=["auto", "full", "blind", "level", "shape", "shuffle", "loss", "rebuild", "tasknorm",
                              "tele"],
@@ -1306,6 +1365,10 @@ def main():
         sys.exit("--guard-rollback действует только на действия агента и случайной политики")
     if args.policy in ("bandit", "scout") and not args.tag:
         sys.exit("--policy bandit/scout требует --tag")
+    if args.shield and not uses_agent:
+        sys.exit("--shield действует только на решения агента (--policy agent или --script-tail agent)")
+    if args.shield_keep < 1 or args.shield_lam < 0:
+        sys.exit("--shield-keep >= 1, --shield-lam >= 0")
     if args.policy == "scout":
         if len(parse_chain(args.scout_set)) != len(parse_chain(args.scout_commit)):
             sys.exit("--scout-set и --scout-commit должны быть одной длины")
