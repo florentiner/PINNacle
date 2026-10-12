@@ -43,8 +43,9 @@ from online_eval_env import (ACTION_TABLE, AE_MODEL_PARAMS, GRID_RANGE, LOSS_TYP
                              OUT_REPO, build_optimizer, build_state, reuse_optimizer,
                              flat_params, tele_display_every, tele_observe)
 from offline_rl import (QNet, apply_state_mode, chain_ctx, STATE_MODES, PDE_DESC_CH,  # noqa: E402
-                        keep_consistent, loss_state, pde_desc, pde_meta, state_channels,
-                        subdir_to_pde)
+                        MAP_ENCODERS, ckpt_arch, keep_consistent, loss_state, pde_desc, pde_meta,
+                        state_channels, subdir_to_pde)
+import tele_maps as TM  # noqa: E402
 
 EPS_START, EPS_END, EPS_DECAY = 0.5, 0.05, 50   # значения авторов (rl_algorithms.py)
 GAMMA = 0.9                                      # их rl_agent_params
@@ -578,6 +579,124 @@ def parse_mask(spec):
     return allowed
 
 
+def resolve_warm(spec):
+    """--warm-strict: путь к чекпоинту — локальный файл либо имя в HF-датасете результатов
+    (rl_arch/models/<имя> у офлайновых агентов; путь с 'rl_arch/' берётся как есть, например
+    rl_arch/agents_online/<тег>.pt). Не найден — исключение: строгий старт с нуля не идёт."""
+    if os.path.exists(spec):
+        return spec
+    from huggingface_hub import hf_hub_download
+    rel = spec if spec.startswith("rl_arch/") else f"rl_arch/models/{spec}"
+    try:
+        return hf_hub_download(OUT_REPO, rel, repo_type="dataset")
+    except Exception as e:      # noqa: BLE001 — любая причина: файла у нас нет
+        raise FileNotFoundError(f"--warm-strict: чекпоинт {spec!r} не найден ни локально, ни в HF "
+                                f"({rel}): {type(e).__name__}: {str(e)[:120]}") from e
+
+
+def warm_meta_issues(meta, args):
+    """Сверка условий обучения чекпоинта с флагами онлайнового прогона. Возвращает
+    (fatal, warn): fatal — расхождения в том, как кодируется вход сети или в каких единицах
+    считается награда (дообучение на них бессмысленно); warn — расхождения в задаче
+    (дисконт, награда первого шага, бюджет, граница ценности), о которых надо знать."""
+    fatal, warn = [], []
+
+    def cmp(name, have, want, bucket, hint=""):
+        if have != want:
+            bucket.append(f"{name}: в чекпоинте {have!r}, в прогоне {want!r}" + (f" ({hint})" if hint else ""))
+
+    if "scalar_ctx" in meta:
+        cmp("scalar_ctx", bool(meta["scalar_ctx"]), bool(args.scalar_ctx), fatal, "--scalar-ctx")
+    if args.scalar_ctx and meta.get("scalar_ctx", True):
+        if "ctx_kmax" in meta:
+            cmp("ctx_kmax", int(meta["ctx_kmax"]), int(args.max_chain_steps), fatal, "--max-chain-steps")
+        if "ctx_budget" in meta:
+            cmp("ctx_budget", int(meta["ctx_budget"]), int(args.budget), fatal,
+                "--budget / --episode-budget")
+        cmp("ctx_err", meta.get("ctx_err", "err"), "none" if args.ctx_no_err else "err", fatal,
+            "--ctx-no-err")
+    cmp("pde_ctx", bool(meta.get("pde_ctx", False)), bool(args.pde_ctx), fatal, "--pde-ctx")
+    cmp("err_norm", meta.get("err_norm", "none") or "none", args.err_norm, fatal, "--err-norm")
+    # форма награды: у офлайновых чекпоинтов reward_form, у онлайновых online_reward
+    r_ck = meta.get("online_reward") or meta.get("reward_form")
+    if r_ck is not None:
+        cmp("награда", r_ck, args.online_reward, fatal, "--online-reward")
+    if meta.get("gamma") is not None:
+        cmp("gamma", round(float(meta["gamma"]), 6), round(float(GAMMA), 6), warn, "--gamma")
+    if "init_err" in meta:
+        cmp("init_err", meta["init_err"], args.init_err, warn, "--init-err")
+    if "episode_budget" in meta:
+        cmp("episode_budget", int(meta["episode_budget"] or 0), int(args.episode_budget), warn,
+            "--episode-budget")
+    if "value_bound" in meta:
+        cmp("value_bound", bool(meta["value_bound"]), bool(args.value_bound), warn, "--value-bound")
+    return fatal, warn
+
+
+def warm_strict_net(ck, args, dev, n_obs, n_ctx):
+    """--warm-strict: сеть ровно по чекпоинту (offline_rl.ckpt_arch — то же построение, что у
+    online_eval_env.load_agent), веса грузятся строго. Любое расхождение — SystemExit с
+    описанием, без частичной загрузки. Возвращает (сеть, mean, std, сведения).
+    С --warm-widen чекпоинт агента на картах расширяется до fulltele (tele_maps.widen_*)."""
+    meta = ck.get("meta") or {}
+    name = os.path.basename(str(args.warm_start))
+
+    def die(msg):
+        raise SystemExit(f"--warm-strict ({name}): {msg}")
+
+    if ck.get("variant") != args.variant:
+        die(f"вариант в чекпоинте {ck.get('variant')!r}, запрошен --variant {args.variant!r}")
+    try:
+        arch = ckpt_arch(ck)
+    except Exception as e:      # noqa: BLE001
+        die(f"архитектура по чекпоинту не разобрана: {type(e).__name__}: {e}")
+    if args.encoder != "auto" and args.encoder != (meta.get("encoder") or "convnext"):
+        die(f"энкодер в чекпоинте {(meta.get('encoder') or 'convnext')!r}, запрошен --encoder {args.encoder!r}")
+    ck_mode = meta.get("state_mode", "full")
+    want_in = int(n_obs + n_ctx)
+    fatal, warn = warm_meta_issues(meta, args)
+    if fatal:
+        die("условия обучения чекпоинта не совпадают с прогоном:\n  " + "\n  ".join(fatal))
+    mean0, std0 = np.asarray(ck["mean"], dtype=np.float32), np.asarray(ck["std"], dtype=np.float32)
+    if mean0.shape != (1, arch["in_ch"], 1, 1) or std0.shape != mean0.shape:
+        die(f"статистики нормировки формы {mean0.shape}/{std0.shape}, у сети {arch['in_ch']} каналов")
+    widened = False
+    try:
+        if args.warm_widen:
+            if args.state_mode != TM.FULLTELE or ck_mode != "full":
+                die(f"--warm-widen расширяет агента на картах (state_mode full) до fulltele; в чекпоинте "
+                    f"{ck_mode!r}, запрошен {args.state_mode!r}")
+            if arch["in_ch"] != TM.MAP_CH + n_ctx:
+                die(f"у чекпоинта {arch['in_ch']} входных каналов, для расширения ждётся "
+                    f"{TM.MAP_CH} карты + {n_ctx} каналов контекста")
+            # сам чекпоинт сначала проверяется строгой загрузкой в сеть его архитектуры
+            src = QNet(ck["variant"], torch.device("cpu"), **arch)
+            src.model.load_state_dict(ck["state_dict"])
+            net = QNet(ck["variant"], dev, **dict(arch, in_ch=want_in))
+            net.model.load_state_dict(TM.widen_state_dict(ck["state_dict"], net.model.state_dict(),
+                                                          arch["in_ch"], want_in))
+            mean, std = TM.widen_norm(mean0, std0, arch["in_ch"])
+            widened = True
+            del src
+        else:
+            if ck_mode != args.state_mode:
+                die(f"чекпоинт обучен в режиме состояния {ck_mode!r}, запрошен {args.state_mode!r}"
+                    + (" (расширение до fulltele — флаг --warm-widen)"
+                       if args.state_mode == TM.FULLTELE and ck_mode == "full" else ""))
+            if arch["in_ch"] != want_in:
+                die(f"у чекпоинта {arch['in_ch']} входных каналов, у прогона {want_in} "
+                    f"({n_obs} наблюдения + {n_ctx} контекста): проверьте --scalar-ctx, --pde-ctx, --state-mode")
+            net = QNet(ck["variant"], dev, **arch)
+            net.model.load_state_dict(ck["state_dict"])
+            mean, std = mean0.copy(), std0.copy()
+    except (RuntimeError, ValueError, KeyError) as e:
+        die(f"веса не легли в сеть {arch}: {type(e).__name__}: {str(e)[:400]}")
+    net.target.load_state_dict(net.model.state_dict())
+    info = dict(file=name, arch=dict(arch, in_ch=want_in), widened=widened, warn=warn,
+                tensors=len(ck["state_dict"]), src_tag=(meta.get("model_tag") or ck.get("tag") or ""))
+    return net, mean, std, info
+
+
 def save_buffer(records, mean, std, tag, meta):
     """Онлайновые переходы прогона целиком (сырые состояния в float16) — локально и
     на HF (rl_arch/buffers_online/<tag>.pt). Без этого опыт каждого прогона
@@ -928,7 +1047,32 @@ def main():
                     help="сохранять онлайновые переходы (состояния, действия, ошибки) "
                          "локально и на HF rl_arch/buffers_online/ — для дообучения офлайн "
                          "на всех собранных данных")
-    ap.add_argument("--state-mode", default="full", choices=list(STATE_MODES),
+    ap.add_argument("--warm-strict", action="store_true",
+                    help="строгий тёплый старт (дообучение офлайнового рецепта): сеть строится ровно по "
+                         "чекпоинту --warm-start (энкодер, число каналов, головы — offline_rl.ckpt_arch, как "
+                         "в online_eval_env.load_agent), веса грузятся строго, условия обучения из meta "
+                         "сверяются с флагами; любое расхождение или отсутствие файла — отказ, а не "
+                         "старт с нуля. Нормировка чекпоинта сохраняется и применяется к обеим "
+                         "половинам батча RLPD. Без флага --warm-start работает по-прежнему (частично)")
+    ap.add_argument("--warm-widen", action="store_true",
+                    help="с --warm-strict и --state-mode fulltele: чекпоинт агента на картах расширяется "
+                         "до fulltele — веса новых каналов первой свёртки нулевые, в момент старта Q те же")
+    ap.add_argument("--encoder", default="auto", choices=["auto"] + list(MAP_ENCODERS),
+                    help="энкодер карт у вариантов с ConvNeXt (как offline_rl.py --encoder); auto — "
+                         "прежний выбор по варианту. При --warm-strict берётся из чекпоинта")
+    ap.add_argument("--bn-mode", default="auto", choices=["auto", "train", "frozen"],
+                    help="энкодеры с BatchNorm (resnet): frozen — накопленные статистики чекпоинта и в "
+                         "обновлениях, и при выборе действия (как на оценке); train — статистики пачки в "
+                         "обновлениях, накопленные при выборе действия; auto — frozen при тёплом старте, "
+                         "train при обучении с нуля. У сетей без BatchNorm ничего не меняет")
+    ap.add_argument("--eps-start", type=float, default=None,
+                    help="начальная доля случайных действий (по умолчанию 0.5 авторов); тёплому старту "
+                         "нужна малая, например 0.1")
+    ap.add_argument("--eps-end", type=float, default=None,
+                    help="конечная доля случайных действий (по умолчанию 0.05)")
+    ap.add_argument("--eps-decay", type=float, default=None,
+                    help="постоянная затухания eps в шагах среды (по умолчанию 50)")
+    ap.add_argument("--state-mode", default="full", choices=list(STATE_MODES) + [TM.FULLTELE],
                     help="Трек 3, лестница состояния: full карты; blind без карт (карты не строятся, "
                          "шаг среды дешевле); level только уровень потерь; shape только форма; "
                          "shuffle перемешанные пиксели; loss обучающие лоссы вместо карт (карты не "
@@ -936,7 +1080,9 @@ def main():
                          "своей задачи (перенос между УрЧП); tele телеметрия обучения: лоссы, "
                          "наклон/t-статистика/разброс/доля улучшений кривой лосса внутри действия, "
                          "норма градиента, смещение весов (offline_rl.tele_state, 10 каналов, "
-                         "карты не строятся)")
+                         "карты не строятся); fulltele карты И телеметрия: 4 карты + 10 каналов "
+                         "телеметрии + признак её наличия (tele_maps.py); офлайновым переходам RLPD "
+                         "телеметрия ставится нулями с признаком 0")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -959,6 +1105,29 @@ def main():
         if args.state_mode in ("loss", "tele") and ((args.rlpd and not args.self_prior) or args.preload):
             ap.error(f"--state-mode {args.state_mode} несовместим с офлайновыми буферами (--rlpd без "
                      "--self-prior, --preload): в них нет обучающего лосса")
+        if args.state_mode == TM.FULLTELE and args.preload:
+            ap.error("--state-mode fulltele несовместим с --preload: в общем буфере офлайновые переходы "
+                     "без телеметрии не отделить; с --rlpd им ставится нулевая телеметрия с признаком 0")
+    if args.warm_strict:
+        if not args.warm_start:
+            ap.error("--warm-strict требует --warm-start")
+        bad = [f for f, on in (("--boot-heads", args.boot_heads), ("--rlpd-full", args.rlpd_full),
+                               ("--ssl-pretrain", args.ssl_pretrain), ("--hl-gauss", args.hl_gauss)) if on]
+        if bad:
+            ap.error("--warm-strict несовместим с " + ", ".join(bad) + ": у них другая сеть или "
+                     "энкодер переучивается до старта")
+    if args.warm_widen and not (args.warm_strict and args.state_mode == TM.FULLTELE):
+        ap.error("--warm-widen требует --warm-strict и --state-mode fulltele")
+    if args.encoder != "auto" and (args.boot_heads or args.rlpd_full):
+        ap.error("--encoder несовместим с --boot-heads и --rlpd-full: у них своя сеть")
+    for nm_, v_ in (("--eps-start", args.eps_start), ("--eps-end", args.eps_end)):
+        if v_ is not None and not (0.0 <= v_ <= 1.0):
+            ap.error(f"{nm_} должен лежать в [0, 1]")
+    if args.eps_decay is not None and args.eps_decay <= 0:
+        ap.error("--eps-decay должен быть положительным")
+    eps_start = EPS_START if args.eps_start is None else float(args.eps_start)
+    eps_end = EPS_END if args.eps_end is None else float(args.eps_end)
+    eps_decay = EPS_DECAY if args.eps_decay is None else float(args.eps_decay)
     if args.pde_ctx and not args.scalar_ctx:
         ap.error("--pde-ctx требует --scalar-ctx")
     if args.keep_opt:
@@ -1031,8 +1200,11 @@ def main():
                     err_norm=args.err_norm, online_reward=args.online_reward,
                     scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
     n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)
-    n_obs = state_channels(args.state_mode)     # каналы наблюдения до контекста: 4 карты или 10 tele
+    # каналы наблюдения до контекста: 4 карты, 10 tele или 15 fulltele (карты + телеметрия + признак)
+    n_obs = TM.obs_channels(args.state_mode)
     tele = args.state_mode == "tele"
+    fulltele = args.state_mode == TM.FULLTELE
+    tele_any = tele or fulltele                 # нужна кривая лосса и веса до действия
     desc_vals = pde_desc(args.pde) if args.pde_ctx else None
 
     def with_ctx(st, step_, spent_, last_a, err_):
@@ -1077,10 +1249,26 @@ def main():
         print(f"RLPD целиком: {args.rlpd_ensemble} критиков с LayerNorm, "
               f"таргет по минимуму из {args.rlpd_subset} случайных, "
               f"{net.n_params()/1e6:.2f} млн параметров", flush=True)
+    elif args.warm_strict:
+        net = None              # сеть строится по чекпоинту ниже
     else:
-        net = QNet(args.variant, dev, in_ch=n_obs + n_ctx)
+        net = QNet(args.variant, dev, in_ch=n_obs + n_ctx, encoder=args.encoder)
     mean = std = None
-    if args.warm_start and not os.path.exists(args.warm_start):
+    warm_info = None
+    warm_loaded = False         # веса чекпоинта реально загружены (строго или частично)
+    if args.warm_strict:
+        # дообучение офлайнового рецепта: ровно сеть чекпоинта, строгая загрузка, его нормировка
+        args.warm_start = resolve_warm(args.warm_start)
+        ck = torch.load(args.warm_start, map_location="cpu", weights_only=False)
+        net, mean, std, warm_info = warm_strict_net(ck, args, dev, n_obs, n_ctx)
+        for w_ in warm_info["warn"]:
+            print(f"ВНИМАНИЕ (--warm-strict): {w_}", flush=True)
+        print(f"строгий тёплый старт из {args.warm_start}: {warm_info['tensors']} тензоров, сеть "
+              f"{warm_info['arch']}"
+              + ("; расширен до fulltele (веса каналов телеметрии нулевые)" if warm_info["widened"] else "")
+              + "; нормировка — из чекпоинта, для обеих половин батча RLPD", flush=True)
+        del ck
+    elif args.warm_start and not os.path.exists(args.warm_start):
         # допускаем имя файла в HF-датасете (rl_arch/models/...)
         try:
             from huggingface_hub import hf_hub_download
@@ -1088,7 +1276,7 @@ def main():
                                               repo_type="dataset")
         except Exception as e:
             print(f"тёплый старт: чекпоинт не найден ({e}) — с нуля", flush=True)
-    if args.warm_start and os.path.exists(args.warm_start):
+    if args.warm_start and warm_info is None and os.path.exists(args.warm_start):
         ck = torch.load(args.warm_start, map_location="cpu", weights_only=False)
         ck_mode = (ck.get("meta") or {}).get("state_mode", "full")
         if ck_mode != args.state_mode:
@@ -1103,10 +1291,38 @@ def main():
         net.model.load_state_dict(ok, strict=False)
         net.target.load_state_dict(net.model.state_dict())
         mean, std = ck["mean"], ck["std"]
+        warm_loaded = True
         print(f"тёплый старт из {args.warm_start}: перенесено {len(ok)} тензоров"
               + (f", пропущено {skipped} (несовпадение формы)" if skipped else ""), flush=True)
+        if skipped:
+            print(f"ВНИМАНИЕ: тёплый старт ЧАСТИЧНЫЙ — {skipped} тензоров чекпоинта не легли в сеть "
+                  f"(другой энкодер или число каналов). Строгая загрузка: --warm-strict", flush=True)
+        if args.rlpd and not args.self_prior:
+            print("ВНИМАНИЕ: с --warm-start онлайновые состояния нормируются статистиками чекпоинта, "
+                  "а офлайновая половина батча RLPD — статистиками буфера; --warm-strict приводит обе "
+                  "к чекпоинту", flush=True)
     if args.scalar_ctx:
         mean, std = pad_norm(mean, std, n_obs + n_ctx)
+    # BatchNorm (resnet): при тёплом старте статистики заморожены — сеть в обновлениях та же, что
+    # выбирает действия и что увидит оценка; с нуля статистики копятся в обновлениях
+    has_bn = bool(getattr(net, "has_bn", False))
+    bn_train = has_bn and (args.bn_mode == "train" or (args.bn_mode == "auto" and not (warm_loaded or warm_info is not None)))
+    if has_bn:
+        net.set_train(False)
+        print(f"BatchNorm в энкодере {net.enc_kind}: "
+              + ("статистики пачки в обновлениях" if bn_train else "статистики заморожены"), flush=True)
+    if hasattr(net, "enc_kind"):
+        # архитектура — в meta: по ней online_eval_env.load_agent строит ту же сеть
+        run_meta.update(encoder=net.enc_kind, in_ch=int(n_obs + n_ctx), ens=int(getattr(net, "ens", 1)),
+                        n_quantiles=int(getattr(net, "nq", 0) or 0),
+                        bn_mode=(("train" if bn_train else "frozen") if has_bn else None))
+    if fulltele:
+        run_meta["channels"] = TM.channel_names(args.state_mode, args.scalar_ctx,
+                                                PDE_DESC_CH if args.pde_ctx else 0)
+    if warm_info is not None:
+        run_meta.update(warm_start=warm_info["file"], warm_strict=True, warm_widen=bool(warm_info["widened"]),
+                        warm_src_tag=warm_info["src_tag"], norm_from="warm_start")
+    run_meta.update(eps=[eps_start, eps_end, eps_decay], lr=float(args.lr))
     q_opt = torch.optim.Adam(net.params(), lr=args.lr)
 
     if args.ssl_pretrain:
@@ -1172,7 +1388,10 @@ def main():
                                 init_err=args.init_err if args.offline_fix else None,
                                 budget=args.episode_budget if args.offline_fix else 0,
                                 err_scale=err_scale if args.offline_fix else 1.0)
-        if args.state_mode != "full":
+        if fulltele:
+            # в буфере телеметрии нет: её каналы нулевые, признак наличия 0 (tele_maps.py)
+            od["S"], od["S2"] = TM.fulltele_batch(od["S"]), TM.fulltele_batch(od["S2"])
+        elif args.state_mode != "full":
             od["S"] = apply_state_mode(od["S"], args.state_mode, seed=101, pde=subdir_to_pde(args.rlpd_subdir))
             od["S2"] = apply_state_mode(od["S2"], args.state_mode, seed=202, pde=subdir_to_pde(args.rlpd_subdir))
         if args.scalar_ctx:
@@ -1218,6 +1437,15 @@ def main():
                   f"({len(keep)} эпизодов) из запрошенных ~{args.rlpd_max}", flush=True)
         om = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True)
         os_ = od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6
+        if fulltele:
+            om, os_ = TM.fix_norm(om, os_)      # телеметрия и признак: без нормировки
+        if warm_info is not None:
+            # строгий тёплый старт: офлайновая половина батча в той же нормировке, что онлайновая
+            # и что сеть видела при обучении, — статистики чекпоинта, а не пересчёт по буферу
+            if od["S"].shape[1] != mean.shape[1]:
+                sys.exit(f"--warm-strict: у офлайновых состояний {od['S'].shape[1]} каналов, у чекпоинта "
+                         f"{mean.shape[1]}")
+            om, os_ = mean, std
         off_buf = LocalBuffer(capacity=len(oidx) + 10, per=args.per)
         if args.n_step > 1:
             # n-шаговые возвраты внутри эпизода: сумма дисконтированных наград и
@@ -1392,7 +1620,9 @@ def main():
                 break
 
             # eps-greedy как у авторов
-            eps = EPS_END + (EPS_START - EPS_END) * math.exp(-steps_done / EPS_DECAY)
+            eps = eps_end + (eps_start - eps_end) * math.exp(-steps_done / eps_decay)
+            if bn_train:
+                net.set_train(False)      # выбор действия — на накопленных статистиках BatchNorm
             steps_done += 1
             if args.greedy_probe and (traj % args.greedy_probe == 0):
                 eps = 0.0        # проба качества политики: метрика отбора = метрика деплоя
@@ -1482,12 +1712,12 @@ def main():
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
-            if tele:
+            if tele_any:
                 # начало кривой лосса этого действия и веса до него
                 tele_h0, tele_th0 = len(model.losshistory.steps), flat_params(model.net)
             t_op = time.time()
             model.train(iterations=epochs,
-                        display_every=(tele_display_every(epochs, args.display_every) if tele
+                        display_every=(tele_display_every(epochs, args.display_every) if tele_any
                                        else args.display_every),
                         callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
             t_opt_total += time.time() - t_op
@@ -1556,8 +1786,15 @@ def main():
                                       loss_name="loss_total", path_to_plot_model=None,
                                       path_to_trajectories=None, img_dir="")
                 raw = pls.save_equation_loss_surface(log_key=True)
-                next_state = apply_state_mode(build_state(raw, prev_raw), args.state_mode,
-                                              seed=int(rng.integers(0, 2 ** 31 - 1)), pde=args.pde)
+                if fulltele:
+                    # карты как в режиме full плюс телеметрия этого действия и признак её наличия
+                    tele_st, l_tot = tele_observe(model, tele_h0, tele_th0, prev_loss_tot)
+                    next_state = TM.fulltele_obs(build_state(raw, prev_raw), tele_st, valid=l_tot is not None)
+                    if l_tot is not None:
+                        prev_loss_tot = l_tot
+                else:
+                    next_state = apply_state_mode(build_state(raw, prev_raw), args.state_mode,
+                                                  seed=int(rng.integers(0, 2 ** 31 - 1)), pde=args.pde)
             t_state_total += time.time() - t_st
             if args.scalar_ctx:
                 next_state = with_ctx(next_state, len(chain), spent, a,
@@ -1619,6 +1856,8 @@ def main():
             if args.distill:
                 cur_states.append(s_norm.copy()); cur_acts.append(a)
 
+            if bn_train:
+                net.set_train(True)       # обновления — на статистиках пачки
             if args.bbf:
                 # BBF: дисконт отжигается 0.97 -> 0.997, горизонт n-step 10 -> 3
                 GAMMA = anneal(steps_done, 200, 0.97, 0.997)
