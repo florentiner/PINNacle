@@ -223,9 +223,105 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
     return Q, float(np.mean(unc)) if unc else 0.0
 
 
+def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, beam=3, budget=0,
+                   smdp_scale=0.0, chunk=250, log=None):
+    """Немиопический вариант lookahead (--mb-full): Q_mb(s, a) = r~(s, a) + g(a) * V~(s1), где V~ —
+    лучшая пессимистичная СУММА наград продолжения, найденная лучевым поиском в суррогате:
+
+        V~(s1) = max(0, max по цепочкам a1..ak, k <= H - 1, из луча: sum_j g_1..g_{j-1} * r~(s_j, a_j)).
+
+    Отличия от жадного просмотра: (1) цепочка не обрывается на неположительной награде — шаг с
+    убытком допустим, если следующие его окупают (разгон Adam перед L-BFGS); (2) на каждой глубине у
+    пары (состояние, первое действие) остаётся beam продолжений, а не одно с лучшей немедленной
+    наградой: сначала лучшее по накопленной сумме в каждом семействе оптимизатора (при beam >= 3 в
+    луче есть узел после Adam, после L-BFGS и после PSO), затем остальные по сумме; beam >= 27 —
+    полный перебор второго действия; (3) остановиться можно после любого действия (максимум по
+    всем префиксам, не меньше нуля — в среде есть почти пустое действие). Обрыв — как раньше:
+    бюджет эпох (последнее действие обрезается остатком), расходимость, глубина H; хвоста-бутстрэпа
+    за глубиной H нет, поэтому это по-прежнему нижняя оценка ценности в модели. При H <= 3 значение
+    не меньше жадного (жадный путь лежит в луче); при H = 1 совпадает с ним.
+
+    Сложность: предсказаний ансамбля (строк на каждый из M членов) на одно состояние буфера
+        27                              первое действие,
+      + 27 * 27                         второе (один узел на первое действие),
+      + (H - 2) * 27 * beam * 27        дальше — beam узлов на первое действие,
+    то есть 27 * (1 + 27 + (H - 2) * 27 * beam); жадный просмотр — 27 * (1 + (H - 1) * 27).
+    H=3, beam=3: 2943 против 1485 у жадного H=3 (вдвое дороже); H=3, beam=4: 3672 (в 2.5 раза);
+    H=4, beam=3: 5130 (в 3.5 раза). Время = mb_sec жадного расчёта той же задачи (он в строке
+    результата) на это отношение; замер на ноутбуке: около 0.05 млн строк в секунду на член и поток.
+    Память: chunk * 27 * beam * 27 строк признаков за раз (chunk=250, beam=3: 547 тыс. строк, ~120 МБ).
+    Сигнатура и возврат — как у lookahead."""
+    import agent_combo as AC
+    if form not in FORMS:
+        raise ValueError(f"модельные цели: награда {form!r} не поддержана, нужна одна из {FORMS}")
+    beam = max(1, int(beam))
+    n = len(st["l"])
+    na = len(S.ACTIONS)
+    acts = np.arange(na)
+    g_act = (float(gamma) ** (S.EPOCHS / float(smdp_scale)) if smdp_scale
+             else np.full(na, float(gamma)))
+    Q = np.zeros((n, na))
+    unc, t0 = [], time.time()
+    for c0 in range(0, n, chunk):
+        rows = np.arange(c0, min(n, c0 + chunk))
+        m = len(rows)
+        rep_i = np.repeat(np.arange(m), na)
+        rep = AC.take(st, rows[rep_i])
+        a = np.tile(acts, m)
+        P, ep = _predict(ens, tab, rep, a, budget)
+        Rm = _reward(form, l_rew[rows][rep_i], P, scale[rows][rep_i])
+        q = Rm.mean(0) - lam * Rm.std(0)
+        q[zero_first[rows][rep_i]] = 0.0
+        unc.append(P.std(0).mean())
+        sc = scale[rows][rep_i]                                   # масштаб ошибки корня (пары s, a)
+        cur = AC.next_state(rep, a, ep, P.mean(0))
+        root = np.where(~_done(cur, budget))[0]                   # корень каждого узла луча
+        node = AC.take(cur, root)
+        acc = np.zeros(len(root))                                 # сумма наград продолжения до узла
+        disc = np.ones(len(root))                                 # произведение дисконтов до узла
+        best = np.zeros(m * na)                                   # V~ корня: остановка даёт 0
+        for depth in range(1, h):
+            k = len(root)
+            if not k:
+                break
+            par = np.repeat(np.arange(k), na)
+            rep2 = AC.take(node, par)
+            a2 = np.tile(acts, k)
+            P2, ep2 = _predict(ens, tab, rep2, a2, budget)
+            R2 = _reward(form, rep2["l"], P2, sc[root][par])
+            val = acc[par] + disc[par] * (R2.mean(0) - lam * R2.std(0))
+            croot = root[par]
+            np.maximum.at(best, croot, val)
+            if depth == h - 1:
+                break
+            nxt = AC.next_state(rep2, a2, ep2, P2.mean(0))
+            cand = np.where(~_done(nxt, budget))[0]
+            if not len(cand):
+                break
+            # beam потомков на корень: сначала лучший по накопленной сумме в каждом семействе
+            # оптимизатора (иначе шаг Adam с убытком, после которого выигрывает L-BFGS, вылетает из
+            # луча первым), затем остальные по сумме. Сортировка по (корень, не лучший в семействе, -сумма)
+            cr, cv, cf = croot[cand], val[cand], S.FAM[a2[cand]]
+            o1 = np.lexsort((-cv, cf, cr))
+            lead = np.ones(len(cand), dtype=bool)
+            lead[o1[1:]] = (cr[o1[1:]] != cr[o1[:-1]]) | (cf[o1[1:]] != cf[o1[:-1]])
+            order = cand[np.lexsort((-cv, ~lead, cr))]
+            rs = croot[order]
+            start = np.r_[0, np.where(np.diff(rs) != 0)[0] + 1]
+            rank = np.arange(len(order)) - np.repeat(start, np.diff(np.r_[start, len(order)]))
+            keep = order[rank < beam]
+            node, root, acc = AC.take(nxt, keep), croot[keep], val[keep]
+            disc = disc[par[keep]] * g_act[a2[keep]]
+        Q[rows] = (q + g_act[a] * best).reshape(m, na)
+        if log is not None and c0 == 0 and n > chunk:
+            log(f"модельные цели (полный просмотр, луч {beam}): первые {m} строк за {time.time() - t0:.1f} с, "
+                f"всего строк {n}")
+    return Q, float(np.mean(unc)) if unc else 0.0
+
+
 def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma, h=3, lam=0.5,
                budget=0, smdp_scale=0.0, subdirs="all", table="", members=5, work="agent_combo_work",
-               quick=False, model=None, log=None, tab=None):
+               quick=False, model=None, log=None, tab=None, full=False, beam=3, max_rows=0, rows_seed=0):
     """Цели Q_mb для обучающих строк набора тренера. names — задачи набора (в порядке data['PDE']),
     err_scale и init_err — по задачам, в единицах тренера (init_err=None: награда первого шага 0).
     model=(tab, ens) — готовые таблица и ансамбль (тесты), иначе они строятся build_model. tab —
@@ -259,13 +355,24 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
         assert init_err.shape == (len(names),), (init_err.shape, len(names))
         l_rew[first] = S._log(init_err[pl] * err_scale[pl])[first]
     rows = np.where(np.asarray(train_mask, dtype=bool) & valid)[0]
+    capped = 0
+    if max_rows and len(rows) > int(max_rows):
+        # --mb-max-rows: случайная часть обучающих строк (смесь УрЧП); у остальных вес добавки 0
+        capped = int(len(rows) - int(max_rows))
+        rows = np.sort(np.random.default_rng(int(rows_seed)).choice(rows, int(max_rows), replace=False))
     QMB = np.zeros((n, len(S.ACTIONS)), dtype=np.float32)
     MBW = np.zeros(n, dtype=bool)
     unc = 0.0
     if len(rows):
-        q, unc = lookahead(ens, tab, {k: v[rows] for k, v in st.items()}, l_rew[rows], zero_first[rows],
-                           err_scale[pl][rows], reward_form, gamma, int(h), float(lam), int(budget),
-                           float(smdp_scale), log=log)
+        sub = {k: v[rows] for k, v in st.items()}
+        if full:
+            q, unc = lookahead_full(ens, tab, sub, l_rew[rows], zero_first[rows], err_scale[pl][rows],
+                                    reward_form, gamma, int(h), float(lam), int(beam), int(budget),
+                                    float(smdp_scale), log=log)
+        else:
+            q, unc = lookahead(ens, tab, sub, l_rew[rows], zero_first[rows],
+                               err_scale[pl][rows], reward_form, gamma, int(h), float(lam), int(budget),
+                               float(smdp_scale), log=log)
         assert q.shape == (len(rows), QMB.shape[1]), q.shape
         if not np.isfinite(q).all():
             raise ValueError("модельные цели: нечисловые значения Q_mb")
@@ -276,8 +383,16 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
                 q_mean=float(QMB[rows].mean()) if len(rows) else 0.0,
                 q_best_mean=float(QMB[rows].max(1).mean()) if len(rows) else 0.0,
                 unc_log10=round(unc, 5), sec=round(time.time() - t0, 1))
-    log(f"модельные цели: строк {info['rows']} (пропущено {info['skipped']}), награда {reward_form}, "
-        f"H={h}, lam={lam}, бюджет {budget or 'нет'}: средний Q_mb {info['q_mean']:.4f}, лучшего действия "
+    # имена не совпадают с флагами тренера (mb_full, mb_beam, mb_max_rows): в строке результата
+    # сводка идёт с приставкой mb_
+    if full:
+        info.update(search="full", search_beam=int(beam))
+    if max_rows:
+        info.update(rows_cap=int(max_rows), capped=capped)
+    log(f"модельные цели: строк {info['rows']} (пропущено {info['skipped']}"
+        + (f", из них сверх --mb-max-rows {capped}" if capped else "") + f"), награда {reward_form}, "
+        + (f"полный просмотр (луч {beam}), " if full else "")
+        + f"H={h}, lam={lam}, бюджет {budget or 'нет'}: средний Q_mb {info['q_mean']:.4f}, лучшего действия "
         f"{info['q_best_mean']:.4f}, разброс ансамбля {info['unc_log10']} порядка, {info['sec']} с")
     return QMB, MBW, info
 

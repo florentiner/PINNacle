@@ -1217,6 +1217,8 @@ QUANTILE_VARIANTS = ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
 CNX_VARIANTS = ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling",
                 "cnx_bcq", "cnx_bbf", "cnx_qrdqn", "cnx_factored")
 NO_ENS_VARIANTS = ("cnn_iql", "cnn_vqc", "cnx_smdp")     # своя V-голова, квантовая голова, свой ансамбль
+# варианты с простой линейной головой на 27 выходов: только им --hlg меняет голову на бины
+HLG_VARIANTS = ("cnn_dqn", "convnext_dqn", "cnn_cql", "cnx_cql")
 
 
 class QNet:
@@ -1226,9 +1228,13 @@ class QNet:
     иначе один из MAP_ENCODERS). ens > 1 — столько Q-голов на общем энкодере (REDQ, 2101.05982):
     model[1] тогда список голов, q_online/q_target/q_scalar/q_cvar отдают СРЕДНЕЕ голов (у
     квантильных — среднее квантилей с одним номером), q_heads — все головы по отдельности.
+    bins > 0 — голова HL-Gauss (--hlg; Farebrother et al., 2403.03950): у вариантов HLG_VARIANTS
+    линейная голова отдаёт 27 x bins логитов, q_online/q_target — (B, A, bins), скаляр Q —
+    матожидание по центрам бинов (scalar, q_scalar; сами бины — в self._hlg, его ставит тренер и
+    online_eval_env.load_agent по полю hl_gauss чекпоинта).
     При значениях по умолчанию сеть и имена параметров прежние."""
 
-    def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1):
+    def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1, bins=0):
         import torch
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
@@ -1250,8 +1256,14 @@ class QNet:
         self.variant = variant
         self.enc_kind = enc_kind
         self.nq = n_quantiles
+        self.bins = max(0, int(bins or 0))
+        self._hlg = None
         self.enc = make_encoder(enc_kind, in_ch)
-        if self.ens > 1:
+        if self.bins:
+            if variant not in HLG_VARIANTS or self.ens > 1:
+                raise ValueError(f"голова HL-Gauss (bins={self.bins}) есть только у {HLG_VARIANTS} с одной головой")
+            self.head = nn.Linear(self.enc.out_dim, N_ACTIONS * self.bins)
+        elif self.ens > 1:
             self.head = nn.ModuleList([make_head(variant, self.enc.out_dim, n_quantiles)
                                        for _ in range(self.ens)])
         else:
@@ -1305,6 +1317,8 @@ class QNet:
         out = torch.stack([h(z) for h in hs], 0)
         if self.variant in QUANTILE_VARIANTS:
             return out.view(len(hs), -1, N_ACTIONS, self.nq)
+        if self.bins:
+            return out.view(len(hs), -1, N_ACTIONS, self.bins)
         return out
 
     def q_heads(self, x, target=False):
@@ -1317,7 +1331,18 @@ class QNet:
         out = model[1](z)
         if self.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn"):
             return out.view(-1, N_ACTIONS, self.nq)
+        if self.bins:
+            return out.view(-1, N_ACTIONS, self.bins)
         return out
+
+    def scalar(self, q):
+        """Выход головы -> скаляр Q по действиям: среднее квантилей, матожидание бинов HL-Gauss,
+        у обычной головы — сам выход."""
+        if self.variant in QUANTILE_VARIANTS:
+            return q.mean(-1)
+        if self.bins:
+            return self._hlg.to_scalar(q)
+        return q
 
     def q_online(self, x):
         return self._q(self.model, x)
@@ -1330,8 +1355,7 @@ class QNet:
 
     def q_scalar(self, x):
         """(B, N_ACTIONS) scalar Q for metrics/policies (mean over quantiles)."""
-        q = self.q_online(x)
-        return q.mean(-1) if self.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn") else q
+        return self.scalar(self.q_online(x))
 
     def q_cvar(self, x, alpha=0.25):
         import torch  # module-level `torch` only exists after main(); keep importable
@@ -1370,7 +1394,14 @@ def ckpt_arch(ck):
     hw = sd.get("1.weight" if ens == 1 else "1.0.weight")
     if hw is not None and hw.dim() == 2 and hw.shape[0] % N_ACTIONS == 0:
         nq = max(1, hw.shape[0] // N_ACTIONS)
-    return dict(n_quantiles=nq, in_ch=in_ch, encoder=(meta.get("encoder") or "auto"), ens=ens)
+    out = dict(n_quantiles=nq, in_ch=in_ch, encoder=(meta.get("encoder") or "auto"), ens=ens)
+    hg = ck.get("hl_gauss")
+    if (hg and ck["variant"] in HLG_VARIANTS and ens == 1 and hw is not None
+            and hw.shape[0] == N_ACTIONS * int(hg[2])):
+        # офлайновый --hlg: линейная голова на 27 x bins логитов (у онлайновых чекпоинтов HL-Gauss
+        # бины лежат в квантильной голове, там хватает n_quantiles); ключ есть только у таких
+        out["bins"] = int(hg[2])
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -1654,6 +1685,61 @@ def ens_td_loss(net, variant, s, a, r, d, gm, s2, taus, cql_alpha, n_min, rng, u
     return loss
 
 
+def hlg_range(data, idx, args):
+    """--hlg: опора бинов (v_min, v_max) в единицах награды тренера; --hlg-vmin / --hlg-vmax задают
+    её явно. Иначе: у награды-разности (delta) ценность не больше текущей ошибки (эту границу и
+    использует --value-bound), а на старте цепочки текущая ошибка — ошибка необученной сети в
+    единицах тренера (--init-err; на смеси с --err-norm init это 1). Она восстанавливается из
+    данных как R + ERR первого шага (награда = ошибка до - ошибка после); v_max = 1.1 от
+    максимума по обучающим цепочкам, v_min = -0.5 * v_max (действие, после которого ошибка выше
+    стартовой в полтора раза и хуже, неотличимо от такого же плохого). Состояния с ошибкой выше
+    стартовой (расходимость) и их цели обрезаются опорой. У остальных форм награды — отрезок
+    квантилей 0.5%..99.5% возврата по записанным цепочкам (RTG), расширенный на 10%."""
+    lo, hi = getattr(args, "hlg_vmin", None), getattr(args, "hlg_vmax", None)
+    if lo is None or hi is None:
+        idx = np.asarray(idx)
+        a_lo = a_hi = None
+        if getattr(args, "reward_form", "") == "delta" and "ERR" in data:
+            first = np.asarray(data["FIRST"])[idx] > 0 if "FIRST" in data else np.zeros(len(idx), bool)
+            before = (np.asarray(data["R"], np.float64) + np.asarray(data["ERR"], np.float64))[idx]
+            top = float(before[first].max()) if first.any() else float(np.quantile(before, 0.99))
+            if np.isfinite(top) and top > 0:
+                a_lo, a_hi = -0.55 * top, 1.1 * top
+        if a_hi is None:
+            q0, q1 = np.quantile(np.asarray(data["RTG"], np.float64)[idx], [0.005, 0.995])
+            pad = 0.1 * max(float(q1 - q0), 1e-3)
+            a_lo, a_hi = float(q0) - pad, float(q1) + pad
+        lo = a_lo if lo is None else float(lo)
+        hi = a_hi if hi is None else float(hi)
+    if not (np.isfinite(lo) and np.isfinite(hi) and hi > lo):
+        raise ValueError(f"--hlg: опора бинов [{lo}, {hi}] пуста (задайте --hlg-vmin и --hlg-vmax)")
+    return float(lo), float(hi)
+
+
+def aux_next_targets(data, idx, chunk=20000):
+    """--aux-next: цель вспомогательной головы — шесть чисел уровня СЛЕДУЮЩИХ карт
+    (surrogate.level6 от S2: минимум и среднее трёх карт потерь) и награда перехода, нормированные
+    по обучающим строкам idx. Следующие карты в массивах тренера есть (S2). Возвращает
+    (Y float32 (N, 7), W float32 (N, 7)): вес 0 у уровня карт терминальных переходов (следующей
+    карты там нет — как в surrogate.build_table) и у нечисловых значений."""
+    import mb_targets as MB
+    n = len(data["A"])
+    lv = np.zeros((n, 6), dtype=np.float64)
+    for k in range(0, n, chunk):                 # level6 считает в float64: по частям, без копии всего S2
+        lv[k:k + chunk] = MB.S.level6(data["S2"][k:k + chunk, :3])
+    y = np.concatenate([lv, np.asarray(data["R"], np.float64)[:, None]], 1)
+    w = np.isfinite(y)
+    w[:, :6] &= (np.asarray(data["D"]) != 1)[:, None]
+    y = np.where(w, y, 0.0)
+    sel = np.zeros(n, dtype=bool)
+    sel[np.asarray(idx)] = True
+    wt = w & sel[:, None]
+    cnt = np.maximum(wt.sum(0), 1)
+    mu = (y * wt).sum(0) / cnt
+    sd = np.sqrt((((y - mu) ** 2) * wt).sum(0) / cnt) + 1e-6
+    return ((y - mu) / sd * w).astype(np.float32), w.astype(np.float32)
+
+
 def train_variant(variant, data, train_mask, args, seed):
     if variant == "cnx_smdp":
         return train_smdp(data, train_mask, args, seed)
@@ -1666,8 +1752,12 @@ def train_variant(variant, data, train_mask, args, seed):
     n_ens = max(1, int(getattr(args, "ens", 1) or 1))
     ens_min = max(1, min(n_ens, int(getattr(args, "ens_min", 2) or 2)))
 
+    # --hlg: голова на бинах, обучение кросс-энтропией (по умолчанию выключено: прежняя голова)
+    n_bins = int(getattr(args, "hlg_bins", 51) or 51) if getattr(args, "hlg", False) else 0
+
     def mk_net():
-        return QNet(variant, device, in_ch=in_ch, encoder=getattr(args, "encoder", "auto"), ens=n_ens)
+        return QNet(variant, device, in_ch=in_ch, encoder=getattr(args, "encoder", "auto"), ens=n_ens,
+                    bins=n_bins)
 
     net = mk_net()
     enc_info = None
@@ -1762,6 +1852,30 @@ def train_variant(variant, data, train_mask, args, seed):
     coarse = None
     if getattr(args, "mask_schedule", False):
         coarse = to_t(coarse_actions(getattr(args, "mask_coarse_lr", 1)))
+    hlg = None
+    hlg_ce = getattr(args, "hlg_aux", "ev") == "ce"
+    if n_bins:
+        from advanced_agents import HLGauss     # тот же класс, что у онлайнового тренера и load_agent
+        v_lo, v_hi = hlg_range(data, idx, args)
+        hlg = HLGauss(v_min=v_lo, v_max=v_hi, n_bins=n_bins).to(device)
+        net._hlg = hlg
+        net.hl_gauss = (float(v_lo), float(v_hi), int(n_bins))      # поле hl_gauss чекпоинта
+        aux_info.update(hlg_vmin=float(v_lo), hlg_vmax=float(v_hi), hlg_bins=int(n_bins))
+        print(f"  [{variant} s{seed}] HL-Gauss: {n_bins} бин(ов) на [{v_lo:.4g}, {v_hi:.4g}], "
+              f"sigma {hlg.sigma:.4g}, цель TD обрезается этим отрезком", flush=True)
+    # --aux-next: голова на признаках энкодера и вложении действия предсказывает уровень СЛЕДУЮЩИХ
+    # карт (surrogate.level6 от S2) и награду перехода; в чекпоинт не попадает (не часть net.model)
+    w_nx = float(getattr(args, "aux_next", 0.0) or 0.0) if QT is None else 0.0
+    nx_head = nx_emb = NXT = NXW = None
+    if w_nx:
+        import torch.nn as nn
+        nx_y, nx_w = aux_next_targets(data, idx)
+        NXT, NXW = to_t(nx_y).float(), to_t(nx_w).float()
+        nx_emb = nn.Embedding(N_ACTIONS, 16).to(device)
+        nx_head = nn.Sequential(nn.Linear(net.enc.out_dim + 16, 128), nn.GELU(),
+                                nn.Linear(128, NXT.shape[1])).to(device)
+        opt.add_param_group({"params": list(nx_emb.parameters()) + list(nx_head.parameters())})
+        aux_info["aux_next_params"] = int(sum(p.numel() for m in (nx_emb, nx_head) for p in m.parameters()))
     aux_acc = {}
     ckpt_every = int(getattr(args, "ckpt_every", 0) or 0)
     ckpts = []
@@ -1806,6 +1920,27 @@ def train_variant(variant, data, train_mask, args, seed):
 
             if QT is not None:
                 loss = F.mse_loss(net.q_online(s), QT[b])
+            elif hlg is not None:
+                # HL-Gauss (как online_train_env.hlg_update, но в общем лоссе с добавками): цель TD
+                # двойного DQN по матожиданиям бинов -> сглаженное распределение по бинам,
+                # кросс-энтропия с логитами взятого действия
+                logits = net.q_online(s)                              # (B,A,bins)
+                taken = logits.gather(1, a[:, None, None].expand(-1, 1, n_bins)).squeeze(1)
+                with torch.no_grad():
+                    q2o = hlg.to_scalar(net.q_online(s2))
+                    if allow is not None:
+                        q2o = q2o.masked_fill(~allow[None], -1e9)
+                    a2 = q2o.argmax(1)
+                    q2 = hlg.to_scalar(net.q_target(s2)).gather(1, a2[:, None]).squeeze(1)
+                    if vbound:
+                        q2 = torch.minimum(q2.clamp_min(0.0), UB[b])
+                    tgt = (r + gm * (1 - d) * q2).clamp(v_lo, v_hi)
+                loss = hlg.loss(taken, tgt).mean()
+                if variant in ("cnn_cql", "cnx_cql"):
+                    qs = hlg.to_scalar(logits)
+                    loss = loss + args.cql_alpha * (
+                        torch.logsumexp(qs, dim=1) - qs.gather(1, a[:, None]).squeeze(1)
+                    ).mean()
             elif net.ens > 1:
                 keep = None
                 if variant == "cnx_bcq":
@@ -1885,15 +2020,24 @@ def train_variant(variant, data, train_mask, args, seed):
 
             if w_mb or w_pani or DEMO is not None or w_te:
                 # плотные добавки считаются на каждой голове: (K,B,A), у квантильных — среднее квантилей
-                qv = net.q_heads(s)
+                qv = ql = net.q_heads(s)
                 if variant in QUANTILE_VARIANTS:
                     qv = qv.mean(-1)
+                elif hlg is not None:
+                    qv = hlg.to_scalar(ql)      # --hlg: добавки действуют на матожидание головы
+
+                def dense(tgt_q):
+                    """Плотная добавка по 27 действиям, (B,): Huber по скаляру Q; при --hlg-aux ce —
+                    кросс-энтропия логитов с распределением HL-Gauss цели (обрезанной опорой бинов)."""
+                    if hlg is not None and hlg_ce:
+                        return hlg.loss(ql[0], tgt_q.clamp(v_lo, v_hi)).mean(1)
+                    return F.smooth_l1_loss(qv, tgt_q[None].expand_as(qv), reduction="none").mean((0, 2))
                 if w_mb:
                     # W * Huber(Q(s, .) - Q_mb(s, .)) по всем 27 действиям; строки без модельной цели
                     # (отложенная часть, оборванная цепочка) имеют вес 0
                     wb = MBW[b]
                     if wb.sum() > 0:
-                        hub = F.smooth_l1_loss(qv, QMB[b][None].expand_as(qv), reduction="none").mean((0, 2))
+                        hub = dense(QMB[b])
                         l_mb = (hub * wb).sum() / wb.sum()
                         loss = loss + w_mb * l_mb
                         aux_acc.setdefault("mb_loss", []).append(l_mb.item())
@@ -1901,7 +2045,7 @@ def train_variant(variant, data, train_mask, args, seed):
                     # W * Huber(Q(s, .) - Q_учителя(s, .)) по всем 27 действиям на строках с целью учителя
                     wt = TEW[b]
                     if wt.sum() > 0:
-                        hub = F.smooth_l1_loss(qv, QTE[b][None].expand_as(qv), reduction="none").mean((0, 2))
+                        hub = dense(QTE[b])
                         l_te = (hub * wt).sum() / wt.sum()
                         loss = loss + w_te * l_te
                         aux_acc.setdefault("teacher_loss", []).append(l_te.item())
@@ -1913,6 +2057,8 @@ def train_variant(variant, data, train_mask, args, seed):
                     qn = net.q_heads(sn)
                     if variant in QUANTILE_VARIANTS:
                         qn = qn.mean(-1)
+                    elif hlg is not None:
+                        qn = hlg.to_scalar(qn)
                     l_pani = F.smooth_l1_loss(qn, qv.detach())
                     loss = loss + w_pani * l_pani
                     aux_acc.setdefault("pani_loss", []).append(l_pani.item())
@@ -1927,6 +2073,16 @@ def train_variant(variant, data, train_mask, args, seed):
                         l_demo = (jm * wd).sum() / wd.sum()
                         loss = loss + w_demo * l_demo
                         aux_acc.setdefault("distill_top_loss", []).append(l_demo.item())
+
+            if w_nx:
+                # W * Huber(прогноз - [уровень следующих карт (6), награда]) в нормированных единицах;
+                # у терминальных переходов следующей карты нет — там только награда (вес NXW)
+                z = net.model[0](s)
+                pred = nx_head(torch.cat([z, nx_emb(a)], 1))
+                hub = F.smooth_l1_loss(pred, NXT[b], reduction="none")
+                l_nx = (hub * NXW[b]).sum() / NXW[b].sum().clamp_min(1.0)
+                loss = loss + w_nx * l_nx
+                aux_acc.setdefault("aux_next_loss", []).append(l_nx.item())
 
             opt.zero_grad(); loss.backward(); opt.step()
             net.soft_update()
@@ -1949,8 +2105,7 @@ def train_variant(variant, data, train_mask, args, seed):
                 b = to_t(test_idx).long()
                 qs = net.q_scalar(S[b]).gather(1, A[b][:, None]).squeeze(1)
                 a2 = net.q_scalar(S2[b]).argmax(1)
-                q2 = (net.q_target(S2[b]).mean(-1) if variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
-                      else net.q_target(S2[b])).gather(1, a2[:, None]).squeeze(1)
+                q2 = net.scalar(net.q_target(S2[b])).gather(1, a2[:, None]).squeeze(1)
                 td = float(((qs - (R[b] + GAMMA * (1 - D[b]) * q2)) ** 2).mean().sqrt())
             net.set_train(True)
             if td < best_td - 1e-3:
@@ -2061,9 +2216,7 @@ def evaluate(net, stats, data, test_mask, policy="mean"):
     with torch.no_grad():
         q_scal = batched(lambda x: net.q_scalar(x), S[idx])
         a2 = batched(lambda x: net.q_scalar(x), S2[idx]).argmax(1)
-        q2t = batched(lambda x: net.q_target(x).mean(-1)
-                      if net.variant in ("cnn_qrdqn", "cnx_cql_qr", "cnx_qrdqn")
-                      else net.q_target(x), S2[idx])
+        q2t = batched(lambda x: net.scalar(net.q_target(x)), S2[idx])
         q2 = q2t.gather(1, a2[:, None]).squeeze(1)
         r = torch.as_tensor(data["R"][idx], device=device)
         d = torch.as_tensor(data["D"][idx], device=device)
@@ -2360,8 +2513,22 @@ def main():
                     help="Модельные цели: глубина жадного просмотра вперёд в суррогате (1 = одно действие)")
     ap.add_argument("--mb-lam", type=float, default=0.5,
                     help="Модельные цели: награда = среднее по членам ансамбля - L * разброс (MOPO)")
+    ap.add_argument("--mb-full", action="store_true",
+                    help="Модельные цели: немиопический просмотр вперёд (mb_targets.lookahead_full) — лучевой "
+                         "поиск глубины --mb-h и ширины --mb-beam по пессимистичной СУММЕ наград до конца "
+                         "бюджета или глубины; остановиться можно после любого действия. Без флага — прежний "
+                         "жадный просмотр (лучшая немедленная награда, обрыв на неположительной)")
+    ap.add_argument("--mb-beam", type=int, default=3,
+                    help="--mb-full: ширина луча на пару (состояние, первое действие). Предсказаний ансамбля "
+                         "на состояние: 27 * (1 + 27 + (H - 2) * 27 * луч) при H >= 2")
+    ap.add_argument("--mb-max-rows", type=int, default=0,
+                    help="Модельные цели: не больше стольких обучающих строк с целью Q_mb (случайные, сид "
+                         "--data-seed; 0 = все). У остальных строк вес добавки 0 — для смеси УрЧП, где "
+                         "просмотр по всем строкам слишком долог")
     ap.add_argument("--mb-subdirs", default="all",
-                    help="Модельные цели: буферы, на которых учится суррогат (all | solvable | список)")
+                    help="Модельные цели: буферы, на которых учится суррогат (all | solvable | список). "
+                         "С --subdirs и --holdout отложенные папки из этого набора исключаются: суррогат "
+                         "не видит задачу проверки переноса")
     ap.add_argument("--mb-table", default="",
                     help="Модельные цели: готовая таблица переходов npz (локально или в HF) вместо сборки")
     ap.add_argument("--mb-members", type=int, default=5, help="Модельные цели: членов ансамбля суррогата")
@@ -2391,6 +2558,26 @@ def main():
                     help="От грубого к точному: первую треть эпох max в цели TD видит один шаг обучения "
                          "на пару «оптимизатор x длина», дальше все 27 действий")
     ap.add_argument("--mask-coarse-lr", type=int, default=1, choices=[0, 1, 2])
+    ap.add_argument("--hlg", action="store_true",
+                    help="HL-Gauss (Farebrother et al., 2403.03950): голова отдаёт логиты по бинам ценности, "
+                         "цель TD — сглаженное гауссианой распределение, лосс — кросс-энтропия вместо MSE. "
+                         f"Варианты {', '.join(HLG_VARIANTS)}, одна голова. Добавки --mb-aux, --teacher-w, "
+                         "--pani-w, --distill-w, --dqfd действуют на матожидание головы. В чекпоинт пишется "
+                         "hl_gauss=(v_min, v_max, бины): оценка сводит бины к скаляру Q")
+    ap.add_argument("--hlg-bins", type=int, default=51, help="--hlg: число бинов")
+    ap.add_argument("--hlg-vmin", type=float, default=None,
+                    help="--hlg: нижняя граница опоры бинов (не задана: по данным, см. hlg_range)")
+    ap.add_argument("--hlg-vmax", type=float, default=None,
+                    help="--hlg: верхняя граница опоры (не задана: у delta — 1.1 ошибки на старте цепочки "
+                         "в единицах тренера, то есть граница --value-bound)")
+    ap.add_argument("--hlg-aux", default="ev", choices=["ev", "ce"],
+                    help="--hlg: как считать --mb-aux и --teacher-w. ev — Huber по матожиданию головы "
+                         "(как без --hlg); ce — кросс-энтропия с распределением HL-Gauss плотной цели")
+    ap.add_argument("--aux-next", type=float, default=0.0,
+                    help="Вес вспомогательной цели (0 = выключено): малая голова на признаках энкодера и "
+                         "вложении действия предсказывает уровень следующих карт (6 чисел surrogate.level6 "
+                         "от S2) и награду, W * Huber в нормированных единицах. В чекпоинт голова не "
+                         "пишется, на оценку не влияет")
     ap.add_argument("--no-verify", action="store_true",
                     help="Не проверять сохранённый чекпоинт через online_eval_env.load_agent")
     args = ap.parse_args()
@@ -2409,6 +2596,27 @@ def main():
                 or args.mask_schedule or args.teacher_w > 0)
     if args.ens < 1 or (args.ens > 1 and not 1 <= args.ens_min <= args.ens):
         ap.error("--ens >= 1 и 1 <= --ens-min <= --ens")
+    if args.hlg:
+        if args.variant not in HLG_VARIANTS:
+            ap.error(f"--hlg поддержан для {', '.join(HLG_VARIANTS)} (обычная линейная голова)")
+        if args.ens > 1 or args.distill_from:
+            ap.error("--hlg несовместим с --ens > 1 и --distill-from")
+        if args.hlg_bins < 2:
+            ap.error("--hlg-bins >= 2")
+        if args.hlg_vmin is not None and args.hlg_vmax is not None and args.hlg_vmax <= args.hlg_vmin:
+            ap.error("--hlg-vmax должен быть больше --hlg-vmin")
+    if args.aux_next < 0:
+        ap.error("--aux-next >= 0")
+    if args.aux_next > 0:
+        if args.variant in ("cnx_smdp", "cnx_bbf") or args.distill_from:
+            ap.error("--aux-next несовместим с cnx_smdp, cnx_bbf (он заново создаёт сеть и оптимизатор) "
+                     "и --distill-from")
+        if args.freeze_encoder:
+            ap.error("--aux-next несовместим с --freeze-encoder: цель учит признаки энкодера")
+    if args.mb_beam < 1 or args.mb_max_rows < 0:
+        ap.error("--mb-beam >= 1, --mb-max-rows >= 0")
+    if (args.mb_full or args.mb_max_rows) and not args.mb_aux > 0:
+        ap.error("--mb-full и --mb-max-rows задаются вместе с --mb-aux > 0")
     if args.variant == "cnx_smdp" and (new_arch or new_loss):
         ap.error("cnx_smdp — отдельный тренер (advanced_agents.SmdpAgent): --encoder, --encoder-init, "
                  "--freeze-encoder, --ens, --mb-aux, --pani-w, --distill-top, --mask-schedule, --teacher-w "
@@ -2627,6 +2835,27 @@ def main():
                mask_coarse_lr=int(args.mask_coarse_lr), teacher_w=float(args.teacher_w),
                teacher_from=os.path.basename(args.teacher_from),
                target_chains=int(args.target_chains), data_seed=int(args.data_seed))
+    # новые приёмы пишутся, только когда включены: строки и meta прежних рецептов не меняются
+    if args.hlg:
+        arm.update(hlg=True, hlg_aux=args.hlg_aux)
+    if args.aux_next > 0:
+        arm.update(aux_next=float(args.aux_next))
+    if args.mb_full:
+        arm.update(mb_full=True, mb_beam=int(args.mb_beam))
+    if args.mb_max_rows:
+        arm.update(mb_max_rows=int(args.mb_max_rows))
+    # суррогат модельных целей не должен видеть отложенную задачу (--holdout): её папки убираются
+    # из --mb-subdirs. Список — в том же порядке, что у agent_combo.py --extra-only-target без
+    # --extra-data (учитель без строк цели), поэтому таблица и ансамбль в кэше --mb-work общие
+    mb_subdirs = args.mb_subdirs
+    if multi and args.holdout and args.mb_aux > 0:
+        if args.mb_table:
+            print("ВНИМАНИЕ: --mb-table с --holdout: готовая таблица берётся как есть, отложенная задача "
+                  "из неё НЕ убирается", flush=True)
+        else:
+            mb_subdirs = ",".join(resolve_subdirs(args.mb_subdirs, args.holdout))
+            arm.update(mb_holdout=args.holdout)
+            print(f"модельные цели: суррогат без отложенных задач ({args.holdout}): {mb_subdirs}", flush=True)
     run_meta.update(arm)
     tb_row = {}
     if args.target_buffer:
@@ -2656,8 +2885,10 @@ def main():
             err_scale=mb_scale, init_err=mb_init,
             gamma=float(GAMMA), h=args.mb_h, lam=args.mb_lam, budget=int(args.episode_budget),
             smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0),
-            subdirs=args.mb_subdirs, table=args.mb_table, members=args.mb_members,
-            work=args.mb_work, quick=bool(args.smoke), tab=tc_tab)
+            subdirs=mb_subdirs, table=args.mb_table, members=args.mb_members,
+            work=args.mb_work, quick=bool(args.smoke), tab=tc_tab,
+            full=bool(args.mb_full), beam=int(args.mb_beam), max_rows=int(args.mb_max_rows),
+            rows_seed=int(args.data_seed))
         run_meta["mb"] = dict(mb_info)
     args._teacher_soft_mask = []
     if args.teacher_w > 0:
@@ -2709,6 +2940,9 @@ def main():
                                  ens=int(getattr(net, "ens", 1)),
                                  n_quantiles=int(getattr(net, "nq", 0) or 0),
                                  in_ch=int(data["S"].shape[1]))}
+            if getattr(net, "hl_gauss", None):
+                # по этому полю load_agent строит голову на бинах и сводит её к скаляру Q
+                ckpt["hl_gauss"] = tuple(net.hl_gauss)
             sfx = run_suffix(args)
             fn = f"/tmp/agent_{args.variant}{sfx}_seed{seed}.pt"
             _t.save(ckpt, fn)

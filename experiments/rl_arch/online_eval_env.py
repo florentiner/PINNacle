@@ -233,7 +233,8 @@ def load_agent(model_file):
     hg = ckpt.get("hl_gauss")
     if hg:
         from advanced_agents import HLGauss
-        net._hlg = HLGauss(v_min=hg[0], v_max=hg[1], n_bins=int(hg[2]))
+        # бины — на устройстве сети (CPU): deepxde на GPU делает тензором по умолчанию cuda
+        net._hlg = HLGauss(v_min=hg[0], v_max=hg[1], n_bins=int(hg[2])).to(torch.device("cpu"))
         print(f"агент обучен с HL-Gauss: скаляр Q по центрам {int(hg[2])} бинов", flush=True)
     # условия обучения, которые оценка обязана воспроизвести (новые чекпоинты);
     # у старых чекпоинтов meta нет — действуют прежние константы
