@@ -965,6 +965,20 @@ add("w23-rnd-dep", 23, "H06",
             f"{KEEPS} " + t3ev("t3m_rnd_dep", S5, hours=MAP_EH))],
     1.0 + MAP_EH, note="контроль: случайная политика со стражем и маской (без Adam 1e-2 и без PSO: пустого "
                        "действия-остановки у случайной политики нет), без агента и без карт")
+# ---------------------------------------------------------------- волна 24
+# На ns2d победители pb2d проваливаются (0.4-0.7 при 0.05 у случайной политики с правилами): агент
+# останавливается пустым действием через 200-2800 эпох или идёт одним Adam. Правила развёртывания,
+# вторая версия: пустое действие и весь PSO запрещены, поэтому бюджет тратится целиком; страж прежний.
+DEPLOY2 = "--mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500"
+for nm, flags, needs, note in (
+        ("mb", MB, (), "модельные цели"),
+        ("mbmae", f"--encoder resnet --encoder-init {ENC_MAE} {MB}", (ENC_MAE,), "модельные цели + предобучение")):
+    model = off_model("convnext_dqn", f"d{nm}")
+    add(f"w24-d2-{nm}", 24, "H06",
+        [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {flags} --seeds 1 --model-tag d{nm}"),
+         (EVAL, f"--policy agent --model-file {model} {DEPLOY2} {KEEPS} " + t3ev(f"t3m_d{nm}_dep2", S5, hours=MAP_EH))],
+        1.0 + MAP_EH, needs=needs, note=note + ": оценка без пустого действия и PSO, со стражем")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
