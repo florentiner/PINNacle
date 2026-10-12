@@ -1116,6 +1116,55 @@ for _nm, _ks in ((("all", range(W28_K)), ("half", range(W28_K // 2)), ("quart", 
         1.5 + MAP_EH, needs=[ENC_MAE],
         note=f"рецепт на направленно собранном буфере: сборщиков {len(list(_ks))} из {W28_K}")
 
+# ---------------------------------------------------------------- волна 30
+# Оставшиеся офлайновые методы обзора поверх рецепта с целями учителя, по одному: HL-Gauss (цель Q
+# как распределение, 2403.03950), полный просмотр вперёд в суррогате вместо близорукого,
+# вспомогательное предсказание уровня следующих карт. Отдельно — одна политика на все уравнения:
+# ученик, суррогат и учитель не видят своё уравнение совсем, оценка на нём без дообучения.
+def w30_job(nm, extra, note):
+    _tt, _mt = f"{TEACH}_{nm}", f"ete_{nm}"
+    add(f"w30-{nm}", 30, "H06",
+        [(COMBO, f"{TEACH_TR} --tag {_tt}"),
+         (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --teacher-from rl_arch/agents_online/{_tt}.pt "
+                   f"--teacher-w 0.5 {extra} --seeds 1 --model-tag {_mt}"),
+         w25_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}_dep2", "")],
+        1.5 + MAP_EH, needs=[ENC_MAE], note=note)
+
+
+w30_job("hlg", "--hlg", "HL-Gauss: модельные цели и цели учителя по ожидаемому значению")
+w30_job("hlgce", "--hlg --hlg-aux ce", "HL-Gauss: модельные цели и цели учителя тоже как распределение")
+w30_job("mbfull", "--mb-full --mb-beam 3", "полный просмотр вперёд в суррогате (луч 3, глубина 3)")
+w30_job("auxn", "--aux-next 0.5", "вспомогательное предсказание уровня следующих карт и награды")
+_tt, _mt = f"{TEACH}_ho", "ete_ho"
+add("w30-ho", 30, "H06",
+    [(COMBO, f"{TEACH_TR} --extra-only-target --tag {_tt}"),
+     (OFFLINE, f"--variant convnext_dqn --subdirs solvable --holdout {SUBDIR} --per-pde-files 40 --pde-ctx --scalar-ctx "
+               f"--err-norm init --reward-form delta --value-bound --gamma 0.99 --episode-budget {BUDGET} --ctx-kmax 70 "
+               f"--save-model {RECIPE} --mb-max-rows 12000 --epochs 60 --teacher-from rl_arch/agents_online/{_tt}.pt "
+               f"--teacher-w 0.5 --seeds 1 --model-tag {_mt}"),
+     w25_eval(f"/tmp/agent_convnext_dqn_cfix_rdelta_vb_multi_{_mt}_seed1.pt", f"t3m_{_mt}_dep2", "")],
+    3.0 + MAP_EH, needs=[ENC_MAE],
+    note="одна политика на все уравнения: своё уравнение отложено у ученика, суррогата и учителя")
+
+# ---------------------------------------------------------------- волна 31
+# Два онлайновых метода поверх чекпоинта рецепта с целями учителя (волна 25, метка ete): дообучение
+# RLPD со строгим тёплым стартом и то же с сигналами обучения рядом с картами (fulltele: новые каналы
+# стартуют с нулевых весов, начальные Q равны офлайновым). 9 часов обучения, оценка отдельным кернелом.
+FT_CK = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_seed1.pt"
+FT_TR = (f"--variant convnext_dqn --pde {PDE} --hours 9 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 "
+         f"--rlpd-subdir {SUBDIR} --offline-fix --offline-reward delta --init-err {INIT_ERR} --value-bound --gamma 0.99 "
+         f"--episode-budget {BUDGET} --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err {KEEPS} "
+         f"--mask adam:0.01,pso --warm-start {FT_CK} --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42")
+for _nm, _extra, _note in (("ft", "", "дообучение онлайн (RLPD) рецепта с целями учителя"),
+                           ("ftt", "--state-mode fulltele --warm-widen",
+                            "то же с сигналами обучения рядом с картами (fulltele)")):
+    _tag = f"{Q}_{_nm}_ete_s42"
+    _ag = f"rl_arch/agents_online/{_tag}.pt"
+    add(f"w31-{_nm}-tr", 31, "H06", [(TRAIN, f"{FT_TR} {_extra} --tag {_tag}")], 9.8, needs=[FT_CK],
+        note="обучение 9 часов: " + _note)
+    add(f"w31-{_nm}-ev", 31, "H06", [w25_eval(_ag, f"t3m_{_nm}_dep2", "")], 0.5 + MAP_EH, needs=[_ag],
+        note="оценка: " + _note)
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

@@ -97,6 +97,14 @@ def lint_offline(argv):
         i = argv.index("--target-buffer")
         assert "--target-buffer" in open(O.__file__).read(), "offline_rl.py не знает --target-buffer"
         argv = argv[:i] + argv[i + 2:]
+    saved_mb = None
+    if "--holdout" in argv and "--mb-aux" in argv:
+        # таблицы суррогата без отложенной задачи нет ни в одном локальном кэше: её сборка качает буферы
+        import mb_targets as MB
+        saved_mb = MB.precompute
+        MB.precompute = lambda data, train_mask, **kw: (
+            np.zeros((len(data["A"]), O.N_ACTIONS), dtype=np.float32), np.zeros(len(data["A"]), dtype=bool),
+            dict(surr_rows=0, surr_sig="lint", surr_file=""))
     saved = (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers, O.teacher_targets)
     O.load_episodes, O.train_variant, O.teacher_q = fake_episodes, _stop, fake_teacher
     O.merge_online_buffers = lambda data, paths, **k: data
@@ -107,6 +115,8 @@ def lint_offline(argv):
     finally:
         (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers,
          O.teacher_targets) = saved
+        if saved_mb is not None:
+            MB.precompute = saved_mb
 
 
 def lint_train(argv):
