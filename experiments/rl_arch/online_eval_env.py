@@ -1005,6 +1005,9 @@ def run_seed(seed, args, progress_cb=None):
             true_maps = build_state(raw, prev_raw)
             prev_raw = raw
             stale_maps = true_maps
+            if getattr(args, "_map_sink", None) is not None:
+                # collect_active.py --save-buffer: карты после действия len(chain) — в буфер сбора
+                args._map_sink(len(chain), true_maps)
             if state_mode == "rebuild":
                 # вторая сборка тех же карт с другой случайностью автокодировщика: насколько
                 # наблюдение воспроизводимо. Состояние генераторов возвращается, поэтому

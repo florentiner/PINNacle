@@ -6763,6 +6763,162 @@
    ]
   },
   {
+   "id": "pb2d-w28-smoke",
+   "wave": 28,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "смоук: сбор двух цепочек с картами, учитель и ученик на собранном, оценка",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --acq random --rounds 1 --batch 2 --share-prefix --share-min 100 --keep-opt --keep-opt-mode safe --smoke --save-buffer --init Adam:0.001:100,LBFGS:1:100 --init Adam:0.001:100,Adam:0.0001:100 --tag tb_smoke --save-dir runs_rl_online"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --smoke --target-buffer runs_rl_online/buffers_new/tb_smoke --tag tb_smoke_teach"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer runs_rl_online/buffers_new/tb_smoke --teacher-from rl_arch/agents_online/tb_smoke_teach.pt --teacher-w 0.5 --seeds 1 --model-tag tb_smoke --epochs 2 --fqe-epochs 2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_tb_smoke_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 1500 --hours 0.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_tb_smoke"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w28-col-0",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 0 из 4, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 99 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 0/4 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_pb2d_w0"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w28-col-1",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 1 из 4, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 99 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 1/4 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_pb2d_w1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w28-col-2",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 2 из 4, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 99 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 2/4 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_pb2d_w2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w28-col-3",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 3 из 4, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 99 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 3/4 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_pb2d_w3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w29-tb-all",
+   "wave": 29,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном буфере: сборщиков 4 из 4",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0,rl_arch/buffers_new/tbuf_pb2d_w1,rl_arch/buffers_new/tbuf_pb2d_w2,rl_arch/buffers_new/tbuf_pb2d_w3 --tag qpb2d_teach_mbpo_tball"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0,rl_arch/buffers_new/tbuf_pb2d_w1,rl_arch/buffers_new/tbuf_pb2d_w2,rl_arch/buffers_new/tbuf_pb2d_w3 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tball.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tball"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_tball_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tball_dep2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w29-tb-half",
+   "wave": 29,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном буфере: сборщиков 2 из 4",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0,rl_arch/buffers_new/tbuf_pb2d_w1 --tag qpb2d_teach_mbpo_tbhalf"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0,rl_arch/buffers_new/tbuf_pb2d_w1 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbhalf.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbhalf"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_tbhalf_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbhalf_dep2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w29-tb-quart",
+   "wave": 29,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном буфере: сборщиков 1 из 4",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_tbquart"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbquart"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbquart_dep2"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

@@ -60,6 +60,10 @@ log10((rmse+brmse)/E0)/3+1) + 6 чисел описателя задачи (offl
                             какие именно — задаёт --data-seed K. Ученик на картах берёт те же цепочки:
                             offline_rl.py --target-chains N --data-seed K
   --target-only             без других задач
+  --target-buffer SPEC      данные цели ТОЛЬКО из собранных заново файлов с картами
+                            (collect_active.py --save-buffer): префиксы HF rl_arch/buffers_new/<тег> и/или
+                            локальные папки через запятую; исходный буфер цели не используется
+                            (target_buffer.py). Ученик: offline_rl.py --target-buffer с той же строкой
   --extra-data PATH_OR_HF   JSON новых цепочек цели (формат ниже), путь локальный или в HF
                             (danil-e/pinnacle-optuna-db); несколько — через запятую
   --extra-only-target       старый буфер цели выбросить, для цели только --extra-data
@@ -1144,6 +1148,10 @@ def build_parser():
                    help="брать файл сбора, даже если сбор ещё не закончен (done=false)")
     g.add_argument("--extra-err-scale", type=float, default=0.0,
                    help="(rmse+brmse)/l2re для записей без err и без итоговых rmse/brmse")
+    g.add_argument("--target-buffer", default="",
+                   help="данные цели ТОЛЬКО из собранных заново файлов с картами (collect_active.py --save-buffer): "
+                        "через запятую префиксы HF rl_arch/buffers_new/<тег> и/или локальные папки; исходный буфер "
+                        "цели не используется, остальные задачи — как обычно (target_buffer.py)")
     g.add_argument("--table", default="", help="готовая таблица npz (локально или в HF) вместо сборки")
     g.add_argument("--data-seed", type=int, default=0, help="сид выбора цепочек для --target-chains")
     g = ap.add_argument_group("приёмы")
@@ -1230,7 +1238,16 @@ def run(args, log=None):
     tsub = meta_all[name].get("subdir")
     if args.target_only and not args.table:
         subdirs = [tsub] if tsub else []        # чужие буферы не качаем
-    drop_old = args.extra_only_target
+    tbuf = getattr(args, "target_buffer", "")
+    if tbuf:
+        bad = [f for f, v in (("--target-chains", args.target_chains > 0), ("--target-only", args.target_only),
+                              ("--extra-data", bool(args.extra_data)), ("--extra-only-target", args.extra_only_target))
+               if v]
+        if bad:
+            raise SystemExit(f"--target-buffer несовместим с {', '.join(bad)}: данные цели — только собранные файлы")
+        if not tsub:
+            raise SystemExit(f"--target-buffer: у задачи {name} нет папки буфера (subdir) в track3/pde_meta.json")
+    drop_old = args.extra_only_target or bool(tbuf)
     if drop_old and not args.table:
         subdirs = [s for s in subdirs if s != tsub]
     if args.table or subdirs:
@@ -1252,6 +1269,16 @@ def run(args, log=None):
     if args.target_chains > 0 and not drop_old:
         keep &= target_chain_rows(tab, pi, args.target_chains, args.data_seed)[0]
     tab = subset(tab, keep)
+    tb_info = None
+    if tbuf:
+        # строки цели — только из собранных файлов (та же функция собирает таблицу ученику)
+        import target_buffer as TB
+        tb_eps, tb_info = TB.load(tbuf, tsub, log)
+        tab, pi, tb_rows = TB.table_with(tab, tb_eps, name, meta_all)
+        tb_info.update(table_rows=tb_rows, table_chains=int(len(np.unique(tab["CH"][tab["PDE"] == pi]))))
+        sizes.update(target_buffer_chains=tb_info["table_chains"], target_buffer_rows=tb_rows)
+        log(f"собранный буфер цели в таблице: цепочек {tb_info['table_chains']}, переходов {tb_rows}; исходный "
+            f"буфер задачи {name} не используется")
     extra_info = None
     if args.extra_data:
         tab, extra_info = extra_rows(tab, load_extra(args.extra_data, args.extra_allow_partial), pi, args.extra_err_scale or None)
@@ -1308,13 +1335,14 @@ def run(args, log=None):
         "mve_frac", "distill_top", "distill_w", "distill_margin", "pani_w", "pani_pen", "mask",
         "mask_schedule", "steps", "batch", "real_ratio", "target_frac", "seed", "target_chains",
         "data_seed", "target_only", "extra_data", "extra_only_target")}
+    combo["target_buffer"] = tbuf
     meta = dict(ctx_kmax=KMAX, ctx_budget=BUDGET, ctx_err="err", err_norm="init", pde_ctx=True,
                 scalar_ctx=True, state_mode="loss", mask=[int(i) for i in np.where(~allowed)[0]],
                 gamma=float(args.gamma), keep_opt=False, keep_opt_mode=None, lbfgs_tol=None,
                 pde=name, train_pdes=[tab["NAMES"][i] for i in np.unique(tab["PDE"])],
                 source="agent_combo.py (офлайн, таблица переходов + суррогат)",
                 guide=guide_spec, guide_actions=[int(a) for a in guide], guide_epochs=P,
-                eval_cmd=cmd, combo=combo,
+                eval_cmd=cmd, combo=combo, **({"target_buffer": tb_info} if tb_info else {}),
                 note="каналы лоссов 0-3 имеют нулевые веса; агент видит шаг, эпохи, прошлое действие, "
                      "(rmse+brmse)/E0 и описатель задачи. При непустом guide агент обучен решать только "
                      "после каркаса: оценивать через --policy script --script <guide> --script-tail agent")
@@ -1339,6 +1367,7 @@ def run(args, log=None):
     report = dict(kind="agent_combo_train", partial=True, pde=name, tag=args.tag, smoke=bool(args.smoke),
                   settings={k: v for k, v in vars(args).items() if not k.startswith("_")},
                   guide=guide_spec, guide_epochs=P, mask=meta["mask"], sizes=sizes, extra=extra_info,
+                  target_buffer=tb_info,
                   surrogate=dict(members=args.members, quick=bool(args.surr_quick), fit_s=models.fit_s,
                                  data_sig=models.sig),
                   train={k: v for k, v in ag.info.items() if k != "curves"}, curves=ag.info["curves"],

@@ -36,6 +36,8 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
     --mask-schedule                 первую треть эпох max в цели видит грубую сетку действий
     --target-chains N --data-seed K кривая «размер буфера»: ученик и суррогат — на тех же N цепочках цели,
                                     что учитель agent_combo.py с теми же N и K (mb_targets.target_subset)
+    --target-buffer SPEC            данные задачи только из собранных заново файлов с картами
+                                    (collect_active.py --save-buffer), исходный буфер не читается (target_buffer.py)
 Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
@@ -2315,6 +2317,12 @@ def main():
                          "--extra-buffers и --per-pde-files")
     ap.add_argument("--data-seed", type=int, default=0,
                     help="Сид выбора цепочек для --target-chains (как --data-seed у agent_combo.py)")
+    ap.add_argument("--target-buffer", default="",
+                    help="Данные задачи --subdir ТОЛЬКО из собранных заново файлов с картами "
+                         "(collect_active.py --save-buffer): через запятую префиксы HF rl_arch/buffers_new/<тег> "
+                         "и/или локальные папки. Исходный буфер задачи не читается ни учеником, ни суррогатом "
+                         "модельных целей (--mb-aux: остальные задачи его таблицы — прежние буферы). Нужен "
+                         "--chain-fix; без --subdirs, --extra-buffers, --target-chains, --per-pde-files, --data-dir")
     ap.add_argument("--err-norm", default="init", choices=["init", "none"],
                     help="Смесь УрЧП: init — ошибки в долях ошибки необученной сети; none — как есть")
     ap.add_argument("--pde-ctx", action="store_true",
@@ -2438,6 +2446,14 @@ def main():
                      "суррогата, размер буфера перестал бы быть N")
         if args.per_pde_files:
             ap.error("--target-chains несовместим с --per-pde-files: буфер урезается по цепочкам, а не по файлам")
+    if args.target_buffer:
+        bad = [f for f, v in (("--subdirs", args.subdirs), ("--extra-buffers", args.extra_buffers),
+                              ("--target-chains", args.target_chains > 0), ("--per-pde-files", args.per_pde_files),
+                              ("--data-dir", args.data_dir)) if v]
+        if bad:
+            ap.error(f"--target-buffer несовместим с {', '.join(bad)}: данные задачи — только собранные файлы")
+        if not args.chain_fix:
+            ap.error("--target-buffer требует --chain-fix: файлы сбора — цепочки, без границ их не прочитать")
     if args.mb_aux > 0:
         if args.mb_h < 1 or args.mb_lam < 0 or args.mb_members < 1:
             ap.error("--mb-h >= 1, --mb-lam >= 0, --mb-members >= 1")
@@ -2499,7 +2515,14 @@ def main():
     else:
         # --per-pde-files действует и на один УрЧП, но режет по файлам и только данные ученика;
         # для кривой «сколько данных буфера нужно» — --target-chains (ниже)
-        episodes = load_episodes(args.data_dir, args.subdir, max_files=args.per_pde_files)
+        tb_info = {}
+        if args.target_buffer:
+            # исходный буфер задачи не читается: только файлы collect_active.py --save-buffer
+            import target_buffer as TB
+            episodes, tb_info = TB.load(args.target_buffer, args.subdir,
+                                        log=lambda *x: print(*x, flush=True))
+        else:
+            episodes = load_episodes(args.data_dir, args.subdir, max_files=args.per_pde_files)
         data = episodes_to_arrays(episodes, fix_next_state=args.fix_next_state,
                                   chain_fix=args.chain_fix, reward_form=args.reward_form,
                                   init_err=args.init_err, budget=args.episode_budget)
@@ -2510,6 +2533,15 @@ def main():
             data, [x.strip() for x in args.extra_buffers.split(",") if x.strip()],
             reward_form=args.reward_form, init_err=args.init_err, budget=args.episode_budget)
     tc_info, tc_tab = {}, None
+    if args.target_buffer:
+        # сколько собранных цепочек и переходов досталось ученику (после обрезки по --episode-budget)
+        tb_info = dict(tb_info, used_chains=int(len(np.unique(data["EP"]))), used_transitions=int(len(data["A"])))
+        print(f"собранный буфер цели у ученика: цепочек {tb_info['used_chains']}, переходов "
+              f"{tb_info['used_transitions']}; исходный буфер {args.subdir} не используется", flush=True)
+        if args.mb_aux > 0:
+            # таблица суррогата — как у учителя agent_combo.py --target-buffer: строки цели только собранные
+            tc_tab = TB.surrogate_table(episodes, subdir_to_pde(args.subdir), args.mb_subdirs, args.mb_table,
+                                        args.mb_work, log=lambda *x: print(*x, flush=True))
     if args.target_chains > 0:
         # до всего остального: цели учителя, контекст, модельные цели и отложенная часть считаются
         # уже на оставленных цепочках
@@ -2596,6 +2628,10 @@ def main():
                teacher_from=os.path.basename(args.teacher_from),
                target_chains=int(args.target_chains), data_seed=int(args.data_seed))
     run_meta.update(arm)
+    tb_row = {}
+    if args.target_buffer:
+        run_meta["target_buffer"] = dict(tb_info)       # источники, число цепочек и переходов
+        tb_row = {"tb_" + k: v for k, v in tb_info.items()}
     if tc_info:
         run_meta["target_data"] = dict(tc_info)         # сколько цепочек цели осталось и где
     mb_info, te_info = {}, {}
@@ -2654,7 +2690,7 @@ def main():
                        model_tag=args.model_tag, state_mode=args.state_mode,
                        scalar_ctx=bool(args.scalar_ctx), ctx_err=bool(args.ctx_err),
                        encoder=getattr(net, "enc_kind", "convnext"), ens=int(getattr(net, "ens", 1)), **arm,
-                       **{"tc_" + k: v for k, v in tc_info.items()},
+                       **{"tc_" + k: v for k, v in tc_info.items()}, **tb_row,
                        **{"mb_" + k: v for k, v in mb_info.items()},
                        **{"teacher_" + k: v for k, v in te_info.items()},
                        **getattr(net, "extra", {}), **m, **fq)

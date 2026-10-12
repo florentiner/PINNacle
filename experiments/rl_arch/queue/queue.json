@@ -7075,6 +7075,218 @@
    ]
   },
   {
+   "id": "w28-col-0",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 0 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 0/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w0"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-1",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 1 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 1/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w1"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-2",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 2 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 2/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w2"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-3",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 3 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 3/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w3"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-4",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 4 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 4/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w4"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-5",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 5 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 5/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w5"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-6",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 6 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 6/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w6"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-7",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 7 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 7/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w7"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-8",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 8 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 8/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w8"
+    }
+   ]
+  },
+  {
+   "id": "w28-col-9",
+   "wave": 28,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор с картами, сборщик 9 из 10, 8 часов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --save-buffer --worker 9/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_w9"
+    }
+   ]
+  },
+  {
+   "id": "w29-tb-all",
+   "wave": 29,
+   "group": "H06",
+   "hours": 5.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном буфере: сборщиков 10 из 10",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/tbuf_ns2d_w2,rl_arch/buffers_new/tbuf_ns2d_w3,rl_arch/buffers_new/tbuf_ns2d_w4,rl_arch/buffers_new/tbuf_ns2d_w5,rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7,rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --tag q_teach_mbpo_tball"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/tbuf_ns2d_w2,rl_arch/buffers_new/tbuf_ns2d_w3,rl_arch/buffers_new/tbuf_ns2d_w4,rl_arch/buffers_new/tbuf_ns2d_w5,rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7,rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --teacher-from rl_arch/agents_online/q_teach_mbpo_tball.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tball"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_tball_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tball_dep2"
+    }
+   ]
+  },
+  {
+   "id": "w29-tb-half",
+   "wave": 29,
+   "group": "H06",
+   "hours": 5.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном буфере: сборщиков 5 из 10",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/tbuf_ns2d_w2,rl_arch/buffers_new/tbuf_ns2d_w3,rl_arch/buffers_new/tbuf_ns2d_w4 --tag q_teach_mbpo_tbhalf"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/tbuf_ns2d_w2,rl_arch/buffers_new/tbuf_ns2d_w3,rl_arch/buffers_new/tbuf_ns2d_w4 --teacher-from rl_arch/agents_online/q_teach_mbpo_tbhalf.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbhalf"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbhalf_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbhalf_dep2"
+    }
+   ]
+  },
+  {
+   "id": "w29-tb-quart",
+   "wave": 29,
+   "group": "H06",
+   "hours": 5.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном буфере: сборщиков 2 из 10",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_tbquart"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbquart"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbquart_dep2"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

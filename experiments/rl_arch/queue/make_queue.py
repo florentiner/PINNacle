@@ -1071,6 +1071,51 @@ for _div in ((2, 4, 8, 16) if N_CHAINS else ()):
          w25_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}_dep2", "")],
         1.5 + MAP_EH, needs=[ENC_MAE], note=f"кривая буфера: {_n} цепочек цели из {N_CHAINS} (1/{_div})")
 
+# ---------------------------------------------------------------- волна 28
+# Направленный сбор С КАРТАМИ для нового уравнения: модель среды по буферам остальных 21 уравнения
+# и собственным прогонам выбирает цепочки (LCB), общие префиксы и ранняя остановка экономят эпохи,
+# каждая цепочка пишется файлом буфера в исходном формате. Затем рецепт учится только на собранном
+# (--target-buffer): исходный случайный буфер своего уравнения не читается нигде.
+# Сравнение — с тем же числом случайных цепочек исходного буфера (волна 27).
+W28_K = {"poissonboltzmann2d": 4, "ns2d_liddriven": 10}.get(PDE, 0)
+W28_SHORT = "ns2d" if NS2D else PREFIX
+_cbatch = 3 if NS2D else 5
+
+
+def tbuf(k):
+    return f"rl_arch/buffers_new/tbuf_{W28_SHORT}_w{k}"
+
+
+if PREFIX == "pb2d":
+    add("w28-smoke", 28, "H06",
+        [(COLLECT, f"--pde {PDE} --acq random --rounds 1 --batch 2 --share-prefix --share-min 100 {KEEPS} --smoke "
+                   "--save-buffer --init Adam:0.001:100,LBFGS:1:100 --init Adam:0.001:100,Adam:0.0001:100 "
+                   "--tag tb_smoke --save-dir runs_rl_online"),
+         (COMBO, f"{TEACH_TR} --smoke --target-buffer runs_rl_online/buffers_new/tb_smoke --tag tb_smoke_teach"),
+         (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer runs_rl_online/buffers_new/tb_smoke "
+                   "--teacher-from rl_arch/agents_online/tb_smoke_teach.pt --teacher-w 0.5 --seeds 1 "
+                   "--model-tag tb_smoke --epochs 2 --fqe-epochs 2"),
+         w25_eval(off_model("convnext_dqn", "tb_smoke"), "t3m_tb_smoke", "", sd="42", hours=0.5, budget=1500)],
+        1.5, needs=[ENC_MAE], note="смоук: сбор двух цепочек с картами, учитель и ученик на собранном, оценка")
+for _k in range(W28_K):
+    add(f"w28-col-{_k}", 28, "H06",
+        [(COLLECT, f"--pde {PDE} --budget {BUDGET} --rounds 99 --batch {_cbatch} --share-prefix --prefix-bonus 0.1 "
+                   f"--truncate 3 {KEEPS} --acq lcb --lcb-k 1 --save-buffer --worker {_k}/{W28_K} --hours 8.0 "
+                   f"--kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_{W28_SHORT}_w{_k}")],
+        9.0, note=f"направленный сбор с картами, сборщик {_k} из {W28_K}, 8 часов")
+# обучение рецепта на собранном: все сборщики, половина, четверть
+for _nm, _ks in ((("all", range(W28_K)), ("half", range(W28_K // 2)), ("quart", range(max(1, W28_K // 4))))
+                 if W28_K else ()):
+    _src = ",".join(tbuf(k) for k in _ks)
+    _tt, _mt = f"{TEACH}_tb{_nm}", f"ete_tb{_nm}"
+    add(f"w29-tb-{_nm}", 29, "H06",
+        [(COMBO, f"{TEACH_TR} --target-buffer {_src} --tag {_tt}"),
+         (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {_src} "
+                   f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 --seeds 1 --model-tag {_mt}"),
+         w25_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}_dep2", "")],
+        1.5 + MAP_EH, needs=[ENC_MAE],
+        note=f"рецепт на направленно собранном буфере: сборщиков {len(list(_ks))} из {W28_K}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

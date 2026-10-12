@@ -91,6 +91,12 @@ def lint_offline(argv):
         return (np.zeros((n, O.N_ACTIONS), dtype=np.float32), np.ones(n, dtype=bool),
                 dict(mask=[], rows=n, units="lint"))
 
+    if "--target-buffer" in argv:
+        # собранного буфера при проверке ещё нет (его пишет сбор той же ночью): флаг проверяется на
+        # наличие в разборе аргументов, остальная строка — как обычная задача на своём буфере
+        i = argv.index("--target-buffer")
+        assert "--target-buffer" in open(O.__file__).read(), "offline_rl.py не знает --target-buffer"
+        argv = argv[:i] + argv[i + 2:]
     saved = (O.load_episodes, O.train_variant, O.teacher_q, O.merge_online_buffers, O.teacher_targets)
     O.load_episodes, O.train_variant, O.teacher_q = fake_episodes, _stop, fake_teacher
     O.merge_online_buffers = lambda data, paths, **k: data
@@ -213,7 +219,10 @@ def lint_combo(argv):
 def lint_collect(argv):
     """Сбор данных: разбор аргументов до таблицы буферов или первого прогона среды."""
     import collect_active as A
+    import killswitch as K
     saved = A.run_seed, A.load_state, A.base_table
+    saved_k = K.killed
+    K.killed = lambda *a, **k: None       # без сети; отменённая задача должна разбираться
 
     def reached(*a, **k):
         # обычное исключение из run_seed сбор засчитывает цепочке как неудачу, SystemExit пропускает
@@ -228,6 +237,7 @@ def lint_collect(argv):
         raise
     finally:
         A.run_seed, A.load_state, A.base_table = saved
+        K.killed = saved_k
 
 
 def lint_cvprobe(argv):
