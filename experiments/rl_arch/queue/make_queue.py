@@ -1039,6 +1039,21 @@ add("w25-te2", 25, "H06",
      w25_eval(off_model("convnext_dqn", "ete"), "t3m_ete_shm", f"{SHIELD} --shield-err model")],
     1.5 + MAP_EH, needs=[ENC_MAE], note="рецепт волны 24 с целями учителя MBPO и щитом (одна оценка)")
 
+# ---------------------------------------------------------------- волна 26
+# Подтверждение на новых сидах 47-51 (вместе с 42-46 — 10 сидов; отбор по 5 сидам завышает победителя).
+# Итог волны 25: цели учителя — pb2d 0.0225, ns2d 0.0506; учитель и щит — pb2d 0.0126, ns2d 0.068;
+# щит — pb2d 0.0315, ns2d 0.0508; рецепт без добавок — 0.0174 и 0.077.
+S5B = seeds(47, 51)
+add("w26-cf-te", 26, "H06",
+    [(COMBO, f"{TEACH_TR} --tag {TEACH}"), _st,
+     w25_eval(off_model("convnext_dqn", "ete"), "t3m_ete_dep2", "", sd=S5B)],
+    1.5 + MAP_EH, needs=[ENC_MAE], note="подтверждение: рецепт с целями учителя, сиды 47-51")
+add("w26-cf-tes", 26, "H06",
+    [(COMBO, f"{TEACH_TR} --tag {TEACH}b"),
+     (_st[0], _st[1].replace(TEACH_CK, f"rl_arch/agents_online/{TEACH}b.pt")),
+     w25_eval(off_model("convnext_dqn", "ete"), "t3m_ete_shm", f"{SHIELD} --shield-err model", sd=S5B)],
+    1.5 + MAP_EH, needs=[ENC_MAE], note="подтверждение: рецепт с целями учителя и щитом, сиды 47-51")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
