@@ -524,7 +524,8 @@ def run_seed(seed, args, progress_cb=None):
                      f"{variant}: у него один выход на действие, брать хвост распределения не из чего")
     meta = getattr(agent, "_meta", {}) if agent is not None else {}
 
-    from offline_rl import state_channels
+    # fulltele (карты + телеметрия, tele_maps.py) — 15 каналов; остальные режимы как в offline_rl
+    from tele_maps import FULLTELE, fulltele_obs, obs_channels as state_channels
 
     def _wants_ctx(ag, var):
         # каналов наблюдения до контекста: 4 карты, у режима tele — TELE_CH (из meta агента)
@@ -554,19 +555,19 @@ def run_seed(seed, args, progress_cb=None):
     from offline_rl import apply_state_mode, loss_state, pde_desc, pde_meta
     state_mode = meta.get("state_mode", "full") if args.state_mode == "auto" else args.state_mode
     mapless = state_mode in ("blind", "loss", "tele")
-    if needs_agent and len({(getattr(ag_, "_meta", {}) or {}).get("state_mode", "full") == "tele"
+    if needs_agent and len({state_channels((getattr(ag_, "_meta", {}) or {}).get("state_mode", "full"))
                             for ag_, *_r in agents}) > 1:
-        sys.exit("комитет из агентов режима tele и агентов на картах не поддержан: разные каналы")
-    if needs_agent and (state_mode == "tele") != (meta.get("state_mode", "full") == "tele"):
+        sys.exit("комитет из агентов режима tele/fulltele и агентов на картах не поддержан: разные каналы")
+    if needs_agent and state_channels(state_mode) != state_channels(meta.get("state_mode", "full")):
         sys.exit(f"агент обучен в режиме {meta.get('state_mode', 'full')!r}, а запрошен {state_mode!r}: "
-                 "у tele другое число каналов")
+                 "у tele и fulltele другое число каналов")
     if args.no_state and needs_agent and not mapless:
         sys.exit(f"--no-state: агент обучен в режиме состояния {state_mode!r}, ему нужны карты")
-    if args.state_compare and state_mode in ("loss", "tele"):
+    if args.state_compare and state_mode in ("loss", "tele", FULLTELE):
         sys.exit(f"--state-compare не определён для режима {state_mode}: агент обучен на лоссах, не на картах")
     # tele считается и без агента (случайная/скриптовая политика с --state-mode tele): дешёвая
     # телеметрия кривой лосса пишется в результат (tele_log) для анализа застоев
-    want_tele = state_mode == "tele"
+    want_tele = state_mode in ("tele", FULLTELE)
     tele_log, tele_obs = [], None
     if state_mode == "rebuild" and not args.state_compare:
         sys.exit("--state-mode rebuild имеет смысл только с --state-compare: агент действует по первой "
@@ -607,7 +608,7 @@ def run_seed(seed, args, progress_cb=None):
     desc_vals = pde_desc(args.pde) if ctx_meta.get("pde_ctx") else None
     err_scale = float(pde_meta()[args.pde]["init_err"]) if ctx_meta.get("err_norm") == "init" else 1.0
     prev_loss_tot = None
-    from offline_rl import state_channels as _sch
+    _sch = state_channels
 
     def add_desc(st):
         if desc_vals is None:
@@ -1048,6 +1049,11 @@ def run_seed(seed, args, progress_cb=None):
                 maps = tele_obs[0]
                 if tele_obs[1] is not None:
                     prev_loss_tot = tele_obs[1]
+            elif state_mode == FULLTELE:
+                # карты и телеметрия последнего действия рядом (раскладка — tele_maps.py)
+                maps = fulltele_obs(true_maps, tele_obs[0], valid=tele_obs[1] is not None)
+                if tele_obs[1] is not None:
+                    prev_loss_tot = tele_obs[1]
             elif state_mode == "rebuild":
                 maps = true_maps          # агент действует по первой сборке
             else:
@@ -1208,13 +1214,14 @@ def build_parser():
                          "по пессимистичному прогнозу (агенту всегда есть из чего выбрать)")
     ap.add_argument("--state-mode", default="auto",
                     choices=["auto", "full", "blind", "level", "shape", "shuffle", "loss", "rebuild", "tasknorm",
-                             "tele"],
+                             "tele", "fulltele"],
                     help="Трек 3: что видит агент. auto — как при обучении (из чекпоинта); "
                          "blind — карты не строятся; level — только уровень потерь; shape — только "
                          "форма; shuffle — перемешанные пиксели; loss — обучающие лоссы вместо карт "
                          "(карты не строятся); tele — телеметрия обучения: лоссы, статистики кривой лосса "
                          "внутри действия, норма градиента, смещение весов (offline_rl.tele_state; "
-                         "без агента пишется в tele_log результата); rebuild — вторая сборка карт с другой случайностью "
+                         "без агента пишется в tele_log результата); fulltele — карты и телеметрия вместе "
+                         "(tele_maps.py: 4 карты + 10 каналов телеметрии + признак); rebuild — вторая сборка карт с другой случайностью "
                          "автокодировщика (с --state-compare). Явное значение — вмешательство на оценке")
     ap.add_argument("--state-compare", action="store_true",
                     help="Вместе с вмешательством: строить истинные карты и записывать, какое "
