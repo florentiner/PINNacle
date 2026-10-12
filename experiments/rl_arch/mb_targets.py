@@ -32,6 +32,9 @@ pde_meta.json, дальше — ошибка после предыдущего �
 строк; суррогат учится на всех цепочках таблицы (--mb-subdirs), включая отложенные цепочки тренера.
 
 Таблица и ансамбль строятся как в agent_combo.py (get_table, Models) и кэшируются в --mb-work.
+С --target-chains N --data-seed K у задачи тренера в таблице остаются N цепочек — те же, что у
+учителя agent_combo.py с теми же N и K, — и только их строки остаются в наборе тренера
+(target_subset; цепочки таблицы и тренера сопоставляются по содержимому, match_chains).
 
 Щит на оценке (online_eval_env.py --shield): тот же ансамбль перед каждым решением агента
 предсказывает исход каждого разрешённого действия в ЖИВОМ состоянии прогона и запрещает действия,
@@ -66,10 +69,10 @@ import surrogate as S  # noqa: E402
 FORMS = ("delta", "dlog")
 
 
-def build_model(names, subdirs="all", table="", members=5, work="agent_combo_work", quick=False, log=print):
-    """Таблица переходов и ансамбль суррогата на всех её цепочках — теми же функциями, что у
-    agent_combo.py (кэш в work общий). names — задачи набора тренера: если буфера задачи нет в
-    таблице, для неё добавляется строка описателя (суррогат тогда экстраполирует)."""
+def load_tab(names, subdirs="all", table="", work="agent_combo_work", log=print):
+    """Таблица переходов — той же функцией, что у agent_combo.py (get_table, кэш в work общий).
+    names — задачи набора тренера: если буфера задачи нет в таблице, для неё добавляется строка
+    описателя (суррогат тогда экстраполирует)."""
     import agent_combo as AC
     import offline_rl as O
     meta = O.pde_meta()
@@ -79,11 +82,25 @@ def build_model(names, subdirs="all", table="", members=5, work="agent_combo_wor
         AC.ensure_pde(tab, n, meta)
     if missing:
         log(f"модельные цели: буферов задач {missing} нет в таблице суррогата — он экстраполирует")
+    return tab
+
+
+def fit_model(tab, members=5, work="agent_combo_work", quick=False, log=print):
+    """Ансамбль суррогата на всех цепочках таблицы tab (agent_combo.Models, кэш в work). Имя файла
+    в кэше содержит отпечаток таблицы (число строк и crc столбцов PDE, CH, A, EPA, L, LN): урезанная
+    таблица (--target-chains) получает свой файл и с полной не путается, а при тех же N и K, что у
+    учителя agent_combo.py, отпечаток тот же — ансамбль учителя из кэша переиспользуется."""
+    import agent_combo as AC
     models = AC.Models(tab, work, members=members, quick=quick, seed=0, log=log)
     # surr_file — файл ансамбля в кэше: его читает щит оценки (online_eval_env.py --shield auto)
     return tab, models.get("full"), dict(surr_rows=int(len(tab["A"])), surr_sig=models.sig,
                                          surr_members=int(members),
                                          surr_file=os.path.abspath(models.path("full")))
+
+
+def build_model(names, subdirs="all", table="", members=5, work="agent_combo_work", quick=False, log=print):
+    """Таблица переходов (load_tab) и ансамбль суррогата на всех её цепочках (fit_model)."""
+    return fit_model(load_tab(names, subdirs, table, work, log), members, work, quick, log)
 
 
 def chain_states(data, tab, pidx, err_scale, budget=0):
@@ -208,10 +225,12 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
 
 def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma, h=3, lam=0.5,
                budget=0, smdp_scale=0.0, subdirs="all", table="", members=5, work="agent_combo_work",
-               quick=False, model=None, log=None):
+               quick=False, model=None, log=None, tab=None):
     """Цели Q_mb для обучающих строк набора тренера. names — задачи набора (в порядке data['PDE']),
     err_scale и init_err — по задачам, в единицах тренера (init_err=None: награда первого шага 0).
-    model=(tab, ens) — готовые таблица и ансамбль (тесты), иначе они строятся build_model.
+    model=(tab, ens) — готовые таблица и ансамбль (тесты), иначе они строятся build_model. tab —
+    готовая таблица вместо сборки по subdirs / table (урезанная target_subset: --target-chains),
+    ансамбль учится на ней.
     Возвращает (QMB float32 (N, 27), MBW bool (N,) — у каких строк цель есть, сводка)."""
     log = log or (lambda *a: print(*a, flush=True))
     t0 = time.time()
@@ -219,7 +238,9 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
         if k not in data:
             raise ValueError("модельные цели требуют набор, загруженный с --chain-fix")
     n = len(data["A"])
-    if model is None:
+    if model is None and tab is not None:
+        tab, ens, info = fit_model(tab, members, work, quick, log)
+    elif model is None:
         tab, ens, info = build_model(names, subdirs, table, members, work, quick, log)
     else:
         tab, ens = model
@@ -259,6 +280,162 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
         f"H={h}, lam={lam}, бюджет {budget or 'нет'}: средний Q_mb {info['q_mean']:.4f}, лучшего действия "
         f"{info['q_best_mean']:.4f}, разброс ансамбля {info['unc_log10']} порядка, {info['sec']} с")
     return QMB, MBW, info
+
+
+# --------------------------------------------------------------------------------------------
+# урезанный буфер цели (offline_rl.py --target-chains; у учителя — agent_combo.py --target-chains)
+# --------------------------------------------------------------------------------------------
+
+# Какую долю выбранных цепочек таблицы тренер ученика обязан найти в своих данных. Обе стороны
+# читают одни файлы одним загрузчиком, поэтому в норме находятся все; потери возможны, только если
+# наборы файлов разошлись (load_episodes молча пропускает нечитаемый файл, таблица в кэше или
+# --mb-table собрана из другого снимка буферов, тренер читает --data-dir). Немного потерянных
+# цепочек точку кривой «размер буфера» не портит (они в строке результата), а ниже 0.8 ученик
+# учился бы на заметно меньшем числе цепочек, чем учитель и суррогат, под той же подписью N —
+# соседние точки кривой отличаются по N вдвое-вчетверо, и такая точка была бы не на своём месте.
+TARGET_MIN_FOUND = 0.8
+
+
+def _chain_key(a, err):
+    """Содержимое цепочки одним ключом: действия и rmse+brmse после каждого (float32, как в дампе)."""
+    return np.asarray(a, dtype=np.int8).tobytes() + np.asarray(err, dtype=np.float32).tobytes()
+
+
+def table_chain_keys(tab, pi, budget=0):
+    """Цепочки задачи pi в таблице: (номера CH по возрастанию, ключи содержимого).
+    При заданном бюджете цепочка режется правилом тренера (episodes_to_arrays_chains): строка, на
+    которой расход достигает бюджета, последняя. Ошибка восстанавливается из LN: 10**log10(x)
+    отличается от x на порядки меньше шага float32, поэтому float32 от неё — исходное число дампа
+    бит в бит и на другой машине (пределы таблицы L_LO, L_HI тренеру накладываются те же)."""
+    rows = np.where(tab["PDE"] == pi)[0]
+    rows = rows[np.argsort(tab["CH"][rows], kind="stable")]
+    ch = tab["CH"][rows]
+    cut = np.r_[0, np.where(np.diff(ch) != 0)[0] + 1, len(rows)]
+    chs, keys = [], []
+    for s, e in zip(cut[:-1], cut[1:]):
+        r = rows[s:e]
+        if budget:
+            hit = np.where(tab["SPENT"][r] + S.EPOCHS[tab["A"][r]] >= budget)[0]
+            r = r[:hit[0] + 1] if len(hit) else r
+        chs.append(int(ch[s]))
+        keys.append(_chain_key(tab["A"][r], 10.0 ** tab["LN"][r]))
+    return np.array(chs, dtype=np.int64), keys
+
+
+def data_chain_keys(data, budget=0):
+    """Цепочки набора тренера (подряд идущие строки с одним EP): список (начало, конец, ключ,
+    ключ без последней строки). Ключ None — цепочка без начала (первая строка не шаг 0 с нулевым
+    расходом, или шаги идут не подряд): с цепочкой таблицы её не сопоставить. Второй ключ есть
+    только у цепочки, чья последняя строка выбирает бюджет (см. match_chains). Ошибки набора —
+    в исходных единицах (один УрЧП, err_scale = 1)."""
+    A, EP = np.asarray(data["A"], dtype=np.int64), np.asarray(data["EP"])
+    STEP, SPENT = np.asarray(data["STEP"], dtype=np.int64), np.asarray(data["SPENT"], dtype=np.int64)
+    err = 10.0 ** S._log(np.asarray(data["ERR"], dtype=np.float64))
+    cut = np.r_[0, np.where(EP[1:] != EP[:-1])[0] + 1, len(EP)]
+    out = []
+    for s, e in zip(cut[:-1], cut[1:]):
+        if SPENT[s] != 0 or not (STEP[s:e] == np.arange(e - s)).all():
+            out.append((int(s), int(e), None, None))
+            continue
+        last = bool(budget) and SPENT[e - 1] + S.EPOCHS[A[e - 1]] >= budget and e - s > 1
+        out.append((int(s), int(e), _chain_key(A[s:e], err[s:e]),
+                    _chain_key(A[s:e - 1], err[s:e - 1]) if last else None))
+    return out
+
+
+def match_chains(data, tab, pi, pick, budget=0):
+    """Какие строки набора тренера принадлежат цепочкам pick (номера CH) задачи pi таблицы.
+
+    У таблицы и у тренера своя нумерация цепочек: CH идёт подряд по цепочкам, от которых осталась
+    хоть одна строка, EP считает и пустые; тренер режет цепочку по бюджету эпох, таблица хранит её
+    целиком. Поэтому цепочки сопоставляются по содержимому — действия и ошибка после каждого, бит в
+    бит (оба пути читают дамп одним загрузчиком), у таблицы после той же обрезки по бюджету. Номера
+    файлов и порядок чтения в сопоставлении не участвуют: разошедшийся набор файлов даёт
+    ненайденные цепочки, а не чужие. Одинаковые по содержимому цепочки (повтор записи в буфере)
+    сопоставляются по счёту в порядке следования: какая из неразличимых останется, безразлично.
+
+    Единственное расхождение загрузчиков по строкам: у незаконченного хвоста файла с копией
+    next_state таблица теряет последний переход, а тренер его оставляет, если именно на нём
+    кончается бюджет. Такая цепочка тренера ищется второй раз без последней строки (tail_fix).
+
+    Цепочка тренера, которой в таблице нет вовсе (в том числе цепочка без начала), ОТБРАСЫВАЕТСЯ
+    (unmatched): суррогат и учитель её не видели. Возвращает (маска строк, сводка)."""
+    chs, keys = table_chain_keys(tab, pi, budget)
+    picked = np.isin(chs, np.asarray(pick))
+    free = {}
+    for i in range(len(keys) - 1, -1, -1):
+        free.setdefault(keys[i], []).append(i)          # pop() отдаёт цепочки в порядке таблицы
+    chains = data_chain_keys(data, budget)
+    pair, fixed = [None] * len(chains), [False] * len(chains)
+    st = dict(data_before=len(chains), data=0, unmatched=0, no_start=0, not_picked=0, tail_fix=0,
+              missing=0, rows_before=int(len(data["A"])), rows=0)
+    for alt in (False, True):                           # сперва точные совпадения, потом без хвоста
+        for k, (s, e, key, key2) in enumerate(chains):
+            q = free.get(key2 if alt else key) if pair[k] is None else None
+            if q:
+                pair[k], fixed[k] = q.pop(), alt
+    keep = np.zeros(len(data["A"]), dtype=bool)
+    for (s, e, key, _), i, fx in zip(chains, pair, fixed):
+        if i is None:
+            st["unmatched"] += 1
+            st["no_start"] += int(key is None)
+        elif not picked[i]:
+            st["not_picked"] += 1
+        else:
+            keep[s:e] = True
+            st["data"] += 1
+            st["tail_fix"] += int(fx)                   # из оставленных
+    st["missing"] = int(picked.sum()) - st["data"]
+    st["rows"] = int(keep.sum())
+    return keep, st
+
+
+def target_subset(data, name, n, seed, budget=0, subdirs="all", table="", work="agent_combo_work", log=None):
+    """offline_rl.py --target-chains N --data-seed K: набор тренера и таблица суррогата, в которых
+    у задачи name остались одни и те же N записанных цепочек — те, что оставляет
+    agent_combo.py --target-chains N --data-seed K (выбор делает общая agent_combo.target_chain_rows
+    на полной таблице; остальные задачи таблицы не трогаются). Таблица — та же, что у модельных
+    целей (subdirs, table, work — это --mb-subdirs, --mb-table, --mb-work). Строки набора
+    отбираются match_chains; несопоставленные цепочки тренера отбрасываются. Если найдено меньше
+    TARGET_MIN_FOUND выбранных цепочек — отказ. Возвращает (набор, урезанная таблица, сводка)."""
+    import agent_combo as AC
+    log = log or (lambda *a: print(*a, flush=True))
+    for k in ("EP", "STEP", "SPENT", "ERR"):
+        if k not in data:
+            raise ValueError("--target-chains требует набор, загруженный с --chain-fix")
+    if "PDE" in data:
+        raise ValueError("--target-chains: набор из нескольких УрЧП не поддержан (цель — один буфер)")
+    tab = load_tab([name], subdirs, table, work, log)
+    pi = tab["NAMES"].index(name)
+    n_buf = int(len(np.unique(tab["CH"][tab["PDE"] == pi])))
+    if not n_buf:
+        raise SystemExit(f"--target-chains: в таблице суррогата нет цепочек задачи {name} (--mb-subdirs или "
+                         "--mb-table без её буфера): выбирать не из чего")
+    keep_tab, pick = AC.target_chain_rows(tab, pi, n, seed)
+    if int(n) > n_buf:
+        log(f"ВНИМАНИЕ: --target-chains {n} больше числа цепочек задачи в буфере ({n_buf}): остаются все "
+            "(как у agent_combo.py), точка кривой — полный буфер")
+    keep, st = match_chains(data, tab, pi, pick, budget)
+    small = AC.subset(tab, keep_tab)
+    info = dict(requested=int(n), data_seed=int(seed), buffer=n_buf, table=int(len(pick)),
+                table_rows=int((small["PDE"] == pi).sum()), surr_rows=int(len(small["A"])),
+                **st, unmatched_action="dropped", found=round(st["data"] / max(1, len(pick)), 4))
+    log(f"урезанный буфер цели {name}: цепочек в буфере {n_buf}, запрошено {n} (сид данных {seed}), в таблице "
+        f"суррогата оставлено {info['table']} ({info['table_rows']} переходов; вся таблица {info['surr_rows']} из "
+        f"{len(tab['A'])}); у ученика было {st['data_before']} цепочек ({st['rows_before']} переходов), оставлено "
+        f"{st['data']} ({st['rows']} переходов), не выбраны {st['not_picked']}, не сопоставлены с таблицей и "
+        f"отброшены {st['unmatched']} (из них без начала {st['no_start']}), выбранных цепочек таблицы не найдено "
+        f"{st['missing']}, найдено без обрезанного хвоста {st['tail_fix']}")
+    if st["data"] < TARGET_MIN_FOUND * len(pick):
+        raise SystemExit(f"--target-chains: в данных ученика найдено {st['data']} из {len(pick)} выбранных цепочек "
+                         f"таблицы суррогата — меньше {TARGET_MIN_FOUND:.0%}. Таблица и буфер ученика собраны из "
+                         "разных файлов (--data-dir, --mb-table, устаревший кэш в --mb-work, непрочитанные файлы): "
+                         "учитель, суррогат и ученик учились бы на разных данных")
+    n_rows = len(data["A"])
+    out = {k: (v[keep] if isinstance(v, np.ndarray) and len(v) == n_rows else v) for k, v in data.items()}
+    if "STATS" in out:
+        out["STATS"] = dict(out["STATS"], target_chains=dict(info))
+    return out, small, info
 
 
 # --------------------------------------------------------------------------------------------

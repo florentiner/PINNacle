@@ -56,7 +56,9 @@ log10((rmse+brmse)/E0)/3+1) + 6 чисел описателя задачи (offl
 Данные
   --pde                     задача-цель (имя из pde_meta.json; pb2d и ns2d — сокращения)
   --subdirs                 папки буферов (all | solvable | список через запятую)
-  --target-chains N         только N случайных записанных цепочек цели (кривая «размер буфера»)
+  --target-chains N         только N случайных записанных цепочек цели (кривая «размер буфера»);
+                            какие именно — задаёт --data-seed K. Ученик на картах берёт те же цепочки:
+                            offline_rl.py --target-chains N --data-seed K
   --target-only             без других задач
   --extra-data PATH_OR_HF   JSON новых цепочек цели (формат ниже), путь локальный или в HF
                             (danil-e/pinnacle-optuna-db); несколько — через запятую
@@ -257,6 +259,19 @@ def subset(tab, keep):
     for k in ROWKEYS:
         out[k] = tab[k][keep]
     return out
+
+
+def target_chain_rows(tab, pi, n, seed):
+    """--target-chains N --data-seed K: N случайных записанных цепочек задачи pi, остальные задачи
+    не трогаются. Возвращает (маска строк таблицы, номера CH выбранных цепочек). Единственное место
+    выбора: его же зовёт тренер ученика на картах (mb_targets.target_subset, offline_rl.py
+    --target-chains), поэтому при тех же N и K учитель, суррогат и ученик видят одни цепочки.
+    Выбор зависит только от числа цепочек задачи в таблице и их порядка (choice берёт позиции в
+    отсортированном списке CH), а не от самих номеров: состав остальных папок таблицы на него не
+    влияет. N больше числа цепочек — остаются все."""
+    chs = np.unique(tab["CH"][tab["PDE"] == pi])
+    pick = np.random.default_rng(seed).choice(chs, min(int(n), len(chs)), replace=False)
+    return (tab["PDE"] != pi) | np.isin(tab["CH"], pick), pick
 
 
 def ensure_pde(tab, name, meta):
@@ -1130,7 +1145,7 @@ def build_parser():
     g.add_argument("--extra-err-scale", type=float, default=0.0,
                    help="(rmse+brmse)/l2re для записей без err и без итоговых rmse/brmse")
     g.add_argument("--table", default="", help="готовая таблица npz (локально или в HF) вместо сборки")
-    g.add_argument("--data-seed", type=int, default=0)
+    g.add_argument("--data-seed", type=int, default=0, help="сид выбора цепочек для --target-chains")
     g = ap.add_argument_group("приёмы")
     g.add_argument("--mbpo-h", type=int, default=0)
     g.add_argument("--mopo-lam", type=float, default=0.0)
@@ -1235,9 +1250,7 @@ def run(args, log=None):
     if drop_old:
         keep &= tab["PDE"] != pi
     if args.target_chains > 0 and not drop_old:
-        chs = np.unique(tab["CH"][tab["PDE"] == pi])
-        pick = np.random.default_rng(args.data_seed).choice(chs, min(args.target_chains, len(chs)), replace=False)
-        keep &= (tab["PDE"] != pi) | np.isin(tab["CH"], pick)
+        keep &= target_chain_rows(tab, pi, args.target_chains, args.data_seed)[0]
     tab = subset(tab, keep)
     extra_info = None
     if args.extra_data:
@@ -1294,7 +1307,7 @@ def run(args, log=None):
         "mbpo_h", "mopo_lam", "cql_alpha", "iql_tau", "guide_frac", "ens", "ens_min", "utd", "mve", "mve_n",
         "mve_frac", "distill_top", "distill_w", "distill_margin", "pani_w", "pani_pen", "mask",
         "mask_schedule", "steps", "batch", "real_ratio", "target_frac", "seed", "target_chains",
-        "target_only", "extra_data", "extra_only_target")}
+        "data_seed", "target_only", "extra_data", "extra_only_target")}
     meta = dict(ctx_kmax=KMAX, ctx_budget=BUDGET, ctx_err="err", err_norm="init", pde_ctx=True,
                 scalar_ctx=True, state_mode="loss", mask=[int(i) for i in np.where(~allowed)[0]],
                 gamma=float(args.gamma), keep_opt=False, keep_opt_mode=None, lbfgs_tol=None,

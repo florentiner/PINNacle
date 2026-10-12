@@ -1054,6 +1054,23 @@ add("w26-cf-tes", 26, "H06",
      w25_eval(off_model("convnext_dqn", "ete"), "t3m_ete_shm", f"{SHIELD} --shield-err model", sd=S5B)],
     1.5 + MAP_EH, needs=[ENC_MAE], note="подтверждение: рецепт с целями учителя и щитом, сиды 47-51")
 
+# ---------------------------------------------------------------- волна 27
+# Кривая по размеру буфера: рецепт с целями учителя на половине, четверти, восьмой и шестнадцатой
+# части цепочек своего уравнения. Урезание согласовано: те же цепочки (--target-chains, --data-seed)
+# видят суррогат среды, учитель и ученик на картах; буферы остальных 21 уравнения не трогаются.
+# Не урезан только предобученный кодировщик: он учился без разметки на картах всех буферов.
+N_CHAINS = {"poissonboltzmann2d": 528, "ns2d_liddriven": 1075}.get(PDE, 0)
+for _div in ((2, 4, 8, 16) if N_CHAINS else ()):
+    _n = N_CHAINS // _div
+    _tt = f"{TEACH}_c{_n}"
+    _mt = f"ete_c{_n}"
+    add(f"w27-buf-{_div}", 27, "H06",
+        [(COMBO, f"{TEACH_TR} --target-chains {_n} --data-seed 0 --tag {_tt}"),
+         (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --teacher-from rl_arch/agents_online/{_tt}.pt "
+                   f"--teacher-w 0.5 --target-chains {_n} --data-seed 0 --seeds 1 --model-tag {_mt}"),
+         w25_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}_dep2", "")],
+        1.5 + MAP_EH, needs=[ENC_MAE], note=f"кривая буфера: {_n} цепочек цели из {N_CHAINS} (1/{_div})")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

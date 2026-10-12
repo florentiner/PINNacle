@@ -34,6 +34,8 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
     --pani-w W --pani-sigma S       шум на нормированных картах, штраф за изменение вектора Q
     --distill-top P --distill-w W   отступ DQfD только на переходах лучших P% цепочек
     --mask-schedule                 первую треть эпох max в цели видит грубую сетку действий
+    --target-chains N --data-seed K кривая «размер буфера»: ученик и суррогат — на тех же N цепочках цели,
+                                    что учитель agent_combo.py с теми же N и K (mb_targets.target_subset)
 Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
@@ -2303,6 +2305,16 @@ def main():
                     help="Папки буфера, исключаемые из смеси (задача проверки переноса)")
     ap.add_argument("--per-pde-files", type=int, default=0,
                     help="Не больше стольких файлов буфера на УрЧП (0 = все): память и время")
+    ap.add_argument("--target-chains", type=int, default=0,
+                    help="Кривая «размер буфера»: оставить N случайных записанных цепочек задачи --subdir "
+                         "(0 = все) — те же, что оставляет agent_combo.py --target-chains N --data-seed K. На них "
+                         "учится суррогат модельных целей (--mb-aux, он же щит оценки; остальные задачи его "
+                         "таблицы не трогаются), и только их переходы идут ученику (TD, --mb-aux, --teacher-w, "
+                         "отложенные 20%%). Выбор делается по таблице суррогата (--mb-subdirs, --mb-table, "
+                         "--mb-work; учителю с --table нужна та же таблица). Нужен --chain-fix; без --subdirs, "
+                         "--extra-buffers и --per-pde-files")
+    ap.add_argument("--data-seed", type=int, default=0,
+                    help="Сид выбора цепочек для --target-chains (как --data-seed у agent_combo.py)")
     ap.add_argument("--err-norm", default="init", choices=["init", "none"],
                     help="Смесь УрЧП: init — ошибки в долях ошибки необученной сети; none — как есть")
     ap.add_argument("--pde-ctx", action="store_true",
@@ -2413,6 +2425,19 @@ def main():
     if args.teacher_w > 0 and (args.pbrs or args.extra_buffers):
         ap.error("--teacher-w несовместим с --pbrs (цель учителя считается в исходной награде) и с "
                  "--extra-buffers (у онлайновых цепочек своя среда и бюджет)")
+    if args.target_chains < 0:
+        ap.error("--target-chains >= 0")
+    if args.target_chains > 0:
+        if args.subdirs:
+            ap.error("--target-chains несовместим с --subdirs: цель — один буфер (--subdir), а в смеси УрЧП "
+                     "задачи-цели нет")
+        if not args.chain_fix:
+            ap.error("--target-chains требует --chain-fix: без границ цепочек выбирать нечего")
+        if args.extra_buffers:
+            ap.error("--target-chains несовместим с --extra-buffers: онлайновых цепочек нет в таблице "
+                     "суррогата, размер буфера перестал бы быть N")
+        if args.per_pde_files:
+            ap.error("--target-chains несовместим с --per-pde-files: буфер урезается по цепочкам, а не по файлам")
     if args.mb_aux > 0:
         if args.mb_h < 1 or args.mb_lam < 0 or args.mb_members < 1:
             ap.error("--mb-h >= 1, --mb-lam >= 0, --mb-members >= 1")
@@ -2472,7 +2497,8 @@ def main():
         # фактически загрузилось (очередь ссылается на него заранее)
         args.subdir = "multi"
     else:
-        # --per-pde-files действует и на один УрЧП: кривая «сколько данных буфера нужно»
+        # --per-pde-files действует и на один УрЧП, но режет по файлам и только данные ученика;
+        # для кривой «сколько данных буфера нужно» — --target-chains (ниже)
         episodes = load_episodes(args.data_dir, args.subdir, max_files=args.per_pde_files)
         data = episodes_to_arrays(episodes, fix_next_state=args.fix_next_state,
                                   chain_fix=args.chain_fix, reward_form=args.reward_form,
@@ -2483,6 +2509,17 @@ def main():
         data = merge_online_buffers(
             data, [x.strip() for x in args.extra_buffers.split(",") if x.strip()],
             reward_form=args.reward_form, init_err=args.init_err, budget=args.episode_budget)
+    tc_info, tc_tab = {}, None
+    if args.target_chains > 0:
+        # до всего остального: цели учителя, контекст, модельные цели и отложенная часть считаются
+        # уже на оставленных цепочках
+        import mb_targets as MB
+        if args.mb_table:
+            print("ВНИМАНИЕ: --target-chains с --mb-table: цепочки совпадут с цепочками учителя, только если "
+                  "agent_combo.py получил ту же таблицу (--table)", flush=True)
+        data, tc_tab, tc_info = MB.target_subset(
+            data, subdir_to_pde(args.subdir), args.target_chains, args.data_seed,
+            budget=int(args.episode_budget), subdirs=args.mb_subdirs, table=args.mb_table, work=args.mb_work)
     if args.scalar_ctx and args.variant in ("cnx_bcq", "cnx_smdp"):
         ap.error("--scalar-ctx не поддержан для cnx_bcq и cnx_smdp")
     if args.scalar_ctx and not args.chain_fix:
@@ -2556,8 +2593,11 @@ def main():
                pani_sigma=float(args.pani_sigma), distill_top=float(args.distill_top),
                distill_w=float(args.distill_w), mask_schedule=bool(args.mask_schedule),
                mask_coarse_lr=int(args.mask_coarse_lr), teacher_w=float(args.teacher_w),
-               teacher_from=os.path.basename(args.teacher_from))
+               teacher_from=os.path.basename(args.teacher_from),
+               target_chains=int(args.target_chains), data_seed=int(args.data_seed))
     run_meta.update(arm)
+    if tc_info:
+        run_meta["target_data"] = dict(tc_info)         # сколько цепочек цели осталось и где
     mb_info, te_info = {}, {}
     if args.mb_aux > 0 or args.teacher_w > 0:
         # модельные цели Q_mb(s, .) для обучающих переходов и цели учителя: один расчёт на все сиды
@@ -2581,7 +2621,7 @@ def main():
             gamma=float(GAMMA), h=args.mb_h, lam=args.mb_lam, budget=int(args.episode_budget),
             smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0),
             subdirs=args.mb_subdirs, table=args.mb_table, members=args.mb_members,
-            work=args.mb_work, quick=bool(args.smoke))
+            work=args.mb_work, quick=bool(args.smoke), tab=tc_tab)
         run_meta["mb"] = dict(mb_info)
     args._teacher_soft_mask = []
     if args.teacher_w > 0:
@@ -2614,6 +2654,7 @@ def main():
                        model_tag=args.model_tag, state_mode=args.state_mode,
                        scalar_ctx=bool(args.scalar_ctx), ctx_err=bool(args.ctx_err),
                        encoder=getattr(net, "enc_kind", "convnext"), ens=int(getattr(net, "ens", 1)), **arm,
+                       **{"tc_" + k: v for k, v in tc_info.items()},
                        **{"mb_" + k: v for k, v in mb_info.items()},
                        **{"teacher_" + k: v for k, v in te_info.items()},
                        **getattr(net, "extra", {}), **m, **fq)
