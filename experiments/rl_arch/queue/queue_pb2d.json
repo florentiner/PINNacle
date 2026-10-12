@@ -6551,6 +6551,74 @@
    ]
   },
   {
+   "id": "pb2d-w25-shm",
+   "wave": 25,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт волны 24 со щитом по прогнозу модели (одна оценка)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --seeds 1 --model-tag esh"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_esh_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --shield auto --shield-lam 0.5 --shield-keep 3 --shield-err model --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_esh_shm"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w25-te1",
+   "wave": 25,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт волны 24 с целями учителя MBPO, без щита (одна оценка)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --tag qpb2d_teach_mbpo"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo.pt --teacher-w 0.5 --seeds 1 --model-tag ete"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_dep2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w25-te2",
+   "wave": 25,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт волны 24 с целями учителя MBPO и щитом (одна оценка)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --tag qpb2d_teach_mbpob"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpob.pt --teacher-w 0.5 --seeds 1 --model-tag ete"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --shield auto --shield-lam 0.5 --shield-keep 3 --shield-err model --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_shm"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

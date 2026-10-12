@@ -1022,6 +1022,23 @@ add("w25-te", 25, "H06",
     1.5 + 2 * MAP_EH, needs=[ENC_MAE],
     note="рецепт волны 24 с целями учителя MBPO: без щита и со щитом по прогнозу модели")
 
+# те же прогоны по одной оценке на кернел: остаток недельной квоты раздроблен по аккаунтам, и задача с
+# двумя оценками ns2d (до 11 часов по оценке планировщика) не помещается ни в один
+_st = (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --teacher-from {TEACH_CK} --teacher-w 0.5 "
+                "--seeds 1 --model-tag ete")
+add("w25-shm", 25, "H06",
+    [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --seeds 1 --model-tag esh"),
+     w25_eval(off_model("convnext_dqn", "esh"), "t3m_esh_shm", f"{SHIELD} --shield-err model")],
+    1.0 + MAP_EH, needs=[ENC_MAE], note="рецепт волны 24 со щитом по прогнозу модели (одна оценка)")
+add("w25-te1", 25, "H06",
+    [(COMBO, f"{TEACH_TR} --tag {TEACH}"), _st, w25_eval(off_model("convnext_dqn", "ete"), "t3m_ete_dep2", "")],
+    1.5 + MAP_EH, needs=[ENC_MAE], note="рецепт волны 24 с целями учителя MBPO, без щита (одна оценка)")
+add("w25-te2", 25, "H06",
+    [(COMBO, f"{TEACH_TR} --tag {TEACH}b"),
+     (_st[0], _st[1].replace(TEACH_CK, f"rl_arch/agents_online/{TEACH}b.pt")),
+     w25_eval(off_model("convnext_dqn", "ete"), "t3m_ete_shm", f"{SHIELD} --shield-err model")],
+    1.5 + MAP_EH, needs=[ENC_MAE], note="рецепт волны 24 с целями учителя MBPO и щитом (одна оценка)")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
