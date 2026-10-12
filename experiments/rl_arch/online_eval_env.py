@@ -803,8 +803,9 @@ def run_seed(seed, args, progress_cb=None):
                 break
         loss_before = bd["prev_loss"]
         snap = None
-        if args.guard_rollback and use_agent and loss_before is not None:
-            # страж: снимок весов до действия агента
+        if args.guard_rollback and (use_agent or args.policy == "random") and loss_before is not None:
+            # страж: снимок весов до действия агента (или случайной политики — контроль: что дают
+            # сами правила развёртывания без агента)
             snap = {k: v.detach().clone() for k, v in model.net.state_dict().items()}
         while True:
             opt_name, lr, epochs = ALL_ACTIONS[a]
@@ -1301,8 +1302,8 @@ def main():
         sys.exit("--state-every должен быть не меньше 1")
     if any(g >= 27 for g in parse_chain(args.guide)):
         sys.exit("--guide: проводник сравнивается по Q агента, поэтому состоит только из 27 действий агента")
-    if args.guard_rollback and not uses_agent:
-        sys.exit("--guard-rollback действует только на действия агента")
+    if args.guard_rollback and not uses_agent and args.policy != "random":
+        sys.exit("--guard-rollback действует только на действия агента и случайной политики")
     if args.policy in ("bandit", "scout") and not args.tag:
         sys.exit("--policy bandit/scout требует --tag")
     if args.policy == "scout":

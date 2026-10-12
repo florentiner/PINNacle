@@ -928,15 +928,48 @@ MAP_COMBOS = (
     ("frzd", f"--encoder resnet --encoder-init {ENC_CON} --freeze-encoder", (ENC_CON,), False,
      "замороженный кодировщик волны 21: только оценка с правилами развёртывания"),
 )
-for nm, flags, needs, plain, note in MAP_COMBOS:
+MAP_EH = 3.5 if NS2D else 2.0        # мягкий предел одной оценки на 5 сидах: сид ns2d около 30 минут
+
+
+def combo_job(nm, flags, needs, plain, note, wave=22):
     model = off_model("convnext_dqn", f"c{nm}")
     steps = [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {flags} --seeds 1 --model-tag c{nm}")]
     if plain:
         steps.append((EVAL, f"--policy agent --model-file {model} --stop-on-noop {KEEPS} "
-                            + t3ev(f"t3m_c{nm}", S5, hours=2.0)))
+                            + t3ev(f"t3m_c{nm}", S5, hours=MAP_EH)))
     steps.append((EVAL, f"--policy agent --model-file {model} --stop-on-noop {DEPLOY} {KEEPS} "
-                        + t3ev(f"t3m_c{nm}_dep", S5, hours=2.0)))
-    add(f"w22-c-{nm}", 22, "H06", steps, 4.0 if plain else 2.5, needs=needs, note=note)
+                        + t3ev(f"t3m_c{nm}_dep", S5, hours=MAP_EH)))
+    add(f"w{wave}-c-{nm}", wave, "H06", steps, (1.0 + MAP_EH) * (2 if plain else 1), needs=needs, note=note)
+
+
+for nm, flags, needs, plain, note in MAP_COMBOS:
+    combo_job(nm, flags, needs, plain, note)
+
+# ---------------------------------------------------------------- волна 23
+# Итог волны 22 на pb2d (медианы 5 сидов): замороженный кодировщик + правила развёртывания 0.0090,
+# модельные цели + правила 0.0163, модельные цели + предобучение 0.0179 без правил (все сиды в
+# 0.013-0.027); модельные цели с замороженным кодировщиком 0.178 и с весом 2 — 0.15 (хуже частей).
+# У лидера после третьего шага почти все действия исполняет страж (откат и LBFGS:1:500), поэтому
+# нужны контроли: те же правила у базы и у случайной политики, и самая частая цепочка лидера без
+# агента. Второй круг комбинаций: к победителям добавлены сглаживание и аугментация.
+PANI_D4 = "--pani-w 0.5 --pani-sigma 0.1 --aug d4"
+for nm, flags, needs, plain, note in (
+        ("based", "", (), False, "контроль: база волны 21 с правилами развёртывания"),
+        ("mbmaepd", f"--encoder resnet --encoder-init {ENC_MAE} {MB} {PANI_D4}", (ENC_MAE,), True,
+         "модельные цели + предобучение + сглаживание + аугментация"),
+        ("frzpd", f"--encoder resnet --encoder-init {ENC_CON} --freeze-encoder {PANI_D4}", (ENC_CON,), False,
+         "замороженный кодировщик + сглаживание + аугментация, оценка с правилами развёртывания")):
+    combo_job(nm, flags, needs, plain, note, wave=23)
+add("w23-rnd-dep", 23, "H06",
+    [(EVAL, f"--policy random --no-state --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 "
+            f"{KEEPS} " + t3ev("t3m_rnd_dep", S5, hours=MAP_EH))],
+    1.0 + MAP_EH, note="контроль: случайная политика со стражем и маской (без Adam 1e-2 и без PSO: пустого "
+                       "действия-остановки у случайной политики нет), без агента и без карт")
+MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
+add("w23-modal", 23, "H06",
+    [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
+            + t3ev("t3m_modal", S5, hours=MAP_EH))],
+    1.0 + MAP_EH, note="контроль: самая частая цепочка лидера волны 22 на pb2d как статическая, без агента")
 
 # ---------------------------------------------------------------- развёртывание лидеров
 # Лидеры треков 1-2 на ns2d в среде без сбросов оптимизатора и со стражем, без нового обучения:

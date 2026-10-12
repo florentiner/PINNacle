@@ -6256,7 +6256,7 @@
    "id": "pb2d-w22-c-mbfrz",
    "wave": 22,
    "group": "H06",
-   "hours": 4.0,
+   "hours": 6.0,
    "needs": [
     "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt"
    ],
@@ -6280,7 +6280,7 @@
    "id": "pb2d-w22-c-mbmae",
    "wave": 22,
    "group": "H06",
-   "hours": 4.0,
+   "hours": 6.0,
    "needs": [
     "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
    ],
@@ -6304,7 +6304,7 @@
    "id": "pb2d-w22-c-mb2",
    "wave": 22,
    "group": "H06",
-   "hours": 4.0,
+   "hours": 6.0,
    "needs": [],
    "note": "модельные цели с весом 2 вместо 0.5",
    "steps": [
@@ -6326,7 +6326,7 @@
    "id": "pb2d-w22-c-mbd",
    "wave": 22,
    "group": "H06",
-   "hours": 2.5,
+   "hours": 3.0,
    "needs": [],
    "note": "модельные цели волны 21: только оценка с правилами развёртывания",
    "steps": [
@@ -6344,7 +6344,7 @@
    "id": "pb2d-w22-c-frzd",
    "wave": 22,
    "group": "H06",
-   "hours": 2.5,
+   "hours": 3.0,
    "needs": [
     "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt"
    ],
@@ -6357,6 +6357,96 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cfrzd_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cfrzd_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w23-c-based",
+   "wave": 23,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [],
+   "note": "контроль: база волны 21 с правилами развёртывания",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --seeds 1 --model-tag cbased"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cbased_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cbased_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w23-c-mbmaepd",
+   "wave": 23,
+   "group": "H06",
+   "hours": 6.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "модельные цели + предобучение + сглаживание + аугментация",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --pani-w 0.5 --pani-sigma 0.1 --aug d4 --seeds 1 --model-tag cmbmaepd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbmaepd_seed1.pt --stop-on-noop --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbmaepd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cmbmaepd_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmbmaepd_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w23-c-frzpd",
+   "wave": 23,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt"
+   ],
+   "note": "замороженный кодировщик + сглаживание + аугментация, оценка с правилами развёртывания",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --freeze-encoder --pani-w 0.5 --pani-sigma 0.1 --aug d4 --seeds 1 --model-tag cfrzpd"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_cfrzpd_seed1.pt --stop-on-noop --mask adam:0.01,pso:0.001,pso:0.0001 --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cfrzpd_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w23-rnd-dep",
+   "wave": 23,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [],
+   "note": "контроль: случайная политика со стражем и маской (без Adam 1e-2 и без PSO: пустого действия-остановки у случайной политики нет), без агента и без карт",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy random --no-state --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_rnd_dep"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w23-modal",
+   "wave": 23,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [],
+   "note": "контроль: самая частая цепочка лидера волны 22 на pb2d как статическая, без агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy script --script Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500 --script-tail repeat --no-state --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_modal"
     }
    ]
   },
