@@ -11371,6 +11371,38 @@
    ]
   },
   {
+   "id": "w35-ft2-tr",
+   "wave": 35,
+   "group": "H06",
+   "hours": 9.8,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "дообучение онлайн (RLPD) от лучшего офлайнового агента, все 27 действий",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_liddriven --hours 9 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir ns2d_liddriven --offline-fix --offline-reward delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --tag q_ft2_tbq_s42"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-ev",
+   "wave": 35,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/q_ft2_tbq_s42.pt"
+   ],
+   "note": "оценка: дообучение онлайн от лучшего офлайнового агента, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ft2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
    "id": "w36-one-m1",
    "wave": 36,
    "group": "H06",
