@@ -1226,6 +1226,55 @@ CNX_VARIANTS = ("convnext_dqn", "cnx_cql", "cnx_cql_qr", "cnx_dueling",
 NO_ENS_VARIANTS = ("cnn_iql", "cnn_vqc", "cnx_smdp")     # своя V-голова, квантовая голова, свой ансамбль
 # варианты с простой линейной головой на 27 выходов: только им --hlg меняет голову на бины
 HLG_VARIANTS = ("cnn_dqn", "convnext_dqn", "cnn_cql", "cnx_cql")
+# варианты, которым --two-nets заменяет одну сеть двумя, как у агента статьи (обычный TD-лосс по
+# скалярному Q на 27 действий; у остальных своя голова или свой лосс)
+TWO_NETS_VARIANTS = ("convnext_dqn", "cnx_cql")
+TWO_NETS_CENTER = ("max", "mean")
+TWO_NETS_HEAD = ("linear", "dueling")
+
+
+def compose_two_nets(q_opt, a_lr, a_ep, center="max"):
+    """Совместное Q по 27 действиям из выходов двух сетей (--two-nets), a = opt*9 + lr*3 + ep:
+        Q27[o, l, e] = Q_opt[o] + (A_lr[o, l] - c_l A_lr[o, .]) + (A_ep[o, e] - c_e A_ep[o, .]),
+    q_opt — (B, 3) сети A, a_lr и a_ep — (B, 3, 3) сети B (оптимизатор, значение параметра).
+    center='max' (c = max): обе добавки <= 0 и равны нулю на лучшем значении параметра, поэтому
+    Q_opt[o] = max_{l,e} Q27[o, l, e], а жадное совместное действие совпадает с иерархическим
+    выбором статьи — оптимизатор по сети A, затем шаг и число эпох независимо по сети B.
+    center='mean' (c = среднее, как в дуэлинговой голове): Q_opt[o] — среднее Q27 по параметрам
+    оптимизатора; шаг и эпохи по-прежнему выбирает сеть B, но оптимизатор жадного совместного
+    действия — argmax_o [Q_opt[o] + размах A_lr[o] + размах A_ep[o]], то есть сеть A одна его уже
+    не определяет."""
+    if center == "max":
+        a_lr = a_lr - a_lr.amax(2, keepdim=True)
+        a_ep = a_ep - a_ep.amax(2, keepdim=True)
+    elif center == "mean":
+        a_lr = a_lr - a_lr.mean(2, keepdim=True)
+        a_ep = a_ep - a_ep.mean(2, keepdim=True)
+    else:
+        raise ValueError(f"центрирование двух сетей {center!r}: выбор {TWO_NETS_CENTER}")
+    q = q_opt[:, :, None, None] + a_lr[:, :, :, None] + a_ep[:, :, None, :]
+    return q.reshape(q.shape[0], N_ACTIONS)
+
+
+class ParamHeads(nn.Module):
+    """Головы сети параметров (--two-nets; DQN_params статьи): у каждого из трёх оптимизаторов своя
+    голова на три шага обучения и своя на три длительности. forward -> (A_lr, A_ep), обе (B, 3, 3).
+    kind='linear' — линейный слой, как голова лучшего рецепта; 'dueling' — поток преимуществ
+    дуэлинговой головы статьи (Linear-ReLU-Linear). Поток ценности той головы здесь не создаётся:
+    в compose_two_nets он сокращается при любом центрировании и остался бы без градиента."""
+
+    def __init__(self, in_dim, kind="linear"):
+        super().__init__()
+
+        def mk():
+            if kind == "dueling":
+                return nn.Sequential(nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, 3))
+            return nn.Linear(in_dim, 3)
+        self.lr = nn.ModuleList([mk() for _ in range(3)])
+        self.ep = nn.ModuleList([mk() for _ in range(3)])
+
+    def forward(self, z):
+        return (torch.stack([h(z) for h in self.lr], 1), torch.stack([h(z) for h in self.ep], 1))
 
 
 class QNet:
@@ -1239,9 +1288,16 @@ class QNet:
     линейная голова отдаёт 27 x bins логитов, q_online/q_target — (B, A, bins), скаляр Q —
     матожидание по центрам бинов (scalar, q_scalar; сами бины — в self._hlg, его ставит тренер и
     online_eval_env.load_agent по полю hl_gauss чекпоинта).
+    two_nets — две отдельные сети, как у агента статьи (--two-nets; RL/rl_utils/DQN_classes.py):
+    сеть A — энкодер и голова на 3 оптимизатора (model[0], model[1]), сеть B — свой энкодер того же
+    вида и головы шага и длительности у каждого оптимизатора (model[2], model[3] — ParamHeads).
+    Наружу (q_online, q_target, q_heads, q_scalar) — совместное Q по 27 действиям из
+    compose_two_nets с центрированием two_center; выходы сетей по отдельности — q_parts, выбор
+    «оптимизатор, затем параметры» — hier_action. two_head — вид голов (TWO_NETS_HEAD).
     При значениях по умолчанию сеть и имена параметров прежние."""
 
-    def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1, bins=0):
+    def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1, bins=0,
+                 two_nets=False, two_center="max", two_head="linear"):
         import torch
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
@@ -1265,8 +1321,29 @@ class QNet:
         self.nq = n_quantiles
         self.bins = max(0, int(bins or 0))
         self._hlg = None
+        self.two_nets = bool(two_nets)
+        self.two_center, self.two_head = two_center, two_head
+        self._enc_idx = (0, 2) if self.two_nets else (0,)      # где в model лежат энкодеры
+        if self.two_nets:
+            if variant not in TWO_NETS_VARIANTS:
+                raise ValueError(f"две сети (two_nets) есть только у {TWO_NETS_VARIANTS}, не у {variant}")
+            if self.ens > 1 or self.bins:
+                raise ValueError("две сети (two_nets) несовместимы с ансамблем голов (ens) и HL-Gauss (bins)")
+            if two_center not in TWO_NETS_CENTER or two_head not in TWO_NETS_HEAD:
+                raise ValueError(f"две сети: центрирование {two_center!r} из {TWO_NETS_CENTER}, "
+                                 f"головы {two_head!r} из {TWO_NETS_HEAD}")
         self.enc = make_encoder(enc_kind, in_ch)
-        if self.bins:
+        if self.two_nets:
+            # сеть A: голова на оптимизаторы (dueling — дуэлинговая голова статьи, Q = V + A - mean A)
+            if two_head == "dueling":
+                from RL.rl_utils.DQN_classes import DuelingHead
+                self.head = DuelingHead(self.enc.out_dim, 3)
+            else:
+                self.head = nn.Linear(self.enc.out_dim, 3)
+            # сеть B: свой энкодер (не общий с A) и головы параметров по оптимизаторам
+            self.enc_b = make_encoder(enc_kind, in_ch)
+            self.head_b = ParamHeads(self.enc_b.out_dim, two_head)
+        elif self.bins:
             if variant not in HLG_VARIANTS or self.ens > 1:
                 raise ValueError(f"голова HL-Gauss (bins={self.bins}) есть только у {HLG_VARIANTS} с одной головой")
             self.head = nn.Linear(self.enc.out_dim, N_ACTIONS * self.bins)
@@ -1277,6 +1354,8 @@ class QNet:
             self.head = make_head(variant, self.enc.out_dim, n_quantiles)
         self.v_head = nn.Linear(self.enc.out_dim, 1) if variant == "cnn_iql" else None
         mods = [self.enc, self.head] + ([self.v_head] if self.v_head is not None else [])
+        if self.two_nets:
+            mods = [self.enc, self.head, self.enc_b, self.head_b]
         self.model = nn.ModuleList(mods).to(device)
         import copy
         self.target = copy.deepcopy(self.model).to(device)
@@ -1302,23 +1381,53 @@ class QNet:
         if self.has_bn:
             self.model.train(on)
             if self.frozen:
-                self.model[0].eval()
+                for i in self._enc_idx:
+                    self.model[i].eval()
 
     def freeze_encoder(self, keep=()):
         """--freeze-encoder: градиент идёт только в головы. keep — имена параметров энкодера,
         которые остаются обучаемыми (первый слой, если у входа больше каналов, чем у
-        предобученных весов). Возвращает число замороженных параметров."""
+        предобученных весов). Возвращает число замороженных параметров. У двух сетей
+        замораживаются оба энкодера."""
         n = 0
-        for name, p in self.model[0].named_parameters():
-            if name not in keep:
-                p.requires_grad_(False)
-                n += p.numel()
+        for i in self._enc_idx:
+            for name, p in self.model[i].named_parameters():
+                if name not in keep:
+                    p.requires_grad_(False)
+                    n += p.numel()
         self.frozen = True
-        self.model[0].eval()
+        for i in self._enc_idx:
+            self.model[i].eval()
         return n
+
+    def n_params_nets(self):
+        """Две сети: число параметров сети оптимизатора (A) и сети параметров (B)."""
+        cnt = lambda i: sum(p.numel() for p in self.model[i].parameters())  # noqa: E731
+        return cnt(0) + cnt(1), cnt(2) + cnt(3)
+
+    def q_parts(self, x, target=False):
+        """Две сети по отдельности: Q_opt (B, 3) сети A и нецентрированные A_lr, A_ep (B, 3, 3)
+        сети B (оптимизатор, значение параметра)."""
+        m = self.target if target else self.model
+        a_lr, a_ep = m[3](m[2](x))
+        return m[1](m[0](x)), a_lr, a_ep
+
+    def hier_action(self, x):
+        """Выбор статьи: оптимизатор — argmax сети A, затем его шаг и число эпох — независимые
+        argmax голов сети B. Возвращает номера действий (B,), a = opt*9 + lr*3 + ep."""
+        q_o, a_lr, a_ep = self.q_parts(x)
+        o = q_o.argmax(1)
+        rows = torch.arange(len(o), device=o.device)
+        return o * 9 + a_lr[rows, o].argmax(1) * 3 + a_ep[rows, o].argmax(1)
+
+    def _joint(self, model, x):
+        a_lr, a_ep = model[3](model[2](x))
+        return compose_two_nets(model[1](model[0](x)), a_lr, a_ep, self.two_center)
 
     def _heads(self, model, x):
         """Все головы: (головы, B, A) или (головы, B, A, nq)."""
+        if self.two_nets:
+            return self._joint(model, x)[None]
         z = model[0](x)
         hs = model[1] if self.ens > 1 else [model[1]]
         out = torch.stack([h(z) for h in hs], 0)
@@ -1332,6 +1441,8 @@ class QNet:
         return self._heads(self.target if target else self.model, x)
 
     def _q(self, model, x):
+        if self.two_nets:
+            return self._joint(model, x)
         if self.ens > 1:
             return self._heads(model, x).mean(0)
         z = model[0](x)
@@ -1376,8 +1487,9 @@ class QNet:
             for p, tp in zip(self.model.parameters(), self.target.parameters()):
                 tp.mul_(1 - tau).add_(tau * p)
             if self.has_bn:
-                for b, tb in zip(self.model[0].buffers(), self.target[0].buffers()):
-                    tb.copy_(b)
+                for i in self._enc_idx:
+                    for b, tb in zip(self.model[i].buffers(), self.target[i].buffers()):
+                        tb.copy_(b)
 
 
 def ckpt_arch(ck):
@@ -1408,6 +1520,10 @@ def ckpt_arch(ck):
         # офлайновый --hlg: линейная голова на 27 x bins логитов (у онлайновых чекпоинтов HL-Gauss
         # бины лежат в квантильной голове, там хватает n_quantiles); ключ есть только у таких
         out["bins"] = int(hg[2])
+    if meta.get("two_nets"):
+        # --two-nets: вторая сеть лежит в ключах '2.*' и '3.*'; поля есть только у таких чекпоинтов
+        out.update(two_nets=True, two_center=(meta.get("two_nets_center") or "max"),
+                   two_head=(meta.get("two_nets_head") or "linear"))
     return out
 
 
@@ -1578,7 +1694,9 @@ def load_encoder_init(net, path):
     чекпоинт агента (variant + state_dict, берутся ключи '0.*' — энкодер другого агента); голый
     state_dict энкодера. Если у сети больше входных каналов, чем у весов (скалярный контекст),
     в первую свёртку копируются веса первых каналов, остальные каналы остаются со свежей
-    инициализацией (их имена — в partial). Возвращает dict(source, encoder, ssl, mean, std, partial)."""
+    инициализацией (их имена — в partial). У двух сетей (--two-nets) веса получают оба энкодера;
+    из чекпоинта такого агента берётся энкодер сети оптимизатора ('0.*').
+    Возвращает dict(source, encoder, ssl, mean, std, partial)."""
     src = path
     if not os.path.exists(path):
         from huggingface_hub import hf_hub_download
@@ -1596,26 +1714,28 @@ def load_encoder_init(net, path):
     if info["encoder"] not in (None, "auto", net.enc_kind):
         raise ValueError(f"--encoder-init: в файле энкодер {info['encoder']!r}, у сети {net.enc_kind!r} "
                          f"(задайте --encoder {info['encoder']})")
-    enc = net.model[0]
-    own = enc.state_dict()
-    if set(sd) != set(own):
-        raise ValueError(f"--encoder-init: имена параметров не совпали с энкодером {net.enc_kind}: "
-                         f"лишние {sorted(set(sd) - set(own))[:4]}, нет {sorted(set(own) - set(sd))[:4]}")
-    new = {}
-    for k, v in own.items():
-        w = torch.as_tensor(sd[k]).to(v.dtype)
-        if w.shape == v.shape:
-            new[k] = w
-        elif (w.dim() == 4 and v.dim() == 4 and w.shape[0] == v.shape[0] and w.shape[2:] == v.shape[2:]
-              and w.shape[1] < v.shape[1]):
-            m = v.detach().cpu().clone()
-            m[:, :w.shape[1]] = w
-            new[k] = m
-            info["partial"].append(k)
-        else:
-            raise ValueError(f"--encoder-init: {k}: форма в файле {tuple(w.shape)}, у сети {tuple(v.shape)}")
-    enc.load_state_dict(new)
-    net.target[0].load_state_dict(enc.state_dict())
+    for i in getattr(net, "_enc_idx", (0,)):        # у двух сетей — оба энкодера (свежие каналы у каждого свои)
+        enc = net.model[i]
+        own = enc.state_dict()
+        if set(sd) != set(own):
+            raise ValueError(f"--encoder-init: имена параметров не совпали с энкодером {net.enc_kind}: "
+                             f"лишние {sorted(set(sd) - set(own))[:4]}, нет {sorted(set(own) - set(sd))[:4]}")
+        new = {}
+        for k, v in own.items():
+            w = torch.as_tensor(sd[k]).to(v.dtype)
+            if w.shape == v.shape:
+                new[k] = w
+            elif (w.dim() == 4 and v.dim() == 4 and w.shape[0] == v.shape[0] and w.shape[2:] == v.shape[2:]
+                  and w.shape[1] < v.shape[1]):
+                m = v.detach().cpu().clone()
+                m[:, :w.shape[1]] = w
+                new[k] = m
+                if k not in info["partial"]:
+                    info["partial"].append(k)
+            else:
+                raise ValueError(f"--encoder-init: {k}: форма в файле {tuple(w.shape)}, у сети {tuple(v.shape)}")
+        enc.load_state_dict(new)
+        net.target[i].load_state_dict(enc.state_dict())
     return info
 
 
@@ -1762,9 +1882,15 @@ def train_variant(variant, data, train_mask, args, seed):
     # --hlg: голова на бинах, обучение кросс-энтропией (по умолчанию выключено: прежняя голова)
     n_bins = int(getattr(args, "hlg_bins", 51) or 51) if getattr(args, "hlg", False) else 0
 
+    # --two-nets: две сети статьи вместо одной (по умолчанию выключено: прежняя сеть)
+    two = bool(getattr(args, "two_nets", False))
+    if two and float(getattr(args, "aux_next", 0.0) or 0.0) > 0:
+        raise ValueError("--two-nets несовместим с --aux-next: вспомогательная голова стоит на одном энкодере")
+
     def mk_net():
         return QNet(variant, device, in_ch=in_ch, encoder=getattr(args, "encoder", "auto"), ens=n_ens,
-                    bins=n_bins)
+                    bins=n_bins, two_nets=two, two_center=getattr(args, "two_nets_center", "max"),
+                    two_head=getattr(args, "two_nets_head", "linear"))
 
     net = mk_net()
     enc_info = None
@@ -1796,6 +1922,11 @@ def train_variant(variant, data, train_mask, args, seed):
     mean[0, :4][flat_ch] = 0.0
     std[0, :4][flat_ch] = 1.0
     aux_info = {}
+    if two:
+        n_a, n_b = net.n_params_nets()
+        aux_info.update(n_params_opt_net=int(n_a), n_params_par_net=int(n_b))
+        print(f"  [{variant} s{seed}] две сети: оптимизатор {n_a} параметров, параметры {n_b}; "
+              f"совместное Q, центрирование {net.two_center}, головы {net.two_head}", flush=True)
     if (net.frozen and enc_info and enc_info["mean"] is not None
             and getattr(args, "state_mode", "full") == "full"):
         # замороженный энкодер ждёт вход в той нормировке, в которой предобучался: статистики
@@ -2377,6 +2508,13 @@ def verify_ckpt(path, net, n=4):
     out.update(max_abs_dq=worst, finite=finite,
                ok=bool(finite and worst <= 1e-3 * scale and out["encoder"] == getattr(net, "enc_kind", None)
                        and out["ens"] == int(getattr(net, "ens", 1))))
+    two = (bool(getattr(net, "two_nets", False)), bool(getattr(ag, "two_nets", False)))
+    if any(two):
+        # --two-nets: загруженная сеть — тоже две сети с тем же центрированием и теми же головами
+        same = (two[0] == two[1] and getattr(ag, "two_center", None) == getattr(net, "two_center", None)
+                and getattr(ag, "two_head", None) == getattr(net, "two_head", None))
+        out.update(two_nets=two[1], two_nets_center=getattr(ag, "two_center", None),
+                   ok=bool(out["ok"] and same))
     return out
 
 
@@ -2585,6 +2723,25 @@ def main():
                          "вложении действия предсказывает уровень следующих карт (6 чисел surrogate.level6 "
                          "от S2) и награду, W * Huber в нормированных единицах. В чекпоинт голова не "
                          "пишется, на оценку не влияет")
+    ap.add_argument("--two-nets", action="store_true",
+                    help="Две отдельные сети, как у агента статьи (RL/rl_utils/DQN_classes.py), вместо одной "
+                         "с головой на 27 действий: сеть A — свой энкодер и голова на 3 оптимизатора, сеть B — "
+                         "свой энкодер и головы шага и длительности у каждого оптимизатора. Энкодеры одного "
+                         "вида (--encoder), оба стартуют с --encoder-init. Лоссы (TD, --mb-aux, --teacher-w, "
+                         "--value-bound) считаются по совместному Q на 27 действий: Q_opt[o] + (A_lr[o,l] - "
+                         "c A_lr[o,.]) + (A_ep[o,e] - c A_ep[o,.]); целевая сеть — та же сумма по целевым "
+                         f"копиям. Варианты {', '.join(TWO_NETS_VARIANTS)}; без --ens, --hlg, --aux-next. "
+                         "В meta чекпоинта пишется two_nets: оценка строит обе сети и получает те же 27 значений")
+    ap.add_argument("--two-nets-center", default="max", choices=list(TWO_NETS_CENTER),
+                    help="--two-nets: что вычитается из преимуществ параметров. max — жадное совместное "
+                         "действие равно выбору статьи (оптимизатор по сети A, затем его шаг и эпохи по сети "
+                         "B), Q_opt — ценность оптимизатора с лучшими параметрами; mean — среднее, как в "
+                         "дуэлинговой голове: вычитаемое гладкое и тянет все три значения параметра, а не одно "
+                         "лучшее, но Q_opt — уже средняя ценность оптимизатора, и выбирает его сумма двух сетей")
+    ap.add_argument("--two-nets-head", default="linear", choices=list(TWO_NETS_HEAD),
+                    help="--two-nets: головы. linear — линейные слои, как голова лучшего рецепта; dueling — "
+                         "как в статье: дуэлинговая голова со скрытым слоем у сети A, её поток преимуществ у "
+                         "голов сети B")
     ap.add_argument("--no-verify", action="store_true",
                     help="Не проверять сохранённый чекпоинт через online_eval_env.load_agent")
     args = ap.parse_args()
@@ -2598,7 +2755,8 @@ def main():
     from killswitch import exit_if_killed
     kill_tag = f"offline_{args.variant}" + run_suffix(args, "multi" if args.subdirs else args.subdir)
     exit_if_killed(kill_tag, remote=True, what="обучение")
-    new_arch = args.encoder != "auto" or args.ens != 1 or args.encoder_init or args.freeze_encoder
+    new_arch = (args.encoder != "auto" or args.ens != 1 or args.encoder_init or args.freeze_encoder
+                or args.two_nets)
     new_loss = (args.mb_aux > 0 or args.pani_w > 0 or args.distill_w > 0 or args.distill_top > 0
                 or args.mask_schedule or args.teacher_w > 0)
     if args.ens < 1 or (args.ens > 1 and not 1 <= args.ens_min <= args.ens):
@@ -2612,6 +2770,19 @@ def main():
             ap.error("--hlg-bins >= 2")
         if args.hlg_vmin is not None and args.hlg_vmax is not None and args.hlg_vmax <= args.hlg_vmin:
             ap.error("--hlg-vmax должен быть больше --hlg-vmin")
+    if args.two_nets:
+        if args.variant not in TWO_NETS_VARIANTS:
+            ap.error(f"--two-nets поддержан для {', '.join(TWO_NETS_VARIANTS)}: у квантильных вариантов, "
+                     "cnx_dueling, cnx_factored, cnx_bcq, cnx_bbf и cnx_smdp своя голова, свой лосс или свой тренер")
+        if args.ens > 1:
+            ap.error("--two-nets несовместим с --ens > 1: ансамбль голов на общем энкодере, а сетей две")
+        if args.hlg:
+            ap.error("--two-nets несовместим с --hlg: совместное Q складывается из скаляров двух сетей, "
+                     "а голова HL-Gauss отдаёт распределение по бинам")
+        if args.aux_next > 0:
+            ap.error("--two-nets несовместим с --aux-next: вспомогательная голова стоит на одном энкодере")
+    elif args.two_nets_center != "max" or args.two_nets_head != "linear":
+        ap.error("--two-nets-center и --two-nets-head задаются вместе с --two-nets")
     if args.aux_next < 0:
         ap.error("--aux-next >= 0")
     if args.aux_next > 0:
@@ -2851,6 +3022,9 @@ def main():
         arm.update(mb_full=True, mb_beam=int(args.mb_beam))
     if args.mb_max_rows:
         arm.update(mb_max_rows=int(args.mb_max_rows))
+    if args.two_nets:
+        # по полю two_nets в meta чекпоинта offline_rl.ckpt_arch строит обе сети
+        arm.update(two_nets=True, two_nets_center=args.two_nets_center, two_nets_head=args.two_nets_head)
     # суррогат модельных целей не должен видеть отложенную задачу (--holdout): её папки убираются
     # из --mb-subdirs. Список — в том же порядке, что у agent_combo.py --extra-only-target без
     # --extra-data (учитель без строк цели), поэтому таблица и ансамбль в кэше --mb-work общие
