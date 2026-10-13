@@ -1317,6 +1317,29 @@ if W28_K:
     add("w35-ftt2-ev", 35, "H06", [free_eval(_ag, "t3m_ftt2", S5)], 0.5 + MAP_EH, needs=[_ag],
         note="оценка: дообучение онлайн с сигналами обучения от лучшего агента, без маски")
 
+# ---------------------------------------------------------------- волна 36
+# Как лучше соединить две сети (сеть оптимизатора и сеть его параметров, как в исходном агенте): три
+# способа против одной сети. Чтобы сравнению можно было верить, каждый вариант учится дважды (сид
+# обучения 1 и 2) и оценивается на трёх сидах среды; учитель общий (готовый чекпоинт), данные —
+# четверть направленно собранного буфера, оценка без маски.
+#   one   — одна сеть на 27 действий (контроль);
+#   addsh — шаг и длительность складываются, кодировщик общий (как в коде статьи);
+#   jntsh — у каждого оптимизатора одна голова на все его пары (шаг, длительность), кодировщик общий;
+#   autsh — последовательный выбор: оптимизатор, шаг, длительность; кодировщик общий.
+W36_TEACH = f"rl_arch/agents_online/{TEACH}_tbquart.pt"
+for _nm, _fl in ((("one", ""),
+                  ("addsh", "--two-nets --two-nets-mode additive --two-nets-shared"),
+                  ("jntsh", "--two-nets --two-nets-mode joint --two-nets-shared"),
+                  ("autsh", "--two-nets --two-nets-mode auto --two-nets-shared")) if W28_K else ()):
+    for _m in (1, 2):
+        _mt = f"n2{_nm}"
+        add(f"w36-{_nm}-m{_m}", 36, "H06",
+            [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {W33_SRC} --teacher-from {W36_TEACH} "
+                       f"--teacher-w 0.5 {_fl} --seeds {_m} --model-tag {_mt}"),
+             free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", "42,43,44")],
+            1.0 + 0.6 * MAP_EH, needs=[ENC_MAE, W36_TEACH],
+            note=f"две сети, вариант {_nm}, сид обучения {_m}, три сида среды, без маски")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
