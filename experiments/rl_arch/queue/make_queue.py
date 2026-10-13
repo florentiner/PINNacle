@@ -1251,6 +1251,12 @@ if W28_K:
             add(f"w33-orig-{'g' if _g else 'f'}{_sfx}", 33, "H06", [free_eval(ORIG_CK, "t3m_orig", _sd, guard=_g)],
                 0.5 + MAP_EH, needs=[ORIG_CK],
                 note=f"исходный агент статьи в нашем протоколе, {'со стражем' if _g else 'без стража'}, сиды {_sd}")
+        if NS2D:
+            # второй чекпоинт исходной архитектуры на ns2d: буфер случайных переходов загружен до обучения,
+            # как прогрев буфера в статье (первый — с симметричной выборкой RLPD)
+            _o2 = "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+            add(f"w33-orig2-f{_sfx}", 33, "H06", [free_eval(_o2, "t3m_orig2", _sd, guard=False)], 0.5 + MAP_EH,
+                needs=[_o2], note=f"исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды {_sd}")
         w33_job("noctx", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, ctx=False)
         # вклад предобучения кодировщика в лучшем варианте: тот же ResNet со случайных весов
         w33_job("resnp", "resnet", "", sd=_sd, sfx=_sfx)

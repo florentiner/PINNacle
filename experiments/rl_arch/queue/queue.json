@@ -7757,6 +7757,22 @@
    ]
   },
   {
+   "id": "w33-orig2-f",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
    "id": "w33-noctx",
    "wave": 33,
    "group": "H06",
@@ -8117,6 +8133,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_orig2_free"
     }
    ]
   },
@@ -8485,6 +8517,22 @@
    ]
   },
   {
+   "id": "w33-orig2-f-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
    "id": "w33-noctx-b",
    "wave": 33,
    "group": "H06",
@@ -8845,6 +8893,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s42",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 42",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_orig2_free"
     }
    ]
   },
@@ -9213,6 +9277,22 @@
    ]
   },
   {
+   "id": "w33-orig2-f-s43",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
    "id": "w33-noctx-s43",
    "wave": 33,
    "group": "H06",
@@ -9573,6 +9653,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s44",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_orig2_free"
     }
    ]
   },
@@ -9941,6 +10037,22 @@
    ]
   },
   {
+   "id": "w33-orig2-f-s45",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 45",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
    "id": "w33-noctx-s45",
    "wave": 33,
    "group": "H06",
@@ -10305,6 +10417,22 @@
    ]
   },
   {
+   "id": "w33-orig2-f-s46",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
    "id": "w33-noctx-s46",
    "wave": 33,
    "group": "H06",
@@ -10665,6 +10793,22 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-c",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_orig2_free"
     }
    ]
   },
