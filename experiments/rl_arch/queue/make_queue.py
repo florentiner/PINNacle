@@ -1288,6 +1288,29 @@ if W34_K:
         w33_job("lean", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, src=_lsrc, tr_extra=f"--subdirs {W34_OTHER}",
                 st_extra=f"--mb-subdirs {W34_OTHER}")
 
+# ---------------------------------------------------------------- волна 35
+# Только метрика (цена сбора и обучения не ограничена): кандидаты, которые могут обойти лучший метод
+# таблицы статьи. 1) Комитет агентов, обученных на разных наборах сборщиков (усреднение Q и
+# голосование). 2) Дообучение онлайн с сигналами обучения рядом с картами (fulltele), старт с лучшего
+# агента на собранном буфере; исследование и оценка со всеми 27 действиями.
+_cm = [f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_{n}_seed1.pt"
+       for n in (("tbquart", "tbq0", "tbq1", "tbq2") if PREFIX == "pb2d" else ("tbquart", "tbq0", "tbq1"))]
+for _how in (("mean", "vote") if W28_K else ()):
+    add(f"w35-cmt-{_how}", 35, "H06",
+        [(EVAL, f"--policy agent --model-files {','.join(_cm)} --ensemble {_how} {GUARD} {KEEPS} "
+                + t3ev(f"t3m_cmt_{_how}_g", S5, hours=MAP_EH))],
+        0.5 + MAP_EH, needs=_cm, note=f"комитет из {len(_cm)} агентов на разных наборах сборщиков, {_how}, без маски")
+if W28_K:
+    _wk = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_tbquart_seed1.pt"
+    _tag = f"{Q}_ftt2_tbq_s42"
+    _ag = f"rl_arch/agents_online/{_tag}.pt"
+    add("w35-ftt2-tr", 35, "H06",
+        [(TRAIN, FT_TR.replace(FT_CK, _wk).replace(" --mask adam:0.01,pso", "")
+                 + f" --state-mode fulltele --warm-widen --tag {_tag}")],
+        9.8, needs=[_wk], note="дообучение онлайн с сигналами обучения, старт с лучшего агента, все 27 действий")
+    add("w35-ftt2-ev", 35, "H06", [free_eval(_ag, "t3m_ftt2", S5)], 0.5 + MAP_EH, needs=[_ag],
+        note="оценка: дообучение онлайн с сигналами обучения от лучшего агента, без маски")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

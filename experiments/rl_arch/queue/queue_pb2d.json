@@ -10303,6 +10303,76 @@
    ]
   },
   {
+   "id": "pb2d-w35-cmt-mean",
+   "wave": 35,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt"
+   ],
+   "note": "комитет из 4 агентов на разных наборах сборщиков, mean, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmt_mean_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w35-cmt-vote",
+   "wave": 35,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt"
+   ],
+   "note": "комитет из 4 агентов на разных наборах сборщиков, vote, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt --ensemble vote --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmt_vote_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w35-ftt2-tr",
+   "wave": 35,
+   "group": "H06",
+   "hours": 9.8,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "дообучение онлайн с сигналами обучения, старт с лучшего агента, все 27 действий",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 9 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir poisson_boltzmann_2d --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --state-mode fulltele --warm-widen --tag qpb2d_ftt2_tbq_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w35-ftt2-ev",
+   "wave": 35,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_ftt2_tbq_s42.pt"
+   ],
+   "note": "оценка: дообучение онлайн с сигналами обучения от лучшего агента, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_ftt2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
