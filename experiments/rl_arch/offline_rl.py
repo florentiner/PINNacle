@@ -1904,10 +1904,10 @@ def train_variant(variant, data, train_mask, args, seed):
         n_fr = net.freeze_encoder(keep=(enc_info["partial"] if enc_info else ()))
         print(f"  [{variant} s{seed}] энкодер заморожен ({n_fr} параметров), учатся головы"
               + ("" if enc_info else "; --encoder-init не задан: энкодер случайный"), flush=True)
-        opt = torch.optim.Adam([p for p in net.params() if p.requires_grad], lr=1e-3,
+        opt = torch.optim.Adam([p for p in net.params() if p.requires_grad], lr=float(getattr(args, "lr", 1e-3)),
                                weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
     else:
-        opt = torch.optim.Adam(net.params(), lr=1e-3,
+        opt = torch.optim.Adam(net.params(), lr=float(getattr(args, "lr", 1e-3)),
                                weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
 
     idx = np.where(train_mask)[0]
@@ -2223,7 +2223,7 @@ def train_variant(variant, data, train_mask, args, seed):
                 aux_acc.setdefault("aux_next_loss", []).append(l_nx.item())
 
             opt.zero_grad(); loss.backward(); opt.step()
-            net.soft_update()
+            net.soft_update(float(getattr(args, "tau", 0.005)))
             if variant == "cnx_bbf" and (epoch * 1000 + k) % 4000 == 3999:
                 # BBF: shrink-and-perturb — ствол сохраняет 50%, головы заново
                 import copy as _copy
@@ -2575,6 +2575,10 @@ def main():
                     help="Отступ L(a_E,a) в лоссе DQfD")
     ap.add_argument("--l2", type=float, default=0.0,
                     help="weight_decay в Adam (L2 из DQfD)")
+    ap.add_argument("--lr", type=float, default=1e-3,
+                    help="шаг Adam у обучения агента (подбор гиперпараметров; прежнее значение 1e-3)")
+    ap.add_argument("--tau", type=float, default=0.005,
+                    help="скорость мягкого обновления целевой сети (прежнее значение 0.005)")
     ap.add_argument("--pbrs", type=float, default=0.0,
                     help="Вес потенциального преобразования награды, Ф=-log10(ошибка)")
     ap.add_argument("--smdp", action="store_true",
@@ -3098,7 +3102,7 @@ def main():
                        n_params=net.n_params(), train_time_s=round(train_time, 1),
                        epochs=args.epochs, smoke=args.smoke,
                        aug=args.aug, n_step=args.n_step, dqfd=args.dqfd,
-                       l2=args.l2, pbrs=args.pbrs, smdp=bool(args.smdp),
+                       l2=args.l2, lr=float(args.lr), tau=float(args.tau), pbrs=args.pbrs, smdp=bool(args.smdp),
                        model_tag=args.model_tag, state_mode=args.state_mode,
                        scalar_ctx=bool(args.scalar_ctx), ctx_err=bool(args.ctx_err),
                        encoder=getattr(net, "enc_kind", "convnext"), ens=int(getattr(net, "ens", 1)), **arm,
