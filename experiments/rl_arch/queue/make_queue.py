@@ -1207,7 +1207,7 @@ def free_eval(model, tag, sd, guard=True):
                   + t3ev(tag + ("_g" if guard else "_free"), sd, hours=MAP_EH))
 
 
-def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True):
+def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True, extra=""):
     _tt, _mt = f"{TEACH}_{nm}{sfx}", f"ete_{nm}"
     steps = []
     init = ""
@@ -1220,7 +1220,8 @@ def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True):
     base = MAP_BASE if ctx else MAP_BASE.replace(" --scalar-ctx", "")
     steps += [(COMBO, f"{TEACH_TR} --target-buffer {W33_SRC} --tag {_tt}"),
               (OFFLINE, f"--variant convnext_dqn {base} --encoder {enc}{init} {MB} --target-buffer {W33_SRC} "
-                        f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 --seeds 1 --model-tag {_mt}"),
+                        f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 {extra} --seeds 1 "
+                        f"--model-tag {_mt}"),
               free_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}", sd)]
     add(f"w33-{nm}{sfx}", 33, "H06", steps, 2.0 + MAP_EH, needs=[pre] if pre and pre != "probe" else [],
         note=f"лучший вариант, кодировщик {enc}, " + ("с предобучением" if pre else "без предобучения")
@@ -1249,6 +1250,11 @@ if W28_K:
         w33_job("noctx", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, ctx=False)
         # вклад предобучения кодировщика в лучшем варианте: тот же ResNet со случайных весов
         w33_job("resnp", "resnet", "", sd=_sd, sfx=_sfx)
+        # две сети, как в исходном агенте статьи: одна выбирает оптимизатор, вторая (свой кодировщик)
+        # — его шаг и длительность; выбор в два этапа. two — головы как у лучшего варианта, twod —
+        # dueling-головы со скрытым слоем, как в статье
+        w33_job("two", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, extra="--two-nets")
+        w33_job("twod", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, extra="--two-nets --two-nets-head dueling")
         # повторы четверти собранного буфера (волна 32) без маски: держится ли лучший результат на
         # других наборах сборщиков при всех 27 действиях
         for _i in range(3 if PREFIX == "pb2d" else 2):
