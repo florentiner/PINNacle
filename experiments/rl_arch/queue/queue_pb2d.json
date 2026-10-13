@@ -7103,6 +7103,78 @@
    ]
   },
   {
+   "id": "pb2d-w32-tbq-0",
+   "wave": 32,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном: сборщики [1] (повтор четверти)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w1 --tag qpb2d_teach_mbpo_tbq0"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w1 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbq0.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbq0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbq0_dep2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w32-tbq-1",
+   "wave": 32,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном: сборщики [2] (повтор четверти)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w2 --tag qpb2d_teach_mbpo_tbq1"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w2 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbq1.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbq1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbq1_dep2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w32-tbq-2",
+   "wave": 32,
+   "group": "H06",
+   "hours": 3.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "рецепт на направленно собранном: сборщики [3] (повтор четверти)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w3 --tag qpb2d_teach_mbpo_tbq2"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w3 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbq2.pt --teacher-w 0.5 --seeds 1 --model-tag ete_tbq2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt --mask adam:0.01,pso --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbq2_dep2"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

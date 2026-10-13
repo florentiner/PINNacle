@@ -1165,6 +1165,22 @@ for _nm, _extra, _note in (("ft", "", "дообучение онлайн (RLPD) 
     add(f"w31-{_nm}-ev", 31, "H06", [w25_eval(_ag, f"t3m_{_nm}_dep2", "")], 0.5 + MAP_EH, needs=[_ag],
         note="оценка: " + _note)
 
+# ---------------------------------------------------------------- волна 32
+# Повтор лучшего результата волны 29 на других сборщиках. Четверть направленно собранного буфера
+# (pb2d: сборщик 0, 19 цепочек; ns2d: сборщики 0-1, 17 цепочек) дала 0.0105 и 0.0456 — лучше полного
+# собранного (0.045 и 0.068) и исходного буфера (0.0227 и 0.0631). У каждой точки одно обучение,
+# поэтому проверяется, держится ли результат на таких же по размеру наборах от других сборщиков.
+for _i, _ks in enumerate(((1,), (2,), (3,)) if PREFIX == "pb2d" else
+                         ((2, 3), (4, 5), (6, 7), (8, 9)) if NS2D else ()):
+    _src = ",".join(tbuf(k) for k in _ks)
+    _tt, _mt = f"{TEACH}_tbq{_i}", f"ete_tbq{_i}"
+    add(f"w32-tbq-{_i}", 32, "H06",
+        [(COMBO, f"{TEACH_TR} --target-buffer {_src} --tag {_tt}"),
+         (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {_src} "
+                   f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 --seeds 1 --model-tag {_mt}"),
+         w25_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}_dep2", "")],
+        1.5 + MAP_EH, needs=[ENC_MAE], note=f"рецепт на направленно собранном: сборщики {list(_ks)} (повтор четверти)")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
