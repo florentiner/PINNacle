@@ -25,6 +25,13 @@ Action space (verified in RL/rl_algorithms.py: i2opt = dict key order):
 
 Comet/gym/dill are NOT imported: only landscape_visualization._aux is used and
 the env's delta/reward logic is replicated locally.
+
+Итерированное офлайновое обучение (прогоны агента в буфер): --save-buffer <тег> пишет исполненную
+цепочку каждого законченного сида с картами одним файлом формата офлайнового буфера
+(rl_arch/buffers_new/<тег>/<папка задачи>/<тег прогона>_seed<сид>.pt, один коммит с итоговой
+строкой), --explore-eps / --explore-stall / --stall-ratio добавляют разведку. Формат файла, учёт
+откатов стража и эпох — в докстринге target_buffer.py; тренеры читают старые и новые данные через
+--target-buffer старый,rl_arch/buffers_new/<тег>. Без этих флагов прогон, строка и чекпоинт прежние.
 """
 from __future__ import annotations
 
@@ -586,6 +593,22 @@ def run_seed(seed, args, progress_cb=None):
               f"не меньше {args.shield_keep} действий, текущая ошибка: "
               + ("измеренная rmse+brmse (привилегированная информация)" if args.shield_err == "true"
                  else "оценка модели по исполненной цепочке"), flush=True)
+    # ---- прогоны политики в буфер и разведка (--save-buffer, --explore-eps, --explore-stall) ----
+    # ro — запись прогона по оставленным действиям: steps [{a, err, explore, rolled, stall}], maps
+    # {номер действия с 1: карты (3, 26, 26) после него}, explore — журнал случайных действий.
+    # Живёт в чекпоинте докатки (t3.rollout); без флагов её нет и прогон прежний
+    save_buf = bool(getattr(args, "save_buffer", ""))
+    ex_eps = float(getattr(args, "explore_eps", 0.0) or 0.0)
+    ex_stall = getattr(args, "explore_stall", None)
+    stall_ratio = float(getattr(args, "stall_ratio", 0.95))
+    explore_on = ex_eps > 0 or ex_stall is not None
+    ro = (dict(steps=[], maps={}, explore=[], stall=False, complete=True, why=None)
+          if (save_buf or explore_on) else None)
+    # свой генератор разведки: поток случайных чисел среды и политики random не трогается
+    xrng = np.random.default_rng([int(seed), 20261013]) if explore_on else None
+    if save_buf and not build_maps:
+        sys.exit("--save-buffer: карты в этом прогоне не строятся (режим состояния без карт или --no-state), "
+                 "писать в буфер нечего")
     guide_stat = [0, 0]              # комитет с проводником: [следовал проводнику, отошёл]
     opt_cache = {}                   # --keep-opt: оптимизатор прошлого действия
     # агент, обученный в среде без сбросов оптимизатора, оценивается в ней же
@@ -688,12 +711,38 @@ def run_seed(seed, args, progress_cb=None):
         t_ae_tot, t_srf_tot, t_opt_tot = t3.get("times", (0.0, 0.0, 0.0))
         bd = t3.get("bd", bd)
         scout_log, scout_spent = t3.get("scout_log", []), t3.get("scout_spent", 0)
+        if ro is not None:
+            rs = t3.get("rollout")
+            if rs is not None and len(rs["steps"]) == len(chain):
+                ro.update({k: rs[k] for k in ("steps", "maps", "explore", "stall", "complete", "why")})
+                if xrng is not None and rs.get("rng") is not None:
+                    xrng.bit_generator.state = rs["rng"]      # разведка продолжается с того же места
+            else:
+                # чекпоинт писал прогон без этих флагов: шагов до докатки в записи нет
+                ro.update(steps=[None] * len(chain), complete=False,
+                          why="докатка с чекпоинта без записи прогона (карт прошлых шагов нет)")
+            if save_buf and ro["complete"] and any(i not in ro["maps"] for i in range(1, len(chain) + 1)):
+                ro.update(complete=False, why="докатка с чекпоинта без карт прошлых шагов")
+            if save_buf and not ro["complete"]:
+                print(f"[seed {seed}] --save-buffer: {ro['why']} — сид в буфер записан не будет", flush=True)
         print(f"[seed {seed}] докатка: spent={spent}/{args.budget}, шагов уже {len(chain)}",
               flush=True)
 
     def dump_ckpt():
         if not ckpt_name:
             return
+        t3 = dict(agree=agree, hist=hist, true_state=true_state, prev_loss_tot=prev_loss_tot,
+                  tele_log=tele_log,
+                  guard_log=guard_log, guard_spent=guard_spent, stale_maps=stale_maps,
+                  shield_log=shield_log,
+                  prev_raw2=({k: v.detach().cpu() for k, v in prev_raw2.items()}
+                             if prev_raw2 is not None else None),
+                  times=(t_ae_tot, t_srf_tot, t_opt_tot), bd=bd,
+                  scout_log=scout_log, scout_spent=scout_spent)
+        if ro is not None:
+            # запись прогона едет в чекпоинте: карты шагов до докатки не теряются, разведка
+            # после докатки тянет тот же поток случайных чисел
+            t3["rollout"] = dict(ro, rng=(xrng.bit_generator.state if xrng is not None else None))
         save_ckpt(ckpt_name, dict(
             net={k: v.detach().cpu() for k, v in model.net.state_dict().items()},
             spent=spent, chain=chain, state=state,
@@ -702,14 +751,7 @@ def run_seed(seed, args, progress_cb=None):
             loss_hist=loss_hist, p_hist=p_hist, boosted=boosted,
             boost_layers=boost_layers, boost_eps=boost_eps,
             rule_st=rule_st,
-            t3=dict(agree=agree, hist=hist, true_state=true_state, prev_loss_tot=prev_loss_tot,
-                    tele_log=tele_log,
-                    guard_log=guard_log, guard_spent=guard_spent, stale_maps=stale_maps,
-                    shield_log=shield_log,
-                    prev_raw2=({k: v.detach().cpu() for k, v in prev_raw2.items()}
-                               if prev_raw2 is not None else None),
-                    times=(t_ae_tot, t_srf_tot, t_opt_tot), bd=bd,
-                    scout_log=scout_log, scout_spent=scout_spent),
+            t3=t3,
             metrics=(rmse, brmse, l2re_op, l2re_bnd)))
 
     rule_st = dict(kicks=0, stalled=False, last_loss=None)
@@ -717,6 +759,7 @@ def run_seed(seed, args, progress_cb=None):
         rule_st = ck["rule_st"]
     while spent < args.budget:
         use_agent = args.policy == "agent"
+        explored, rolled = False, []     # разведка и откаты стража на этом шаге (запись прогона)
         if args.policy == "script":
             if len(chain) < len(script):
                 a = script[len(chain)]
@@ -817,6 +860,21 @@ def run_seed(seed, args, progress_cb=None):
                 g = guide[len(chain)] if len(chain) < len(guide) else None
                 if g is not None and a != g and q[g] + args.guide_bonus >= q[a]:
                     a = g       # от эвристики отходим только при явном выигрыше по Q
+            if xrng is not None:
+                # разведка: с вероятностью p выбор агента заменяется равновероятным действием из
+                # разрешённых (маска и щит действуют). p = --explore-stall, если прошлое оставленное
+                # действие не снизило обучающий лосс в --stall-ratio раз (агент стоит), иначе
+                # --explore-eps. При p = 0 генератор не тратится
+                stalled = bool(ro["stall"]) and ex_stall is not None
+                p_ex = float(ex_stall) if stalled else ex_eps
+                if p_ex > 0 and xrng.random() < p_ex:
+                    a_own, a = int(a), int(xrng.choice(np.where(allow_now)[0]))
+                    explored = True
+                    # [шаг, выбор агента, случайное действие, p, застой, оставлено ли стражем (ниже)]
+                    ro["explore"].append([len(chain) + 1, a_own, a, round(p_ex, 4), int(stalled)])
+                    print(f"[seed {seed}] разведка (p={p_ex:g}{', застой' if stalled else ''}): вместо "
+                          f"{ALL_ACTIONS[a_own][0]}:{ALL_ACTIONS[a_own][1]:g}:{ALL_ACTIONS[a_own][2]} — "
+                          f"{ALL_ACTIONS[a][0]}:{ALL_ACTIONS[a][1]:g}:{ALL_ACTIONS[a][2]}", flush=True)
             if sh is not None:
                 MB.shield_chosen(sh, a)
                 if not sh["skip"]:
@@ -829,7 +887,7 @@ def run_seed(seed, args, progress_cb=None):
                 shield_log.append(sh)
             if args.state_compare and true_state is not None:
                 agree.append([len(chain) + 1, int(a), int(greedy_on(true_state))])
-            if (args.stop_on_noop and a in NOOP_ACTIONS
+            if (args.stop_on_noop and a in NOOP_ACTIONS and not explored
                     and any(c[0] != "PSO" for c in chain)):
                 # «стоп» засчитываем только после настоящего обучения: лидер трека 1
                 # начинает цепочку с пустого шага PSO, и остановка на нём оставила бы
@@ -870,6 +928,7 @@ def run_seed(seed, args, progress_cb=None):
                 guard_log.append([len(chain) + 1, int(a), float(loss_before),
                                   float(cur_loss) if np.isfinite(cur_loss) else None])
                 guard_spent += epochs
+                rolled.append(guard_log[-1][1:2] + [int(epochs)] + guard_log[-1][2:])
                 print(f"[seed {seed}] страж: {opt_name} lr={lr} ep={epochs} поднял лосс "
                       f"{loss_before:.3e} -> {cur_loss:.3e}, откат и запасное действие", flush=True)
                 a, snap = guard_fb, None
@@ -897,6 +956,15 @@ def run_seed(seed, args, progress_cb=None):
         brmse = float(getattr(tester, "brmse", float("inf")))
         l2re_op = float(getattr(tester, "l2re", float("inf")))
         l2re_bnd = float(getattr(tester, "bc_l2re", float("inf")))
+        if ro is not None:
+            # в запись идёт оставленное действие (после отката стража — запасное) и то, что откачено;
+            # застой — оставленное действие не снизило обучающий лосс в --stall-ratio раз
+            ro["stall"] = bool(loss_before is not None
+                               and (not np.isfinite(cur_loss) or cur_loss > stall_ratio * loss_before))
+            if explored:
+                ro["explore"][-1].append(int(not rolled))
+            ro["steps"].append(dict(a=int(a), err=float(rmse + brmse), explore=bool(explored and not rolled),
+                                    rolled=rolled, stall=ro["stall"]))
         print(f"[seed {seed}] step {len(chain)}: {opt_name} lr={lr} ep={epochs} "
               f"spent={spent}/{args.budget} l2re={math.hypot(l2re_op, l2re_bnd):.4e}", flush=True)
         # история по шагам: нужна для выбора «лучшего из k» по обучающему лоссу и для
@@ -1010,6 +1078,10 @@ def run_seed(seed, args, progress_cb=None):
             if getattr(args, "_map_sink", None) is not None:
                 # collect_active.py --save-buffer: карты после действия len(chain) — в буфер сбора
                 args._map_sink(len(chain), true_maps)
+            if save_buf:
+                # --save-buffer: те же истинные карты (без вмешательств --state-mode), канал delta
+                # загрузчик буфера строит сам
+                ro["maps"][len(chain)] = np.array(true_maps, dtype=np.float32)[:3]
             if state_mode == "rebuild":
                 # вторая сборка тех же карт с другой случайностью автокодировщика: насколько
                 # наблюдение воспроизводимо. Состояние генераторов возвращается, поэтому
@@ -1114,6 +1186,16 @@ def run_seed(seed, args, progress_cb=None):
         sh_row = dict(shield=os.path.basename(shield[2]), shield_lam=float(args.shield_lam),
                       shield_keep=int(args.shield_keep), shield_err=args.shield_err, shield_log=shield_log,
                       **MB.shield_summary(shield_log))
+    ex_row = {}
+    if explore_on:
+        # explore_log: [шаг, выбор агента, случайное действие, p, застой (0/1), оставлено стражем (0/1)];
+        # stall_steps — шаги, после которых засчитан застой (следующее решение шло с --explore-stall)
+        ex_row = dict(explore_eps=ex_eps, explore_stall=ex_stall, stall_ratio=stall_ratio,
+                      explore_log=ro["explore"], n_explore=len(ro["explore"]),
+                      explore_steps=[int(e[0]) for e in ro["explore"]],
+                      stall_steps=[i + 1 for i, s_ in enumerate(ro["steps"]) if s_ and s_["stall"]])
+    if save_buf:
+        args._rollout = ro           # main пишет файл буфера; в строку результата карты не идут
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
                 stop_reason=stop_reason, spent=spent, ls=ls_info,
                 lbfgs_tol=(None if args.lbfgs_tol is None or args.lbfgs_tol < 0 else args.lbfgs_tol),
@@ -1133,7 +1215,7 @@ def run_seed(seed, args, progress_cb=None):
                 guide_follow=int(guide_stat[0]), guide_deviate=int(guide_stat[1]),
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
                 keep_opt_mode=(keep_mode if keep_opt else None),
-                elapsed_s=round(time.time() - t0, 1), **sh_row)
+                elapsed_s=round(time.time() - t0, 1), **sh_row, **ex_row)
 
 
 def result_done(name):
@@ -1344,6 +1426,28 @@ def build_parser():
                     help="не строить карты ландшафта (AE + поверхность лоссов). "
                          "Допустимо только для policy=fixed/random с триггерами "
                          "none/plateau/midpoint — там карты не используются")
+    ap.add_argument("--save-buffer", default="", metavar="ТЕГ",
+                    help="Итерированное офлайновое обучение: исполненную цепочку каждого законченного сида "
+                         "записать С КАРТАМИ одним файлом в формате офлайнового буфера (как collect_active.py "
+                         "--save-buffer): <save-dir>/buffers_new/<ТЕГ>/<папка задачи>/<тег прогона>_seed<сид>.pt, "
+                         "в HF — rl_arch/buffers_new/<ТЕГ>/<папка задачи>/ одним коммитом с итоговой строкой "
+                         "сида. Читается тренерами: --target-buffer старый,rl_arch/buffers_new/<ТЕГ>. В файле "
+                         "только исполненные и оставленные действия: откаченное стражем действие переходом не "
+                         "становится (поле rolled у запасного), его эпохи — в полях spent и guard_spent "
+                         "(target_buffer.py). Карты шагов до --resume едут в чекпоинте; докатка с чекпоинта без "
+                         "них — сид не записан (buffer.saved=false в строке). Требует карт: без --no-state, "
+                         "--state-every 1, без бустинга")
+    ap.add_argument("--explore-eps", type=float, default=0.0,
+                    help="разведка в прогонах агента: с такой вероятностью выбор агента заменяется "
+                         "равновероятным действием из разрешённых (маска, щит). Свой генератор случайных "
+                         "чисел от сида; 0 — прежнее жадное поведение. Страж действует и на случайные "
+                         "действия. В строке результата — explore_log")
+    ap.add_argument("--explore-stall", type=float, default=None,
+                    help="вероятность разведки после застоя вместо --explore-eps: прошлое оставленное действие "
+                         "не снизило обучающий лосс в --stall-ratio раз (лосс после > ratio * лосс до). "
+                         "Без флага — выключено")
+    ap.add_argument("--stall-ratio", type=float, default=0.95,
+                    help="порог застоя для --explore-stall")
     ap.add_argument("--smoke", action="store_true")
     return ap
 
@@ -1383,6 +1487,18 @@ def main():
     if args.policy == "scout":
         if len(parse_chain(args.scout_set)) != len(parse_chain(args.scout_commit)):
             sys.exit("--scout-set и --scout-commit должны быть одной длины")
+    explore = args.explore_eps > 0 or args.explore_stall is not None
+    if explore and not uses_agent:
+        sys.exit("--explore-eps / --explore-stall действуют только на решения агента")
+    if not 0.0 <= args.explore_eps <= 1.0 or not 0.0 <= (args.explore_stall or 0.0) <= 1.0 or args.stall_ratio <= 0:
+        sys.exit("--explore-eps и --explore-stall — вероятности из [0, 1], --stall-ratio > 0")
+    if (args.save_buffer or explore) and args.boost_trigger != "none":
+        sys.exit("--save-buffer и разведка несовместимы с бустингом: шаг BOOST не действие буфера")
+    if args.save_buffer:
+        if args.no_state or args.state_every != 1:
+            sys.exit("--save-buffer требует карты после каждого действия: без --no-state и с --state-every 1")
+        if not all(c.isalnum() or c in "_-." for c in args.save_buffer):
+            sys.exit("--save-buffer: тег — буквы, цифры, '_', '-', '.' (это имя папки в rl_arch/buffers_new)")
     if args.smoke:  # только как дефолты — явные флаги не перезаписываем
         given = set(a.split("=")[0] for a in sys.argv[1:] if a.startswith("--"))
         if "--budget" not in given: args.budget = 300
@@ -1398,8 +1514,18 @@ def main():
             continue
         args._ckpt_name = name
         cb = None if args.smoke else (lambda r, n=name: upload(r, n))
+        args._rollout = None
         row = run_seed(seed, args, progress_cb=cb)
         row["smoke"] = args.smoke
+        buf = None
+        if args.save_buffer and not row.get("unfinished"):
+            # файл буфера законченного сида (незаконченный: запись прогона лежит в чекпоинте докатки)
+            import target_buffer as TB
+            buf = TB.write_rollout(row, args._rollout, args, args.save_buffer, tag)
+            row["buffer"] = {k: v for k, v in buf.items() if k != "path"}
+            print(f"[seed {seed}] буфер {args.save_buffer}: "
+                  + (f"{buf['file']}, переходов {buf['n']} (случайных действий {buf['n_explore']}, откатов "
+                     f"{buf['n_rolled']})" if buf["saved"] else f"НЕ записан — {buf['why']}"), flush=True)
         print(json.dumps({k: v for k, v in row.items() if k != "chain"}), flush=True)
         if row.get("unfinished"):
             # итог не заливаем: строка выглядела бы завершённой, а бюджет не выбран
@@ -1407,6 +1533,15 @@ def main():
                   flush=True)
             continue
         if not args.smoke:
+            if buf is not None and buf["saved"]:
+                # файл буфера и итоговая строка — один коммит (лимит HF — 128 коммитов в час на
+                # репозиторий): строка в HF означает, что и файл там. Не удалось — строка отдельно
+                row["buffer"]["up"] = True
+                pairs = [(buf["path"], buf["hf"]),
+                         (json.dumps(row, indent=1).encode(), f"rl_arch/online_env/{name}.json")]
+                if TB.upload_files(pairs, f"rl_arch online_env {name} + buffers_new {args.save_buffer}"):
+                    continue
+                row["buffer"]["up"] = False
             upload(row, f"{args.pde}_{tag}_seed{seed}")
 
 
