@@ -1052,7 +1052,7 @@ class TinyViT(nn.Module):
         return self.norm(self.blocks(t).mean(1))
 
 
-MAP_ENCODERS = ("convnext", "resnet", "resnetpos", "vit")      # что принимает --encoder у вариантов cnx_*
+MAP_ENCODERS = ("convnext", "convnextw", "convnexthr", "resnet", "resnetpos", "vit")      # что принимает --encoder у вариантов cnx_*
 
 
 def make_encoder(kind: str, in_ch: int = 4, size: int = 26):
@@ -1096,7 +1096,13 @@ def make_encoder(kind: str, in_ch: int = 4, size: int = 26):
                 return self.enc(x)[1]
         return TheirEncoder()
 
-    if kind == "convnext":
+    if kind in ("convnext", "convnextw", "convnexthr"):
+        # convnext — прежняя сеть (48/96 каналов, по два блока, вход сразу сжимается до 13x13);
+        # convnextw — шире и глубже (64/128, по три блока); convnexthr — первая стадия на полной
+        # карте 26x26 (вход не сжимается), вторая на 13x13: проверка, мешает ли раннее сжатие
+        c1, c2, nb = (64, 128, 3) if kind == "convnextw" else (48, 96, 2)
+        full_res = kind == "convnexthr"
+
         class Block(nn.Module):
             def __init__(self, c):
                 super().__init__()
@@ -1113,11 +1119,12 @@ def make_encoder(kind: str, in_ch: int = 4, size: int = 26):
             out_dim = 256
             def __init__(self):
                 super().__init__()
-                self.stem = nn.Conv2d(in_ch, 48, 2, stride=2)          # 13
-                self.s1 = nn.Sequential(Block(48), Block(48))
-                self.down = nn.Conv2d(48, 96, 2, stride=2)         # 6
-                self.s2 = nn.Sequential(Block(96), Block(96))
-                self.head = nn.Sequential(nn.Linear(96, 256), nn.ReLU())
+                self.stem = (nn.Conv2d(in_ch, c1, 3, padding=1) if full_res        # 26
+                             else nn.Conv2d(in_ch, c1, 2, stride=2))               # 13
+                self.s1 = nn.Sequential(*[Block(c1) for _ in range(nb)])
+                self.down = nn.Conv2d(c1, c2, 2, stride=2)         # 6 (13 у convnexthr)
+                self.s2 = nn.Sequential(*[Block(c2) for _ in range(nb)])
+                self.head = nn.Sequential(nn.Linear(c2, 256), nn.ReLU())
             def forward(self, x):
                 x = self.s2(self.down(self.s1(self.stem(x))))
                 x = x.mean(dim=(2, 3))

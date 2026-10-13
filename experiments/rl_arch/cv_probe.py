@@ -85,7 +85,7 @@ import surrogate as S  # noqa: E402
 BUDGET = S.BUDGET
 KMAX = S.K_MAX
 ROWKEYS = ("PDE", "FILE", "CH", "STEP", "SPENT", "A", "PA", "L", "LN", "LV", "LVN", "SPF", "LAST")
-ENCODERS = ("conv", "convnext", "resnet", "resnetpos", "vit", "cnn")
+ENCODERS = ("conv", "convnext", "convnextw", "convnexthr", "resnet", "resnetpos", "vit", "cnn")
 DEFAULT_ENCODERS = ("conv", "convnext", "resnet", "vit")
 FALLBACK_ENCODER = "convnext"
 BASES = {
@@ -443,7 +443,7 @@ def make_encoder(kind, in_ch=4, size=26):
             nn.init.kaiming_uniform_(new.weight, nonlinearity="relu")
             enc.enc.backbone[0] = new
         return enc
-    if kind in ("convnext", "cnn", "resnet", "resnetpos", "vit"):
+    if kind in ("convnext", "convnextw", "convnexthr", "cnn", "resnet", "resnetpos", "vit"):
         return O.make_encoder(kind, in_ch, size)
     raise ValueError(f"неизвестный энкодер {kind!r}: {ENCODERS}")
 

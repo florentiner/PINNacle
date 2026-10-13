@@ -1181,6 +1181,61 @@ for _i, _ks in enumerate(((1,), (2,), (3,)) if PREFIX == "pb2d" else
          w25_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}_dep2", "")],
         1.5 + MAP_EH, needs=[ENC_MAE], note=f"рецепт на направленно собранном: сборщики {list(_ks)} (повтор четверти)")
 
+# ---------------------------------------------------------------- волна 33
+# Требование 13 октября: у агента остаются все 27 действий, маска при развёртывании не допускается
+# (Adam 1e-2 и PSO должны быть доступны). Поэтому оценки этой волны идут БЕЗ маски: агент работает до
+# конца бюджета, страж с откатом остаётся (тег ..._g) либо выключен (тег ..._free, протокол статьи).
+# 1) Уже обученные лучшие чекпоинты без маски: рецепт на исходном буфере (ete) и на четверти
+#    направленно собранного (ete_tbquart).
+# 2) Лучший вариант с ConvNeXt вместо ResNet: без предобучения, с предобучением восстановлением
+#    блоков (кодировщик предобучается в том же кернеле зондом CV), шире и глубже (convnextw), без
+#    раннего сжатия карты (convnexthr).
+# 3) Лучший вариант без скалярного контекста (шаг, потраченный бюджет, прошлое действие): его вклад.
+GUARD = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
+W33_SRC = ",".join(tbuf(k) for k in range(max(1, W28_K // 4))) if W28_K else ""
+W33_CV = "/kaggle/working"
+W33_SPLIT = (("", S5), ("-a", "42,43"), ("-b", "44,45,46"))   # целиком и двумя кернелами: квота раздроблена
+
+
+def free_eval(model, tag, sd, guard=True):
+    return (EVAL, f"--policy agent --model-file {model} {GUARD if guard else ''} {KEEPS} "
+                  + t3ev(tag + ("_g" if guard else "_free"), sd, hours=MAP_EH))
+
+
+def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True):
+    _tt, _mt = f"{TEACH}_{nm}{sfx}", f"ete_{nm}"
+    steps = []
+    init = ""
+    if pre == "probe":
+        steps.append((CVPROBE, f"--tag w33cv --configs level,ssl-mae-{enc} --save-encoder --hours 0.7 "
+                               f"--out-dir {W33_CV}"))
+        init = f" --encoder-init {W33_CV}/cvprobe_w33cv_enc_mae_{enc}.pt"
+    elif pre:
+        init = f" --encoder-init {pre}"
+    base = MAP_BASE if ctx else MAP_BASE.replace(" --scalar-ctx", "")
+    steps += [(COMBO, f"{TEACH_TR} --target-buffer {W33_SRC} --tag {_tt}"),
+              (OFFLINE, f"--variant convnext_dqn {base} --encoder {enc}{init} {MB} --target-buffer {W33_SRC} "
+                        f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 --seeds 1 --model-tag {_mt}"),
+              free_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}", sd)]
+    add(f"w33-{nm}{sfx}", 33, "H06", steps, 2.0 + MAP_EH, needs=[pre] if pre and pre != "probe" else [],
+        note=f"лучший вариант, кодировщик {enc}, " + ("с предобучением" if pre else "без предобучения")
+             + ("" if ctx else ", без скалярного контекста") + f", без маски, сиды {sd}")
+
+
+if W28_K:
+    for _sfx, _sd in W33_SPLIT:
+        for _ck, _nm in ((f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_tbquart_seed1.pt", "tbquart"),
+                         (f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_seed1.pt", "ete")):
+            for _g in (True, False):
+                add(f"w33-nm-{_nm}-{'g' if _g else 'f'}{_sfx}", 33, "H06",
+                    [free_eval(_ck, f"t3m_ete_{_nm}" if _nm != "ete" else "t3m_ete", _sd, guard=_g)],
+                    0.5 + MAP_EH, needs=[_ck],
+                    note=f"без маски, {'со стражем' if _g else 'без стража'}: готовый чекпоинт {_nm}, сиды {_sd}")
+        for _nm, _enc, _pre in (("cnx", "convnext", ""), ("cnxm", "convnext", "probe"),
+                                ("cnxwm", "convnextw", "probe"), ("cnxhrm", "convnexthr", "probe")):
+            w33_job(_nm, _enc, _pre, sd=_sd, sfx=_sfx)
+        w33_job("noctx", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, ctx=False)
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

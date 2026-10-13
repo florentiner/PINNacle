@@ -7175,6 +7175,570 @@
    ]
   },
   {
+   "id": "pb2d-w33-nm-tbquart-g",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbquart-f",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-ete-g",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-ete-f",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnx",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnx.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxm",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnext --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxm.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxwm",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnextw --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxwm.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxhrm",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnexthr --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxhrm.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-noctx",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_noctx.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbquart-g-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbquart-f-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-ete-g-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-ete-f-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnx-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnx-a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnx-a.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxm-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnext --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxm-a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxm-a.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxwm-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnextw --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxwm-a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxwm-a.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxhrm-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnexthr --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxhrm-a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxhrm-a.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-noctx-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_noctx-a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_noctx-a.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbquart-g-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbquart-f-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-ete-g-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-ete-f-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnx-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnx-b"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnx-b.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxm-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnext --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxm-b"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxm-b.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxwm-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnextw --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxwm-b"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxwm-b.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-cnxhrm-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w33cv --configs level,ssl-mae-convnexthr --save-encoder --hours 0.7 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_cnxhrm-b"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init /kaggle/working/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_cnxhrm-b.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-noctx-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_noctx-b"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_noctx-b.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
