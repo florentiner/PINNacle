@@ -138,11 +138,13 @@ from online_eval_env import OUT_REPO, run_seed, upload  # noqa: E402
 import branch_endings as B  # noqa: E402
 import ga_chains as G  # noqa: E402
 import surrogate as S  # noqa: E402
+# запись файла буфера — общая с online_eval_env.py --save-buffer (прогоны политики)
+from target_buffer import (BUF_HF, FORMAT, MAP_KEYS, action_index, buffer_subdir,  # noqa: E402,F401
+                           chain_transitions, save_chain, upload_files)
+from target_buffer import num as _num  # noqa: E402
 
-FORMAT = 1
 EPOCHS = [int(t[2]) for t in E.ACTION_TABLE]
-BUF_HF = "rl_arch/buffers_new"  # корень буферов с картами в датасете результатов HF
-MAP_KEYS = ("loss_total", "loss_oper", "loss_bnd")
+assert [tuple(t) for t in E.ACTION_TABLE] == [tuple(t) for t in S.ACTIONS], "таблицы действий среды и суррогата"
 _BASE = {}                      # кэш процесса: базовая таблица переходов
 
 
@@ -251,14 +253,6 @@ def edit_dist(a, b):
 # --------------------------------------------------------------------------------------------
 # Приём 3: опорная кривая и решение об остановке
 # --------------------------------------------------------------------------------------------
-
-def _num(x):
-    try:
-        x = float(x)
-    except (TypeError, ValueError):
-        return None
-    return x if math.isfinite(x) else None
-
 
 def ref_curves(records):
     """Кривые log10 l2re от потраченных эпох у собранных цепочек."""
@@ -395,52 +389,13 @@ def run_env(a, acts, seed, n_planned, watch=None, ckpt=None, ckpt_every=0, resum
 # Буфер с картами (--save-buffer)
 # --------------------------------------------------------------------------------------------
 
-def buffer_subdir(pde):
-    """Папка буфера задачи (как у исходных офлайновых буферов: pde_meta.json, поле subdir)."""
-    import offline_rl as O
-    return (O.pde_meta().get(pde) or {}).get("subdir") or pde
-
-
 def buffer_dir(a):
     return os.path.join(a.buffer_dir or os.path.join(a.save_dir, "buffers_new", a.tag), buffer_subdir(a.pde))
 
 
-def chain_transitions(res, acts, budget):
-    """Исполненная цепочка -> переходы в формате офлайнового буфера (описание — в докстринге
-    модуля). res — итог run_env (chain, hist, err, maps), acts — задуманные номера действий.
-    Цепочка кончается на первом переходе без числовой ошибки и на первом действии, перед которым
-    нет карты (упавший прогон)."""
-    chain, hist, maps = res["chain"], res["hist"], res.get("maps") or {}
-    n = min(len(chain), len(hist))
-    errs = list(res.get("err") or []) + [None] * n
-    zero = {k: np.zeros((26, 26), np.float32) for k in MAP_KEYS}
-    out, has_next, bad = [], False, False
-    for i in range(n):
-        if i and i not in maps:
-            break
-        x = acts[i] if acts is not None and i < len(acts) else None
-        if x is None or E.ACTION_TABLE[x][0] != chain[i][0] or abs(E.ACTION_TABLE[x][1] - float(chain[i][1])) > 1e-12:
-            x = action_index(*chain[i])
-        if x is None:
-            break
-        cur = {k: maps[i][j].copy() for j, k in enumerate(MAP_KEYS)} if i else {k: v.copy() for k, v in zero.items()}
-        has_next = (i + 1) in maps
-        nxt = {k: (maps[i + 1][j] if has_next else cur[k]).copy() for j, k in enumerate(MAP_KEYS)}
-        e = _num(errs[i])
-        bad = e is None or e <= 0
-        out.append(dict(state=cur, next_state=nxt, action=(x // 9, {"lr": (x % 9) // 3, "epochs": x % 3}),
-                        reward=(0.0 if bad else -float(e)), done=0, epochs_real=int(chain[i][2]),
-                        spent=int(hist[i][0]), l2re=_num(hist[i][2])))
-        if bad:
-            break
-    if out:
-        out[-1]["done"] = -1 if bad else (1 if out[-1]["spent"] >= budget or not has_next else 0)
-    return out
-
-
 def write_buffer(st, a, rec, res):
-    """Файл буфера записи rec (последняя в st['records']); в запись — buf_file, buf_n, buf_up."""
-    import torch
+    """Файл буфера записи rec (последняя в st['records']); в запись — buf_file, buf_n, buf_up.
+    Переходы и сам файл — общий код target_buffer.py (chain_transitions, save_chain)."""
     idx = len(st["records"]) - 1
     if rec.get("error") and not rec["prefix_owner"] and len(rec["hist"]) <= rec["shared_prefix_len"]:
         return                          # упавшая концовка без новых действий: это был бы повтор префикса
@@ -448,43 +403,18 @@ def write_buffer(st, a, rec, res):
     if not tr:
         return
     grp = None if rec.get("group") is None else f"{a.tag}#g{rec['group']}"
-    for t in tr:
-        t["chain"], t["group"] = f"{a.tag}#{idx}", grp
-    tr[0]["meta"] = dict(format=FORMAT, pde=a.pde, tag=a.tag, record=idx, seed=rec["seed"], env=rec["env"],
-                         truncated=rec["truncated"], shared_prefix_len=rec["shared_prefix_len"],
-                         stop=rec["stop"], round=rec["round"], acq=rec["acq"], l2re=rec["l2re"])
     d = buffer_dir(a)
-    os.makedirs(d, exist_ok=True)
     fname = f"{a.tag}_c{idx:04d}.pt"
-    torch.save(tr, os.path.join(d, fname))
+    save_chain(d, fname, tr, f"{a.tag}#{idx}", grp,
+               dict(format=FORMAT, pde=a.pde, tag=a.tag, record=idx, seed=rec["seed"], env=rec["env"],
+                    truncated=rec["truncated"], shared_prefix_len=rec["shared_prefix_len"],
+                    stop=rec["stop"], round=rec["round"], acq=rec["acq"], l2re=rec["l2re"]))
     rec.update(buf_file=fname, buf_n=len(tr), buf_up=False)
     buf = st.setdefault("buffer", dict(dir=d, hf=f"{BUF_HF}/{a.tag}/{buffer_subdir(a.pde)}", files=0,
                                        transitions=0, uploaded=0, lost=0))
     buf["dir"] = d
     buf["files"] += 1
     buf["transitions"] += len(tr)
-
-
-def upload_files(pairs, msg, tries=9):
-    """Несколько файлов одним коммитом в датасет результатов HF: pairs — [(локальный путь, путь в
-    репозитории)]. Токен и повторы — как у online_eval_env.upload (лимит HF — 128 коммитов в час
-    на репозиторий, поэтому один коммит на заливку, а не на файл)."""
-    tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
-    if not tok:
-        print("no HF token — буфер только локально", flush=True)
-        return False
-    from huggingface_hub import CommitOperationAdd, HfApi
-    for attempt in range(tries):
-        try:
-            HfApi().create_commit(repo_id=OUT_REPO, repo_type="dataset", token=tok, commit_message=msg,
-                                  operations=[CommitOperationAdd(path_in_repo=dst, path_or_fileobj=src)
-                                              for src, dst in pairs])
-            print(f"uploaded {len(pairs)} файлов буфера: {os.path.dirname(pairs[0][1])}", flush=True)
-            return True
-        except Exception as e:
-            print(f"buffer upload retry {attempt}: {str(e)[:120]}", flush=True)
-            time.sleep(min(600, 20 * 2 ** attempt))
-    return False
 
 
 def flush_buffer(st, a):
@@ -555,15 +485,6 @@ def base_table(a):
     print(f"таблица переходов: УрЧП {len(tab['NAMES'])}, переходов {len(tab['A'])}, "
           f"{_BASE['table_s']:.0f} с ({path})", flush=True)
     return _BASE
-
-
-def action_index(opt, lr, ep):
-    """Индекс действия из 27 по оптимизатору и шагу; эпохи — ближайшие по логарифму (последнее
-    действие могло быть обрезано бюджетом), как в surrogate.load_eval_rows."""
-    hit = [i for i, (o, l, _) in enumerate(E.ACTION_TABLE) if o == opt and abs(l - float(lr)) < 1e-12]
-    if not hit:
-        return None
-    return min(hit, key=lambda j: abs(math.log10(EPOCHS[j]) - math.log10(max(float(ep), 1.0))))
 
 
 def k_l2re(records, default=1.0):

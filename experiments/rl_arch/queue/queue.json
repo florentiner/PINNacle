@@ -10799,6 +10799,2026 @@
    ]
   },
   {
+   "id": "w33-nm-tbquart-g-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-f-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-g-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-f-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnx-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnx-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnx-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxm-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxm-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxm-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxwm-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxwm-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxwm-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxhrm-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxhrm-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxhrm-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-f-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, без стража, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_orig_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-g-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, со стражем, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-noctx-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_noctx-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_noctx-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-blind-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_blind-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_blind-s47.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-resnp-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик resnet, без предобучения, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_resnp-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_resnp-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_resnp"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_resnp_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_resnp_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set2-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --tag q_teach_mbpo_set2-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --teacher-from rl_arch/agents_online/q_teach_mbpo_set2-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_set2_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set3-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --tag q_teach_mbpo_set3-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --teacher-from rl_arch/agents_online/q_teach_mbpo_set3-s47.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set3"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set3_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_set3_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-two-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_two-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two-s47.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag ete_two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-twod-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_twod-s47"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_twod-s47.pt --teacher-w 0.5 --two-nets --two-nets-head dueling --seeds 1 --model-tag ete_twod"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_twod_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_twod_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq0-g-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq1-g-s47",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-g-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-f-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-g-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-f-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnx-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnx-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnx-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxm-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxm-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxm-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxwm-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxwm-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxwm-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxhrm-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxhrm-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxhrm-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-f-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, без стража, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_orig_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-g-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, со стражем, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-noctx-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_noctx-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_noctx-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-blind-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_blind-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_blind-s48.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-resnp-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик resnet, без предобучения, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_resnp-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_resnp-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_resnp"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_resnp_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_resnp_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set2-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --tag q_teach_mbpo_set2-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --teacher-from rl_arch/agents_online/q_teach_mbpo_set2-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_set2_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set3-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --tag q_teach_mbpo_set3-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --teacher-from rl_arch/agents_online/q_teach_mbpo_set3-s48.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set3"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set3_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_set3_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-two-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_two-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two-s48.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag ete_two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-twod-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_twod-s48"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_twod-s48.pt --teacher-w 0.5 --two-nets --two-nets-head dueling --seeds 1 --model-tag ete_twod"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_twod_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_twod_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq0-g-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq1-g-s48",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-g-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-f-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-g-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-f-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnx-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnx-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnx-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxm-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxm-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxm-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxwm-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxwm-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxwm-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxhrm-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxhrm-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxhrm-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-f-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, без стража, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_orig_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-g-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, со стражем, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-noctx-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_noctx-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_noctx-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-blind-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_blind-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_blind-s49.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-resnp-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик resnet, без предобучения, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_resnp-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_resnp-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_resnp"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_resnp_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_resnp_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set2-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --tag q_teach_mbpo_set2-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --teacher-from rl_arch/agents_online/q_teach_mbpo_set2-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_set2_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set3-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --tag q_teach_mbpo_set3-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --teacher-from rl_arch/agents_online/q_teach_mbpo_set3-s49.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set3"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set3_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_set3_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-two-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_two-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two-s49.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag ete_two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-twod-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_twod-s49"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_twod-s49.pt --teacher-w 0.5 --two-nets --two-nets-head dueling --seeds 1 --model-tag ete_twod"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_twod_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_twod_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq0-g-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq1-g-s49",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-g-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-f-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-g-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-f-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnx-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnx-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnx-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxm-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxm-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxm-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxwm-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxwm-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxwm-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxhrm-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxhrm-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxhrm-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-f-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, без стража, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_orig_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-g-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, со стражем, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-noctx-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_noctx-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_noctx-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-blind-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_blind-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_blind-s50.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-resnp-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик resnet, без предобучения, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_resnp-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_resnp-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_resnp"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_resnp_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_resnp_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set2-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --tag q_teach_mbpo_set2-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --teacher-from rl_arch/agents_online/q_teach_mbpo_set2-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_set2_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set3-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --tag q_teach_mbpo_set3-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --teacher-from rl_arch/agents_online/q_teach_mbpo_set3-s50.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set3"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set3_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_set3_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-two-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_two-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two-s50.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag ete_two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-twod-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_twod-s50"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_twod-s50.pt --teacher-w 0.5 --two-nets --two-nets-head dueling --seeds 1 --model-tag ete_twod"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_twod_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_twod_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq0-g-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq1-g-s50",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-g-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт tbquart, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_tbquart_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbquart-f-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт tbquart, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_tbquart_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-g-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, со стражем: готовый чекпоинт ete, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-ete-f-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt"
+   ],
+   "note": "без маски, без стража: готовый чекпоинт ete, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnx-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик convnext, без предобучения, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnx-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnx-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_cnx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxm-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnext, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxm-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxm-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_cnxm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxwm-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnextw, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxwm-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnextw --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnextw.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxwm-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxwm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxwm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_cnxwm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-cnxhrm-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt"
+   ],
+   "note": "лучший вариант, кодировщик convnexthr, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_cnxhrm-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnexthr --encoder-init rl_arch/encoders/cvprobe_w33cv_enc_mae_convnexthr.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_cnxhrm-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_cnxhrm"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_cnxhrm_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_cnxhrm_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-f-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, без стража, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_orig_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig-g-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt"
+   ],
+   "note": "исходный агент статьи в нашем протоколе, со стражем, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-orig2-f-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt"
+   ],
+   "note": "исходный агент статьи (прогрев буфера), наш протокол, без стража, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_ns2d_preload_seed42.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_orig2_free"
+    }
+   ]
+  },
+  {
+   "id": "w33-noctx-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без скалярного контекста, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_noctx-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_noctx-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_noctx"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-blind-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_blind-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_blind-s51.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-resnp-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [],
+   "note": "лучший вариант, кодировщик resnet, без предобучения, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_resnp-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_resnp-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_resnp"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_resnp_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_resnp_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set2-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --tag q_teach_mbpo_set2-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w6,rl_arch/buffers_new/tbuf_ns2d_w7 --teacher-from rl_arch/agents_online/q_teach_mbpo_set2-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_set2_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-set3-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --tag q_teach_mbpo_set3-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w8,rl_arch/buffers_new/tbuf_ns2d_w9 --teacher-from rl_arch/agents_online/q_teach_mbpo_set3-s51.pt --teacher-w 0.5 --seeds 1 --model-tag ete_set3"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_set3_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_set3_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-two-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_two-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two-s51.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag ete_two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-twod-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 5.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_twod-s51"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_twod-s51.pt --teacher-w 0.5 --two-nets --two-nets-head dueling --seeds 1 --model-tag ete_twod"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_twod_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_twod_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq0-g-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "w33-nm-tbq1-g-s51",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
    "id": "w33-nm-tbquart-g-c",
    "wave": 33,
    "group": "H06",
@@ -11403,6 +13423,206 @@
    ]
   },
   {
+   "id": "w35-ftt2-auto",
+   "wave": 35,
+   "group": "H06",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "дообучение онлайн (ftt2) и оценка одним кернелом",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_liddriven --hours 8 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir ns2d_liddriven --offline-fix --offline-reward delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --state-mode fulltele --warm-widen --tag q_ftt2_tbq_s42a"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_ftt2_tbq_s42a.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-auto",
+   "wave": 35,
+   "group": "H06",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "дообучение онлайн (ft2) и оценка одним кернелом",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_liddriven --hours 8 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-subdir ns2d_liddriven --offline-fix --offline-reward delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --tag q_ft2_tbq_s42a"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_ft2_tbq_s42a.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ftt2-ev-s42",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ftt2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 42: дообучение онлайн с сигналами обучения от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ftt2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-ev-s42",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ft2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 42: дообучение онлайн от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ft2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ftt2-ev-s43",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ftt2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 43: дообучение онлайн с сигналами обучения от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ftt2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-ev-s43",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ft2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 43: дообучение онлайн от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ft2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ftt2-ev-s44",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ftt2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 44: дообучение онлайн с сигналами обучения от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ftt2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-ev-s44",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ft2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 44: дообучение онлайн от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ft2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ftt2-ev-s45",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ftt2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 45: дообучение онлайн с сигналами обучения от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ftt2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-ev-s45",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ft2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 45: дообучение онлайн от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ft2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ftt2-ev-s46",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ftt2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 46: дообучение онлайн с сигналами обучения от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ftt2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_ftt2_g"
+    }
+   ]
+  },
+  {
+   "id": "w35-ft2-ev-s46",
+   "wave": 35,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ft2_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 46: дообучение онлайн от лучшего агента",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ft2_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_ft2_g"
+    }
+   ]
+  },
+  {
    "id": "w36-one-m1",
    "wave": 36,
    "group": "H06",
@@ -11567,6 +13787,490 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_n2autsh_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_n2autsh_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-0",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 100, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 100 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-1",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 101, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 101 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-2",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 102, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 102 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-3",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 103, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 103 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-4",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 104, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 104 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-5",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 105, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 105 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-6",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 106, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 106 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-roll-7",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt"
+   ],
+   "note": "круг 1: прогон агента с пробными действиями, сид 107, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it1 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 107 --tag ns2d_it1_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-train",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "круг 1: учитель и агент заново на старых и новых данных",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/ns2d_it1 --tag q_teach_mbpo_it1"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/ns2d_it1 --teacher-from rl_arch/agents_online/q_teach_mbpo_it1.pt --teacher-w 0.5 --seeds 1 --model-tag ete_it1"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-auto",
+   "wave": 37,
+   "group": "H06",
+   "hours": 8.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "круг 1 одним кернелом: ждёт прогоны, учит, оценивает на 5 сидах",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/ns2d_it1/ns2d_liddriven --n 8 --min 4 --hours 3.5"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/ns2d_it1 --tag q_teach_mbpo_it1a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/ns2d_it1 --teacher-from rl_arch/agents_online/q_teach_mbpo_it1a.pt --teacher-w 0.5 --seeds 1 --model-tag ete_it1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_it1_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-ev-s42",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 1: оценка агента после переобучения, сид 42, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ete_it1_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-ev-s43",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 1: оценка агента после переобучения, сид 43, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_ete_it1_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-ev-s44",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 1: оценка агента после переобучения, сид 44, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_ete_it1_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-ev-s45",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 1: оценка агента после переобучения, сид 45, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_ete_it1_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it1-ev-s46",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 1: оценка агента после переобучения, сид 46, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_ete_it1_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-0",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 200, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 200 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-1",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 201, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 201 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-2",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 202, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 202 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-3",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 203, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 203 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-4",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 204, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 204 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-5",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 205, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 205 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-6",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 206, со стражем",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 206 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-roll-7",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt"
+   ],
+   "note": "круг 2: прогон агента с пробными действиями, сид 207, без стража",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it1_seed1.pt --keep-opt --keep-opt-mode safe --save-buffer ns2d_it2 --explore-eps 0.1 --explore-stall 0.5 --stall-ratio 0.95 --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 207 --tag ns2d_it2_roll"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-train",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "круг 2: учитель и агент заново на старых и новых данных",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/ns2d_it1,rl_arch/buffers_new/ns2d_it2 --tag q_teach_mbpo_it2"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1,rl_arch/buffers_new/ns2d_it1,rl_arch/buffers_new/ns2d_it2 --teacher-from rl_arch/agents_online/q_teach_mbpo_it2.pt --teacher-w 0.5 --seeds 1 --model-tag ete_it2"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-ev-s42",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt"
+   ],
+   "note": "круг 2: оценка агента после переобучения, сид 42, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ete_it2_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-ev-s43",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt"
+   ],
+   "note": "круг 2: оценка агента после переобучения, сид 43, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_ete_it2_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-ev-s44",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt"
+   ],
+   "note": "круг 2: оценка агента после переобучения, сид 44, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_ete_it2_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-ev-s45",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt"
+   ],
+   "note": "круг 2: оценка агента после переобучения, сид 45, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_ete_it2_g"
+    }
+   ]
+  },
+  {
+   "id": "w37-it2-ev-s46",
+   "wave": 37,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt"
+   ],
+   "note": "круг 2: оценка агента после переобучения, сид 46, без маски",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_it2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_ete_it2_g"
     }
    ]
   },

@@ -266,7 +266,21 @@ def lint_cvprobe(argv):
         V.load_data, K.killed = saved
 
 
-LINTERS = {"cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+def lint_wait(argv):
+    """Шаг ожидания файлов в HF: только разбор аргументов (сеть при проверке не трогаем)."""
+    import wait_hf as Wt
+    saved = Wt.count
+    Wt.count = lambda path: 10 ** 6
+    try:
+        sys.argv = ["wait_hf.py"] + list(argv)
+        if Wt.main() != 0:
+            raise SystemExit("wait_hf: ненулевой код")
+    finally:
+        Wt.count = saved
+    raise Reached()
+
+
+LINTERS = {"wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}
