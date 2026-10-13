@@ -1195,7 +1195,8 @@ GUARD = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
 W33_SRC = ",".join(tbuf(k) for k in range(max(1, W28_K // 4))) if W28_K else ""
 W33_CV = "/kaggle/working"
 # целиком, двумя кернелами и по одному сиду на кернел: остаток недельной квоты раздроблен по аккаунтам
-W33_SPLIT = (("", S5), ("-a", "42,43"), ("-b", "44,45,46")) + tuple((f"-s{x}", str(x)) for x in range(42, 47))
+W33_SPLIT = ((("", S5), ("-a", "42,43"), ("-b", "44,45,46")) + tuple((f"-s{x}", str(x)) for x in range(42, 47))
+             + (("-c", seeds(47, 51)),))        # -c: сиды 47-51, вместе с 42-46 — подтверждение на 10 сидах
 # исходный агент статьи (исходный свёрточный кодировщик + DQN, буфер и дообучение онлайн) в нашем
 # протоколе: 7000 эпох, все 27 действий, без стража — до сих пор он оценивался только при 31 000 эпох
 ORIG_CK = ("rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt" if NS2D
@@ -1207,8 +1208,11 @@ def free_eval(model, tag, sd, guard=True):
                   + t3ev(tag + ("_g" if guard else "_free"), sd, hours=MAP_EH))
 
 
-def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True, extra=""):
+def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True, extra="", src=None, tr_extra="", st_extra=""):
+    """src — источники собранного буфера (по умолчанию четверть сборщиков волны 28); tr_extra и
+    st_extra — добавки к командам учителя и ученика (например, свой набор чужих буферов)."""
     _tt, _mt = f"{TEACH}_{nm}{sfx}", f"ete_{nm}"
+    src = src or W33_SRC
     steps = []
     init = ""
     if pre == "probe":
@@ -1218,9 +1222,9 @@ def w33_job(nm, enc, pre, sd=S5, sfx="", ctx=True, extra=""):
     elif pre:
         init = f" --encoder-init {pre}"
     base = MAP_BASE if ctx else MAP_BASE.replace(" --scalar-ctx", "")
-    steps += [(COMBO, f"{TEACH_TR} --target-buffer {W33_SRC} --tag {_tt}"),
-              (OFFLINE, f"--variant convnext_dqn {base} --encoder {enc}{init} {MB} --target-buffer {W33_SRC} "
-                        f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 {extra} --seeds 1 "
+    steps += [(COMBO, f"{TEACH_TR} --target-buffer {src} {tr_extra} --tag {_tt}"),
+              (OFFLINE, f"--variant convnext_dqn {base} --encoder {enc}{init} {MB} --target-buffer {src} "
+                        f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 {extra} {st_extra} --seeds 1 "
                         f"--model-tag {_mt}"),
               free_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}", sd)]
     add(f"w33-{nm}{sfx}", 33, "H06", steps, 2.0 + MAP_EH, needs=[pre] if pre and pre != "probe" else [],
@@ -1253,6 +1257,9 @@ if W28_K:
         # две сети, как в исходном агенте статьи: одна выбирает оптимизатор, вторая (свой кодировщик)
         # — его шаг и длительность; выбор в два этапа. two — головы как у лучшего варианта, twod —
         # dueling-головы со скрытым слоем, как в статье
+        # ещё два набора по два сборщика на ns2d (обучение и оценка без маски): разброс между наборами
+        for _i, _ks in enumerate(((6, 7), (8, 9)) if NS2D else ()):
+            w33_job(f"set{_i + 2}", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, src=",".join(tbuf(k) for k in _ks))
         w33_job("two", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, extra="--two-nets")
         w33_job("twod", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, extra="--two-nets --two-nets-head dueling")
         # повторы четверти собранного буфера (волна 32) без маски: держится ли лучший результат на
@@ -1261,6 +1268,25 @@ if W28_K:
             _ck = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_tbq{_i}_seed1.pt"
             add(f"w33-nm-tbq{_i}-g{_sfx}", 33, "H06", [free_eval(_ck, f"t3m_ete_tbq{_i}", _sd)],
                 0.5 + MAP_EH, needs=[_ck], note=f"без маски, со стражем: повтор {_i} четверти собранного, сиды {_sd}")
+
+# ---------------------------------------------------------------- волна 34
+# Сколько чужих данных нужно методу. Тот же направленный сбор и рецепт, но модель среды (у сборщика,
+# учителя и ученика) видит журналы только ОДНОГО другого уравнения вместо 21: для pb2d это ns2d, для
+# ns2d — pb2d. Предобученный кодировщик прежний. Оценка без маски.
+W34_OTHER = {"poissonboltzmann2d": "ns2d_liddriven", "ns2d_liddriven": "poisson_boltzmann_2d"}.get(PDE, "")
+W34_K = {"poissonboltzmann2d": 1, "ns2d_liddriven": 2}.get(PDE, 0)
+for _k in range(W34_K):
+    add(f"w34-lcol-{_k}", 34, "H06",
+        [(COLLECT, f"--pde {PDE} --budget {BUDGET} --rounds 99 --batch {_cbatch} --share-prefix --prefix-bonus 0.1 "
+                   f"--truncate 3 {KEEPS} --acq lcb --lcb-k 1 --save-buffer --worker {_k}/{W34_K} --hours 8.0 "
+                   f"--kernel-hours 8.0 --resume --subdirs {W34_OTHER} --save-dir runs_rl_online "
+                   f"--tag tbufl_{W28_SHORT}_w{_k}")],
+        9.0, note=f"направленный сбор с картами, модель среды по одному чужому уравнению ({W34_OTHER})")
+if W34_K:
+    _lsrc = ",".join(f"rl_arch/buffers_new/tbufl_{W28_SHORT}_w{k}" for k in range(W34_K))
+    for _sfx, _sd in W33_SPLIT[:3]:
+        w33_job("lean", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, src=_lsrc, tr_extra=f"--subdirs {W34_OTHER}",
+                st_extra=f"--mb-subdirs {W34_OTHER}")
 
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
