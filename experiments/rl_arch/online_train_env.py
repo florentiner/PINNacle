@@ -17,6 +17,12 @@
 
   python experiments/rl_arch/online_train_env.py --variant convnext_dqn \
       --pde poissonboltzmann2d --hours 11 --seed 42
+
+Дообучение лучшего офлайнового агента тем же лоссом, каким он учился (online_aux.py):
+--rlpd-target-buffer — офлайновая половина батча RLPD из собранного буфера цели (загрузчик и
+преобразование переходов offline_rl.py --target-buffer) вместо исходного случайного буфера;
+--mb-aux / --teacher-from --teacher-w — плотные добавки по всем 27 действиям на обеих половинах
+батча (у онлайнового перехода цели считаются при записи в буфер). Без этих флагов лосс — один TD.
 """
 from __future__ import annotations
 
@@ -46,6 +52,7 @@ from offline_rl import (QNet, apply_state_mode, chain_ctx, STATE_MODES, PDE_DESC
                         MAP_ENCODERS, ckpt_arch, keep_consistent, loss_state, pde_desc, pde_meta,
                         state_channels, subdir_to_pde)
 import tele_maps as TM  # noqa: E402
+import online_aux as OA  # noqa: E402
 
 EPS_START, EPS_END, EPS_DECAY = 0.5, 0.05, 50   # значения авторов (rl_algorithms.py)
 GAMMA = 0.9                                      # их rl_agent_params
@@ -62,13 +69,18 @@ class LocalBuffer:
         self.per, self.alpha = per, per_alpha
         self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio = ([] for _ in range(7))
         self.ub = []            # ошибка в s2: потолок ценности s2 при награде-разности
+        self.aux = []           # плотные цели состояния s (--mb-aux, --teacher-w): None или {mb, te}
+        self.has_aux = False    # без плотных целей выборка идёт прежним путём
         self.last_idx = None
         self.last_ub = None
+        self.last_aux = None
 
-    def push(self, s, a, r, s2, d, gam=None, ub=None):
+    def push(self, s, a, r, s2, d, gam=None, ub=None, aux=None):
         if len(self.s) >= self.cap:
-            for arr in (self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio, self.ub):
+            for arr in (self.s, self.a, self.r, self.s2, self.d, self.gam, self.prio, self.ub, self.aux):
                 arr.pop(0)
+        self.aux.append(aux)
+        self.has_aux = self.has_aux or aux is not None
         self.s.append(s); self.a.append(a); self.r.append(r)
         self.s2.append(s2); self.d.append(d)
         self.ub.append(float("inf") if ub is None else float(ub))
@@ -88,6 +100,8 @@ class LocalBuffer:
         self.last_idx = idx
         self.last_ub = torch.as_tensor(np.array([self.ub[i] for i in idx], dtype=np.float32),
                                        device=device)
+        if self.has_aux:
+            self.last_aux = OA.stack_aux([self.aux[i] for i in idx], device)
         t = lambda arr, dt: torch.as_tensor(np.array([arr[i] for i in idx]), dtype=dt, device=device)
         return (t(self.s, torch.float32), t(self.a, torch.long), t(self.r, torch.float32),
                 t(self.s2, torch.float32), t(self.d, torch.float32), t(self.gam, torch.float32))
@@ -99,11 +113,20 @@ class LocalBuffer:
             self.prio[int(i)] = float(abs(e)) + 1e-3
 
 
+def _aux_term(net, s, batch, aux):
+    """Плотные добавки офлайнового рецепта (online_aux.aux_loss): aux — объект online_aux.Aux, batch —
+    цели строк батча. Значения добавок остаются в aux.last (для журнала и строки результата)."""
+    term, parts = OA.aux_loss(net, s, batch, aux.w_mb, aux.w_te)
+    aux.last = parts
+    return term
+
+
 def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0,
-                 munch=False, m_tau=0.03, m_alpha=0.9, l2_init=0.0, init_w=None, vbound=None):
+                 munch=False, m_tau=0.03, m_alpha=0.9, l2_init=0.0, init_w=None, vbound=None, aux=None):
     """vbound: None — без границ; число — нижняя граница ценности следующего состояния
     (0, если агент может остановиться; -inf, если нет). Верхняя граница — ошибка в
-    следующем состоянии: при награде-разности будущие улучшения её не превысят."""
+    следующем состоянии: при награде-разности будущие улучшения её не превысят.
+    aux — плотные добавки по всем 27 действиям (--mb-aux, --teacher-w); None — прежний лосс."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
     for _ in range(iters):
@@ -126,6 +149,10 @@ def agent_update(net, buf, opt, batch_size, iters, variant, cql_alpha=1.0,
         if "cql" in variant:
             qs = net.q_scalar(s)
             loss = loss + cql_alpha * (torch.logsumexp(qs, 1) - qs.gather(1, a[:, None]).squeeze(1)).mean()
+        if aux is not None and buf.has_aux:
+            term = _aux_term(net, s, buf.last_aux, aux)
+            if term is not None:
+                loss = loss + term
         opt.zero_grad(); loss.backward(); opt.step()
         net.soft_update()
     return float(loss.item())
@@ -149,14 +176,18 @@ def _dihedral_pair(s, s2):
 
 def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
                        max_bellman=False, aug=False, munch=False, m_tau=0.03,
-                       m_alpha=0.9, l2_init=0.0, init_w=None, vbound=None):
-    """RLPD: симметричная выборка — половина батча офлайн, половина онлайн."""
+                       m_alpha=0.9, l2_init=0.0, init_w=None, vbound=None, aux=None):
+    """RLPD: симметричная выборка — половина батча офлайн, половина онлайн.
+    aux — плотные добавки по всем 27 действиям на обеих половинах; None — прежний лосс."""
     import torch.nn.functional as F
     dev = next(net.model.parameters()).device
-    parts, ubs = [], []
+    parts, ubs, auxs = [], [], []
     for b in (off_buf, on_buf):
         parts.append(b.sample(half, dev))
         ubs.append(b.last_ub)
+        if aux is not None:
+            # у половины без единой цели (онлайновый буфер до первых целей) веса нулевые
+            auxs.append(b.last_aux if b.has_aux else OA.stack_aux([None] * len(parts[-1][1]), dev))
     ub = torch.cat(ubs, 0)
     s, a, r, s2, d, gm = [torch.cat([p[i] for p in parts], 0) for i in range(6)]
     if aug:
@@ -180,6 +211,10 @@ def agent_update_mixed(net, off_buf, on_buf, opt, half, variant, cql_alpha=1.0,
     if "cql" in variant:
         qs = net.q_scalar(s)
         loss = loss + cql_alpha * (torch.logsumexp(qs, 1) - qs.gather(1, a[:, None]).squeeze(1)).mean()
+    if aux is not None:
+        term = _aux_term(net, s, OA.cat_aux(auxs), aux)
+        if term is not None:
+            loss = loss + term
     opt.zero_grad(); loss.backward(); opt.step()
     net.soft_update()
     with torch.no_grad():
@@ -1083,6 +1118,39 @@ def main():
                          "карты не строятся); fulltele карты И телеметрия: 4 карты + 10 каналов "
                          "телеметрии + признак её наличия (tele_maps.py); офлайновым переходам RLPD "
                          "телеметрия ставится нулями с признаком 0")
+    # --- лосс офлайнового рецепта в онлайновом дообучении (online_aux.py). По умолчанию выключено:
+    # без этих флагов батч и лосс прежние бит-в-бит ---
+    ap.add_argument("--rlpd-target-buffer", default="",
+                    help="офлайновая половина батча RLPD — собранный буфер цели (та же спецификация, что у "
+                         "offline_rl.py --target-buffer: префиксы rl_arch/buffers_new/<тег> в HF и/или "
+                         "локальные папки через запятую) вместо --rlpd-subdir. Читается тем же загрузчиком и "
+                         "тем же преобразованием переходов, что у офлайнового тренера; нужны --rlpd и "
+                         "--offline-fix. Вместе с --rlpd-subdir не задаётся")
+    ap.add_argument("--mb-aux", type=float, default=0.0,
+                    help="вес модельных целей в онлайновом лоссе (0 = выключено): W * Huber(Q(s,.) - Q_mb(s,.)) "
+                         "по всем 27 действиям на обеих половинах батча, как offline_rl.py --mb-aux. У строк "
+                         "офлайновой половины цели считаются один раз до обучения, у онлайнового перехода — "
+                         "при записи в буфер, из состояния суррогата живой цепочки (mb_targets.py). Нужны "
+                         "--rlpd, --offline-fix и награда delta или dlog у обеих половин")
+    ap.add_argument("--mb-h", type=int, default=3,
+                    help="модельные цели: глубина жадного просмотра вперёд в суррогате")
+    ap.add_argument("--mb-lam", type=float, default=0.5,
+                    help="модельные цели: награда = среднее по членам ансамбля - L * разброс (MOPO)")
+    ap.add_argument("--mb-subdirs", default="all",
+                    help="модельные цели: буферы, на которых учится суррогат (all | solvable | список); с "
+                         "--rlpd-target-buffer строки цели в таблице — только собранные")
+    ap.add_argument("--mb-table", default="",
+                    help="модельные цели: готовая таблица переходов npz (локально или в HF) вместо сборки")
+    ap.add_argument("--mb-members", type=int, default=5, help="модельные цели: членов ансамбля суррогата")
+    ap.add_argument("--mb-work", default="agent_combo_work",
+                    help="модельные цели: кэш таблицы и суррогата (общий с agent_combo.py и offline_rl.py)")
+    ap.add_argument("--teacher-from", default="",
+                    help="чекпоинт учителя на скалярах от agent_combo.py (локальный путь или путь в HF), как "
+                         "offline_rl.py --teacher-from; задаётся вместе с --teacher-w")
+    ap.add_argument("--teacher-w", type=float, default=0.0,
+                    help="вес дистилляции учителя в онлайновом лоссе (0 = выключено): W * Huber(Q(s,.) - "
+                         "Q_учителя(s,.)) по всем 27 действиям на обеих половинах батча; нужны --rlpd, "
+                         "--offline-fix, награда delta или dlog и --init-err")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -1184,6 +1252,41 @@ def main():
     guide = parse_chain(args.guide)
     if guide and not all(allowed[g] for g in guide):
         ap.error("--guide содержит действие, запрещённое --mask")
+    if args.rlpd_target_buffer:
+        if not args.rlpd or args.self_prior:
+            ap.error("--rlpd-target-buffer задаёт офлайновую половину батча RLPD: нужен --rlpd без --self-prior")
+        if any(x.split("=")[0] == "--rlpd-subdir" for x in sys.argv[1:]):
+            ap.error("--rlpd-target-buffer и --rlpd-subdir вместе не задаются: офлайновая половина — либо "
+                     "собранный буфер цели, либо исходный буфер (объединения нет)")
+        if not args.offline_fix:
+            ap.error("--rlpd-target-buffer требует --offline-fix: файлы сбора — цепочки, без границ их не прочитать")
+        bad = [f for f, on in (("--qwm", args.qwm), ("--preload", args.preload)) if on]
+        if bad:
+            ap.error("--rlpd-target-buffer несовместим с " + ", ".join(bad))
+    if (args.teacher_w > 0) != bool(args.teacher_from) or args.teacher_w < 0 or args.mb_aux < 0:
+        ap.error("--teacher-from и --teacher-w > 0 задаются вместе; веса --mb-aux и --teacher-w не отрицательны")
+    aux_on = args.mb_aux > 0 or args.teacher_w > 0
+    if aux_on:
+        from offline_rl import QUANTILE_VARIANTS
+        if not (args.rlpd and args.offline_fix) or args.self_prior:
+            ap.error("--mb-aux и --teacher-w требуют --rlpd с офлайновым буфером и --offline-fix (без "
+                     "--self-prior): цели считаются по цепочкам, как у офлайнового тренера")
+        if args.offline_reward not in ("delta", "dlog") or args.offline_reward != args.online_reward:
+            ap.error("--mb-aux и --teacher-w требуют одну награду у обеих половин батча: --offline-reward "
+                     "delta (или dlog вместе с --online-reward dlog); в logged, level и model цели не переводятся")
+        if args.teacher_w > 0 and args.init_err is None:
+            ap.error("--teacher-w требует --init-err: учитель считает первый шаг от ошибки необученной сети")
+        bad = [f for f, on in (("--hl-gauss", args.hl_gauss), ("--boot-heads", args.boot_heads),
+                               ("--rlpd-full", args.rlpd_full), ("--risk-tau", args.risk_tau),
+                               ("--cvar-alpha", args.cvar_alpha),
+                               (f"--variant {args.variant} (квантильная голова)", args.variant in QUANTILE_VARIANTS),
+                               ("--pbrs", args.pbrs), ("--n-step > 1", args.n_step > 1), ("--bbf", args.bbf),
+                               ("--go-explore", args.go_explore), ("--preload", args.preload),
+                               ("--qwm", args.qwm), ("--munchausen", args.munchausen),
+                               ("--max-bellman", args.max_bellman)) if on]
+        if bad:
+            ap.error("--mb-aux и --teacher-w несовместимы с " + ", ".join(bad) + ": у этих веток свой лосс, "
+                     "своя сеть или другая награда — плотные цели в них не добавляются")
     run_meta = dict(ctx_kmax=args.max_chain_steps, ctx_budget=args.budget,
                     ctx_err=("none" if args.ctx_no_err else "err"),
                     mask=[int(i) for i in np.where(~allowed)[0]],
@@ -1377,23 +1480,36 @@ def main():
                             path_to_trajectories=None, **AE_MODEL_PARAMS)
     buf = LocalBuffer(per=args.per)
     off_buf = None
+    aux = None                  # плотные добавки офлайнового рецепта (online_aux.Aux); None — прежний лосс
+    aux_row = {}                # поля новых флагов для строки результата
     if (args.rlpd or args.qwm) and not args.self_prior:
         # при self-prior внешний буфер не нужен вовсе — опорную половину даст
         # собственный замороженный прайор; качать 300МБ незачем
         # офлайновая половина батча: тот же буфер, на котором учатся офлайн-агенты
         from offline_rl import load_episodes, episodes_to_arrays, split_by_episode
-        od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
-                                fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"),
-                                chain_fix=args.offline_fix, reward_form=args.offline_reward,
-                                init_err=args.init_err if args.offline_fix else None,
-                                budget=args.episode_budget if args.offline_fix else 0,
-                                err_scale=err_scale if args.offline_fix else 1.0)
+        off_subdir, tb_eps, tb_info = args.rlpd_subdir, None, None
+        if args.rlpd_target_buffer:
+            # собранный буфер цели: загрузчик и преобразование переходов офлайнового тренера
+            # (offline_rl.py --target-buffer), исходный буфер задачи не читается
+            off_subdir = pde_meta()[args.pde].get("subdir") or args.pde
+            tb_eps, od, tb_info = OA.load_target(args.rlpd_target_buffer, off_subdir, args.offline_reward,
+                                                 args.init_err, args.episode_budget, err_scale,
+                                                 log=lambda *x: print(*x, flush=True))
+            run_meta.update(rlpd_target_buffer=args.rlpd_target_buffer, target_buffer=dict(tb_info))
+            aux_row.update(rlpd_target_buffer=args.rlpd_target_buffer, **{"tb_" + k: v for k, v in tb_info.items()})
+        else:
+            od = episodes_to_arrays(load_episodes(None, args.rlpd_subdir),
+                                    fix_next_state=(args.rlpd_subdir == "poisson_boltzmann_2d"),
+                                    chain_fix=args.offline_fix, reward_form=args.offline_reward,
+                                    init_err=args.init_err if args.offline_fix else None,
+                                    budget=args.episode_budget if args.offline_fix else 0,
+                                    err_scale=err_scale if args.offline_fix else 1.0)
         if fulltele:
             # в буфере телеметрии нет: её каналы нулевые, признак наличия 0 (tele_maps.py)
             od["S"], od["S2"] = TM.fulltele_batch(od["S"]), TM.fulltele_batch(od["S2"])
         elif args.state_mode != "full":
-            od["S"] = apply_state_mode(od["S"], args.state_mode, seed=101, pde=subdir_to_pde(args.rlpd_subdir))
-            od["S2"] = apply_state_mode(od["S2"], args.state_mode, seed=202, pde=subdir_to_pde(args.rlpd_subdir))
+            od["S"] = apply_state_mode(od["S"], args.state_mode, seed=101, pde=subdir_to_pde(off_subdir))
+            od["S2"] = apply_state_mode(od["S2"], args.state_mode, seed=202, pde=subdir_to_pde(off_subdir))
         if args.scalar_ctx:
             if args.offline_fix:
                 # контекст s' — это контекст СЛЕДУЮЩЕГО шага (шаг+1, потрачено с учётом
@@ -1413,7 +1529,29 @@ def main():
             print(f"офлайновым переходам приписан контекст: {od['S'].shape}", flush=True)
         otr, _ = split_by_episode(od)
         oidx = np.where(otr)[0]
-        if args.keep_opt:
+        off_aux = {}
+        if aux_on:
+            # цели строк офлайновой половины: один расчёт до обучения, теми же функциями и в тех же
+            # единицах, что у offline_rl.py (таблица суррогата с собранным буфером цели, ансамбль,
+            # жадный просмотр вперёд; Q учителя на скалярах в единицах награды тренера)
+            aux = OA.Aux(args.pde, w_mb=args.mb_aux, w_te=args.teacher_w, reward_form=args.offline_reward,
+                         err_scale=err_scale, init_err=args.init_err, gamma=float(GAMMA),
+                         budget=int(args.episode_budget), smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0),
+                         mb_h=args.mb_h, mb_lam=args.mb_lam, mb_subdirs=args.mb_subdirs, mb_table=args.mb_table,
+                         mb_members=args.mb_members, mb_work=args.mb_work, quick=bool(args.smoke),
+                         teacher_from=args.teacher_from, device=dev, log=lambda *x: print(*x, flush=True))
+            off_aux = aux.offline(od, otr, episodes=tb_eps)
+            run_meta.update(aux.meta())
+        env_now = OA.env_label(args.keep_opt, args.keep_opt_mode)
+        same_env = tb_info is not None and set(tb_info["envs"]) == {env_now}
+        if tb_info is not None and not same_env:
+            print(f"ВНИМАНИЕ: собранный буфер цели записан в среде {sorted(tb_info['envs'])}, прогон идёт в "
+                  f"{env_now}", flush=True)
+        if args.keep_opt and same_env:
+            # собранный буфер записан в этой же среде без сбросов: согласованы все его переходы
+            print(f"--keep-opt: собранный буфер цели записан в той же среде ({env_now}): берутся все "
+                  f"{len(oidx)} обучающих переходов", flush=True)
+        elif args.keep_opt:
             # буфер собран со сбросом оптимизатора на каждом действии. В среде без сбросов переход
             # тот же, только если оптимизатор перед действием и так был бы новым: первый шаг
             # цепочки, смена семейства оптимизатора или PSO (у него состояния нет)
@@ -1467,13 +1605,17 @@ def main():
             for i in oidx:
                 off_buf.push(((od["S"][i][None] - om) / os_)[0], int(od["A"][i]), float(od["R"][i]),
                              ((od["S2"][i][None] - om) / os_)[0], float(od["D"][i]),
-                             ub=float(od["ERR"][i]) if "ERR" in od else None)
+                             ub=float(od["ERR"][i]) if "ERR" in od else None,
+                             aux=(OA.Aux.row(off_aux, int(i)) if off_aux else None))
         if mean is None:
             mean, std = om, os_
         if args.scalar_ctx:
             mean, std = pad_norm(mean, std, n_obs + n_ctx)
-        print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из {args.rlpd_subdir}, "
-              f"UTD={args.rlpd_utd}", flush=True)
+        print(f"RLPD: офлайновый буфер {len(off_buf)} переходов из "
+              + (f"собранного буфера цели {args.rlpd_target_buffer}" if tb_info is not None else args.rlpd_subdir)
+              + f", UTD={args.rlpd_utd}"
+              + (f"; плотные цели: модельные у {sum(1 for x in off_buf.aux if x and 'mb' in x)} переходов, "
+                 f"учителя у {sum(1 for x in off_buf.aux if x and 'te' in x)}" if aux is not None else ""), flush=True)
     if args.preload:
         # схема авторов: прошлые переходы кладутся в ТОТ ЖЕ буфер, из которого потом
         # идёт равномерная выборка — отличие от RLPD, где офлайн держится отдельно
@@ -1595,6 +1737,7 @@ def main():
         end_reason = ""
         start_step, resumed_from = 0, None
         chain_trans = []    # (s_норм, a, r) текущей цепочки — для self-imitation
+        live_acts, live_eps, live_errs = [], [], []     # цепочка для плотных целей (online_aux.Aux.live)
 
         if args.boot_heads:
             net.active = int(rng.integers(0, net.K))   # одна голова на всю цепочку
@@ -1850,7 +1993,13 @@ def main():
                     phi = lambda e: -math.log10(max(float(e), 1e-8))
                     if err_before is not None:
                         r_eff = reward + args.pbrs * (g_eff * phi(err) - phi(err_before))
-                buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff, ub=err)
+                aux_s = None
+                if aux is not None:
+                    # цели состояния ДО действия: по цепочке без него (суррогат получает измеренную
+                    # ошибку после прошлого действия, как в строках буфера), затем действие дописывается
+                    aux_s = aux.live(live_acts, live_eps, live_errs)
+                    live_acts.append(int(a)); live_eps.append(int(epochs)); live_errs.append(float(err))
+                buf.push(s_norm, a, r_eff, s2_norm, float(done == 1), gam=g_eff, ub=err, aux=aux_s)
             if args.sil:
                 chain_trans.append((s_norm.copy(), a, float(reward)))
             if args.distill:
@@ -1975,17 +2124,18 @@ def main():
                                                 max_bellman=args.max_bellman, aug=args.aug,
                                                 munch=args.munchausen, m_tau=args.m_tau,
                                                 m_alpha=args.m_alpha, l2_init=args.l2_init,
-                                                init_w=init_w, vbound=vbound)
+                                                init_w=init_w, vbound=vbound, aux=aux)
                     else:
                         ql = agent_update(net, off_buf, q_opt, args.batch_size, 1, args.variant,
                                           munch=args.munchausen, m_tau=args.m_tau,
                                           m_alpha=args.m_alpha, l2_init=args.l2_init,
-                                          init_w=init_w, vbound=vbound)
+                                          init_w=init_w, vbound=vbound, aux=aux)
                 if args.sil and sil_buf is not None and sil_buf.chains:
                     from advanced_agents import sil_update
                     sil_update(net, sil_buf, q_opt, args.batch_size, dev)
                 print(f"[траектория {traj}] шаг {len(chain)}: {opt_name} lr={lr} ep={epochs} ({how}, eps={eps:.2f}) "
-                      f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)}+{len(off_buf)} q-loss={ql:.4f}", flush=True)
+                      f"l2re={l2re:.4e} reward={reward:+.4f} буфер={len(buf)}+{len(off_buf)} q-loss={ql:.4f}"
+                      + ("" if aux is None else "".join(f" {k}-aux={v:.4f}" for k, v in aux.last.items())), flush=True)
             elif hlg is not None and len(buf) >= args.min_buffer:
                 ql = hlg_update(net, buf, q_opt, args.batch_size, args.update_iters, hlg,
                                 munch=args.munchausen, m_tau=args.m_tau, m_alpha=args.m_alpha)
@@ -2053,7 +2203,8 @@ def main():
                        state_mode=args.state_mode,
                        t_state_h=round(t_state_total / 3600, 3),
                        t_opt_h=round(t_opt_total / 3600, 3),
-                       elapsed_h=round((time.time() - t_start) / 3600, 2))
+                       elapsed_h=round((time.time() - t_start) / 3600, 2),
+                       **aux_row, **(aux.row_fields() if aux is not None else {}))
             print(json.dumps({k: v for k, v in row.items() if k not in ("chains", "last_chain")}), flush=True)
             last_row = row
             if not args.smoke and time.time() - last_row_up >= 1800:

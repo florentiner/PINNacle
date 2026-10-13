@@ -16,7 +16,10 @@ teacher_scalar_q, teacher_targets) без GPU, без сети и без обу�
     буфера, посчитанные тренером ученика, совпадают с Q того же чекпоинта на состоянии, которое
     собирает оценка (online_eval_env.add_scalar_ctx + описатель) из строк ТАБЛИЦЫ учителя — и у
     одного УрЧП, и на смеси с нормировкой ошибки на E0; перевод единиц dlog -> delta / dlog, каркас
-    учителя, отказы; добавка к TD в train_variant и полный прогон main() по боевому рецепту.
+    учителя, отказы; добавка к TD в train_variant и полный прогон main() по боевому рецепту;
+  * онлайновое дообучение (online_aux.py): цепочка живого прогона строками набора тренера даёт то
+    же состояние суррогата, что строка буфера и live_state, а цели онлайнового перехода (модельные
+    и учителя) равны целям строки буфера с той же цепочкой; слагаемое лосса — как в train_variant.
 
     DDEBACKEND=pytorch HF_HUB_OFFLINE=1 python experiments/rl_arch/tests/test_shield_teacher.py
 """
@@ -46,6 +49,7 @@ import offline_rl as O  # noqa: E402
 import surrogate as S  # noqa: E402
 import mb_targets as MB  # noqa: E402
 import agent_combo as AC  # noqa: E402
+import online_aux as OA  # noqa: E402
 import test_map_agent as T  # noqa: E402
 
 torch.set_num_threads(1)
@@ -143,6 +147,14 @@ def test_features(bufs, tmp):
         X_l, ep_l = MB.step_features(tab_l, st_l, data["A"][i:i + 1], budget=int(st_l["spent"][0]) + left)
         assert np.array_equal(X_l[0], X_fit[i]), (i, np.where(X_l[0] != X_fit[i])[0])
         assert int(st_l["step"][0]) == len(chain) and int(st_l["spent"][0]) == sum(c[2] for c in chain)
+        # четвёртый путь — онлайновое дообучение (online_aux.live_data): цепочка живого прогона строками
+        # набора тренера, состояние — тем же chain_states; совпадает и с live_state, и со строкой таблицы
+        s0 = i - int(data["STEP"][i])
+        ld = OA.live_data(data["A"][s0:i], S.EPOCHS[data["A"][s0:i]], data["ERR"][s0:i])
+        st_o, ok_o, _ = MB.chain_states(ld, tab_l, np.array([0]), np.ones(1), budget=7000)
+        st_o = {k: v[i - s0:i - s0 + 1] for k, v in st_o.items()}
+        assert ok_o[i - s0] and all(np.array_equal(st_o[k], st_l[k]) for k in st_l), i
+        assert np.array_equal(MB.step_features(tab_l, st_o, data["A"][i:i + 1], budget=7000)[0][0], X_fit[i]), i
     # новые цепочки (строки оценки / collect_active): последнее действие обрезано бюджетом 7000
     full = [["Adam", 0.01, 2500], ["Adam", 0.0001, 2500], ["LBFGS", 1.0, 1000], ["LBFGS", 0.5, 500],
             ["Adam", 0.001, 500]]
@@ -160,7 +172,17 @@ def test_features(bufs, tmp):
         X_l, ep_l = MB.step_features(tab_l, st_l, tab2["A"][new[k]:new[k] + 1],
                                      budget=int(st_l["spent"][0]) + 7000 - (spent[k - 1] if k else 0))
         assert np.array_equal(X_l[0], X_new[k]), k
+        # то же через строки набора (онлайновое дообучение): действие обрезается остатком бюджета 7000
+        ld = OA.live_data(tab2["A"][new[:k]], [c[2] for c in full[:k]], errs[:k])
+        st_o, ok_o, _ = MB.chain_states(ld, tab_l, np.array([0]), np.ones(1), budget=7000)
+        X_o, ep_o = MB.step_features(tab_l, {key: v[k:k + 1] for key, v in st_o.items()},
+                                     tab2["A"][new[k]:new[k] + 1], budget=7000)
+        # ошибка в наборе тренера хранится в float32 (как в дампе буфера): log10 ошибки совпадает до 1e-7
+        assert ok_o[k] and np.allclose(X_o[0], X_new[k], rtol=0, atol=1e-6) and int(ep_o[0]) == full[k][2], k
+        assert all(np.array_equal(st_o[key][k:k + 1], st_l[key]) for key in st_l if key != "l"), k
     assert int(ep_l[0]) == 500 and S.EPOCHS[tab2["A"][new[-1]]] == 1000
+    ld = OA.live_data(tab2["A"][new], [c[2] for c in full], errs)       # бюджет выбран: состояния для цели нет
+    assert not MB.chain_states(ld, tab_l, np.array([0]), np.ones(1), budget=7000)[1][len(full)]
     # состояние после обрезанного действия: эпохи по семействам считаются фактические
     st_l = MB.live_state(tab_l, full, errs[-1])
     assert int(st_l["spent"][0]) == 7000 and st_l["spf"][0].tolist() == [5500.0, 1500.0, 0.0]
@@ -424,6 +446,83 @@ def test_teacher_loss(ckpt):
     print("учитель: добавка к TD и к модельным целям, ученик приближается к учителю: OK")
 
 
+def test_online_targets(ckpt):
+    """Онлайновое дообучение (online_aux.Aux): цели строк офлайновой половины — те же числа, что считает
+    offline_rl.py; цели онлайнового перехода равны целям строки набора с той же цепочкой."""
+    import torch.nn.functional as F
+    data = T.make_data()
+    n = len(data["A"])
+    every = np.ones(n, bool)
+    mask = data["EP"] < 4
+    for form in ("delta", "dlog"):
+        aux = OA.Aux(PDE, w_mb=0.5, w_te=0.5, reward_form=form, err_scale=1.0, init_err=1.0, gamma=0.99,
+                     budget=7000, mb_h=3, mb_lam=0.5, teacher_from=ckpt, device=CPU, log=QUIET)
+        off = aux.offline(data, mask, model=T.fake_model())
+        QMB, MBW, _ = MB.precompute(data, every, [PDE], form, np.ones(1), np.array([1.0]), 0.99, h=3, lam=0.5,
+                                    budget=7000, model=T.fake_model(), log=QUIET)
+        QTE, TEV, _ = O.teacher_targets(ckpt, data, [PDE], form, np.ones(1), np.array([1.0]), 0.99, CPU,
+                                        budget=7000, log=QUIET)
+        assert (off["MBW"] == (MBW & mask)).all() and (off["TEW"] == (TEV & mask)).all() and MBW.any() and TEV.any()
+        assert np.array_equal(off["QMB"][mask], QMB[mask]) and np.array_equal(off["QTE"], QTE)
+        assert not off["QMB"][~mask].any(), "строки вне обучающей части без модельной цели"
+        assert OA.Aux.row(off, int(np.where(~mask)[0][0])) is None
+        r0 = OA.Aux.row(off, 0)
+        assert np.array_equal(r0["mb"], QMB[0]) and np.array_equal(r0["te"], QTE[0])
+        assert aux.meta()["teacher"]["rows"] == int(TEV.sum()) and aux.meta()["mb"]["rows"] == int((MBW & mask).sum())
+        for i in range(n):
+            s0 = i - int(data["STEP"][i])
+            r = aux.live(data["A"][s0:i], [O.action_epochs(a) for a in data["A"][s0:i]], data["ERR"][s0:i]) or {}
+            assert ("mb" in r) == bool(MBW[i]) and ("te" in r) == bool(TEV[i]), (form, i)
+            if MBW[i]:
+                assert r["mb"].shape == (27,) and np.allclose(r["mb"], QMB[i], atol=1e-6), (form, i)
+            if TEV[i]:
+                assert r["te"].shape == (27,) and np.allclose(r["te"], QTE[i], atol=1e-6), (form, i)
+        assert aux.live_n["calls"] == n and aux.live_n["mb"] == int(MBW.sum()) and aux.live_n["te"] == int(TEV.sum())
+    # остаток бюджета: действие в модели обрезается им, как в среде тренера; бюджет выбран — цели нет
+    acts, errs = [2, 2], [0.5, 0.3]                                 # Adam 0.01 на 2500 эпох дважды
+    r_big = aux.live(acts, [2500, 2500], errs)
+    aux_small = OA.Aux(PDE, w_mb=0.5, reward_form="dlog", init_err=1.0, budget=5200, mb_h=1, log=QUIET)
+    aux_small.build_model(model=T.fake_model())
+    aux_wide = OA.Aux(PDE, w_mb=0.5, reward_form="dlog", init_err=1.0, budget=7000, mb_h=1, log=QUIET)
+    aux_wide.build_model(model=T.fake_model())
+    seen = []
+    orig = MB.step_features
+
+    def spy(tab, st, a, budget=0):
+        X, ep = orig(tab, st, a, budget)
+        seen.append(ep.copy())
+        return X, ep
+    MB.step_features = spy
+    try:
+        r_s, r_w = aux_small.live(acts, [2500, 2500], errs), aux_wide.live(acts, [2500, 2500], errs)
+    finally:
+        MB.step_features = orig
+    assert r_big is not None and r_s["mb"].shape == (27,) and r_w["mb"].shape == (27,)
+    assert seen[0].max() == 200 and (seen[0] == np.minimum(S.EPOCHS, 200)).all(), "обрезка остатком бюджета 200"
+    assert (seen[1] == np.minimum(S.EPOCHS, 2000)).all()
+    assert aux_small.live(acts + [1], [2500, 2500, 200], errs + [0.2]) is None, "бюджет выбран: цели нет"
+    # слагаемое лосса — выражение train_variant: Huber по 27 действиям, среднее по строкам с целью
+    torch.manual_seed(0)
+    net = O.QNet("convnext_dqn", CPU, in_ch=4, encoder="resnet", ens=2)
+    s = torch.randn(5, 4, 26, 26)
+    rows = [dict(mb=QMB[0], te=QTE[0]), None, dict(mb=QMB[1]), dict(te=QTE[2]), dict(mb=QMB[3], te=QTE[3])]
+    batch = OA.cat_aux([OA.stack_aux(rows[:2], CPU), OA.stack_aux(rows[2:], CPU)])
+    assert batch["mb"][1].tolist() == [1, 0, 1, 0, 1] and batch["te"][1].tolist() == [1, 0, 0, 1, 1]
+    term, parts = OA.aux_loss(net, s, batch, 0.5, 0.25)
+    qv = net.q_heads(s)
+    ref = 0.0
+    for key, w in (("mb", 0.5), ("te", 0.25)):
+        tgt, wt = batch[key]
+        hub = F.smooth_l1_loss(qv, tgt[None].expand_as(qv), reduction="none").mean((0, 2))
+        ref = ref + w * (hub * wt).sum() / wt.sum()
+        assert abs(parts[key] - float(((hub * wt).sum() / wt.sum()).detach())) < 1e-7
+    assert torch.allclose(term, ref) and term.requires_grad
+    assert OA.aux_loss(net, s, OA.stack_aux([None] * 5, CPU), 0.5, 0.25) == (None, {}), "нет целей — нет слагаемого"
+    assert OA.aux_loss(net, s, batch, 0.0, 0.0) == (None, {})
+    print("онлайновое дообучение: цели офлайновых строк как у offline_rl.py, цели онлайнового перехода равны "
+          "целям строки буфера с той же цепочкой, обрезка бюджетом, слагаемое лосса: OK")
+
+
 def test_main(bufs, ckpt, tmp):
     """Полный прогон main() по боевому рецепту (convnext_dqn, delta, граница ценности, контекст)."""
     import killswitch
@@ -499,6 +598,7 @@ def main():
         test_shield_loop(tab, tab_l, data, tmp); lap()
         ckpt = test_teacher(bufs, tmp); lap()
         test_teacher_loss(ckpt); lap()
+        test_online_targets(ckpt); lap()
         test_main(bufs, ckpt, tmp); lap()
         test_eval_flags(); lap()
     print(f"test_shield_teacher: всё прошло за {time.time() - t0:.1f} с")

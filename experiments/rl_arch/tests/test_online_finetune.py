@@ -11,7 +11,15 @@
     BatchNorm заморожены, сохранённый агент читается load_agent и даёт те же Q, что сеть тренера;
   * fulltele: раскладка каналов, расширение чекпоинта нулевыми весами (Q не меняются), нулевая
     телеметрия офлайновых переходов, состояния тренера и оценки на одной цепочке совпадают;
-  * прежняя командная строка: та же сеть, прежняя нормировка по буферу, прежний eps.
+  * прежняя командная строка: та же сеть, прежняя нормировка по буферу, прежний eps; действия и
+    q-loss каждого шага и веса сохранённого агента — те же числа, что давал код до правок;
+  * лосс офлайнового рецепта (--rlpd-target-buffer, --mb-aux, --teacher-from / --teacher-w;
+    online_aux.py): офлайновая половина батча равна массивам офлайнового тренера на тех же файлах
+    собранного буфера (состояния с контекстом, действия, награды, обрезка по бюджету), плотные цели
+    её строк равны тем, что считает offline_rl.py (таблица суррогата с собранным буфером, настоящий
+    ансамбль HGB, настоящий чекпоинт учителя agent_combo.run), у онлайнового перехода цели конечны,
+    формы 27 и равны целям строки буфера с той же цепочкой; обновления идут и двигают сеть; meta и
+    строка результата; fulltele с расширением; отказы.
 
     DDEBACKEND=pytorch HF_HUB_OFFLINE=1 python experiments/rl_arch/tests/test_online_finetune.py
 """
@@ -39,6 +47,7 @@ import torch  # noqa: E402
 import offline_rl as O  # noqa: E402
 import online_eval_env as E  # noqa: E402
 import online_train_env as T  # noqa: E402
+import online_aux as OA  # noqa: E402
 import tele_maps as TM  # noqa: E402
 
 CPU = torch.device("cpu")
@@ -203,7 +212,11 @@ def fake_env(n_chains):
         m.__dict__.update(d)
         sys.modules[k] = m
     T.time, T.build_state, E.build_state = clock, fake_build_state, fake_build_state
-    O.load_episodes = lambda data_dir=None, subdir=None, max_files=0: make_eps()
+    real_load = O.load_episodes
+    # исходный буфер задачи — синтетический дамп; папка с файлами (собранный буфер цели) читается
+    # настоящим загрузчиком
+    O.load_episodes = lambda data_dir=None, subdir=None, max_files=0: (
+        real_load(data_dir, subdir, max_files) if data_dir else make_eps())
     T.upload = lambda *a, **k: None
     try:
         yield made
@@ -230,11 +243,13 @@ def run_train(tmp, argv, n_chains=3):
     def mixed_spy(net, off_buf, on_buf, *a, **k):
         spy["off"], spy["on"] = off_buf, on_buf
         spy["mixed"] = spy.get("mixed", 0) + 1
+        spy["aux"] = k.get("aux")
         return orig_mixed(net, off_buf, on_buf, *a, **k)
 
     def upd_spy(net, buf, *a, **k):
         # с --rlpd, пока онлайновых переходов меньше восьми, обновления идут по офлайновому буферу
         spy.setdefault("off", buf)
+        spy.setdefault("aux_first", k.get("aux"))
         return orig_upd(net, buf, *a, **k)
 
     out = io.StringIO()
@@ -528,11 +543,211 @@ def test_fulltele_main(tmp, path, ck):
           f"тренера и оценки совпали на {len(g) + 1} шагах: OK")
 
 
+# Записано кодом до правок лосса (коммит debbeca) этой же проверкой test_defaults, torch 2.12.0:
+# (оптимизатор, шаг, эпохи, q-loss) каждого шага тренера и сумма модулей весов сохранённого агента
+REF_TORCH = "2.12.0"
+REF_STEPS = [("Adam", "0.01", 100, "0.1701"), ("LBFGS", "0.1", 100, "0.0884"), ("PSO", "0.0001", 100, "0.0216"),
+             ("PSO", "0.0001", 200, "0.0177"), ("LBFGS", "0.1", 100, "0.0048"), ("PSO", "0.001", 100, "0.0193"),
+             ("LBFGS", "0.5", 100, "0.0159"), ("Adam", "0.001", 400, "0.0203"), ("Adam", "0.01", 100, "0.0113"),
+             ("LBFGS", "1.0", 500, "0.0103")]
+REF_ABS = 11354.262049402883
+
+
+def step_lines(out):
+    return [(m[0], m[1], int(m[2]), m[3]) for m in
+            re.findall(r"шаг \d+: (\w+) lr=([0-9.e-]+) ep=(\d+) .*q-loss=([0-9.]+)", out)]
+
+
+# ---------------------------------------------------------------- лосс офлайнового рецепта
+def make_tbuf(root, env, seed=3, n_chains=8):
+    """Собранный буфер цели в формате collect_active.py --save-buffer: цепочка на файл, у первого
+    перехода meta со средой сбора; цепочки по 3-6 действий в 100 эпох (шестое выбирает бюджет 600),
+    у одной последнее действие (Adam 0.01 на 1000 эпох) обрезано бюджетом до 300."""
+    rng = np.random.default_rng(seed)
+    d = os.path.join(root, SUBDIR)
+    os.makedirs(d)
+    keys = ("loss_total", "loss_oper", "loss_bnd")
+    for c in range(n_chains):
+        acts = [int(x) for x in rng.choice([0, 3, 6, 9, 12, 15, 21], size=3 + c % 4)]
+        eps = [100] * len(acts)
+        if c == 1:
+            acts, eps = acts[:3] + [1], [100, 100, 100, 300]
+        maps = [{k: np.zeros((26, 26), np.float32) for k in keys}]
+        maps += [{k: rng.normal(size=(26, 26)).astype(np.float32) for k in keys} for _ in acts]
+        err, spent, tr = 0.7, 0, []
+        for j, a in enumerate(acts):
+            err *= float(rng.uniform(0.5, 0.95))
+            last = j == len(acts) - 1
+            spent += eps[j]
+            tr.append(dict(state=dict(maps[j]), next_state=dict(maps[j] if last else maps[j + 1]),
+                           action=(a // 9, {"lr": (a % 9) // 3, "epochs": a % 3}), reward=-err,
+                           done=int(last), epochs_real=eps[j], spent=spent, chain=f"t#{c}", group=None))
+        tr[0]["meta"] = dict(format="tbuf", pde=PDE, tag="t", record=c, seed=c, env=dict(env))
+        torch.save(tr, os.path.join(d, f"t_c{c:04d}.pt"))
+    return root
+
+
+def test_full_loss(tmp, path, ck):
+    import json
+    import mb_targets as MB
+    import target_buffer as TB
+    sys.path.insert(0, HERE)
+    import test_shield_teacher as TS
+    quiet = lambda *a, **k: None  # noqa: E731
+    tdir = os.path.join(tmp, "teach")
+    os.makedirs(tdir)
+    teacher, _ = TS.train_teacher(TS.make_buffers(), tdir)      # настоящий учитель agent_combo.run
+    table = os.path.join(tdir, "table.npz")                     # таблица двух задач: строки цели заменятся
+    spec = make_tbuf(os.path.join(tmp, "tbuf_keep"), dict(keep_opt=True, mode="safe", budget=BUDGET))
+    spec_reset = make_tbuf(os.path.join(tmp, "tbuf_reset"), dict(keep_opt=False, mode=None, budget=BUDGET))
+    base = [a for a in FT if a not in ("--rlpd-subdir", SUBDIR)] + [
+        "--warm-start", path, "--warm-strict", "--eps-start", "0.1", "--guide", GUIDE]
+    aux_flags = ["--mb-aux", "0.5", "--mb-h", "2", "--mb-lam", "0.5", "--mb-table", table, "--mb-members", "2",
+                 "--teacher-from", teacher, "--teacher-w", "0.5"]
+
+    # ---- то, что считает офлайновый тренер на тех же файлах (вызовы offline_rl.main)
+    episodes, _ = TB.load(spec, SUBDIR, log=quiet)
+    data = O.episodes_to_arrays(episodes, fix_next_state=False, chain_fix=True, reward_form="delta",
+                                init_err=0.811, budget=BUDGET, verbose=False)
+    n_all = len(data["A"])
+    assert data["STATS"]["budget_cut"] == 3 and n_all == 36 and int(data["D"].sum()) == 8
+    c1, c2 = O.chain_ctx(data, k_max=KMAX, budget=BUDGET, with_err=False)
+    S_ref = ((O.attach_ctx(data["S"], c1) - ck["mean"]) / ck["std"]).astype(np.float32)
+    S2_ref = ((O.attach_ctx(data["S2"], c2) - ck["mean"]) / ck["std"]).astype(np.float32)
+    train_mask, _ = O.split_by_episode(data)
+    idx = np.where(train_mask)[0]
+    with contextlib.redirect_stdout(io.StringIO()):
+        tab_ref = TB.surrogate_table(episodes, PDE, "all", table, os.path.join(tmp, "work_ref"), log=quiet)
+        QMB, MBW, mb_ref = MB.precompute(
+            data, train_mask, names=[PDE], reward_form="delta", err_scale=np.ones(1), init_err=np.array([0.811]),
+            gamma=0.99, h=2, lam=0.5, budget=BUDGET, smdp_scale=0.0, subdirs="all", table=table, members=2,
+            work=os.path.join(tmp, "work_ref"), quick=False, tab=tab_ref, log=quiet)
+        QTE, TEV, _ = O.teacher_targets(teacher, data, names=[PDE], reward_form="delta", err_scale=np.ones(1),
+                                        init_err=np.array([0.811]), gamma=0.99, budget=BUDGET, device=CPU, log=quiet)
+    assert MBW[idx].all() and not MBW[~train_mask].any() and TEV.all() and np.abs(QMB[idx]).max() > 1e-4
+
+    # ---- полный прогон: собранный буфер в офлайновой половине и обе добавки
+    out, spy = run_train(tmp, base + ["--rlpd-target-buffer", spec, "--tag", "fl_x", "--mb-work",
+                                      os.path.join(tmp, "work_on")] + aux_flags, n_chains=3)
+    assert "берутся все" in out and "собранного буфера цели" in out and spy.get("mixed", 0) > 0, out[-900:]
+    off = spy["off"]
+    assert len(off) == len(idx), (len(off), len(idx))
+    assert np.array_equal(np.stack(off.s), S_ref[idx]) and np.array_equal(np.stack(off.s2), S2_ref[idx]), \
+        "состояния офлайновой половины не равны массивам офлайнового тренера"
+    assert off.a == [int(a) for a in data["A"][idx]] and np.array_equal(np.float32(off.r), data["R"][idx])
+    assert np.array_equal(np.float32(off.d), data["D"][idx]) and np.array_equal(np.float32(off.ub), data["ERR"][idx])
+    assert np.allclose(np.stack(off.s)[:, 8], 0.0) and data["STEP"][idx[0]] == 0
+    assert abs(off.r[0] - (0.811 - float(data["ERR"][idx[0]]))) < 1e-6, "первый шаг считается от --init-err"
+    for j, i in enumerate(idx):
+        row = off.aux[j]
+        assert np.allclose(row["mb"], QMB[i], atol=1e-6), f"модельная цель строки {i} не как у offline_rl.py"
+        assert np.allclose(row["te"], QTE[i], atol=1e-6), f"цель учителя строки {i} не как у offline_rl.py"
+    assert spy["aux"] is not None and spy["aux_first"] is spy["aux"], "обновления без плотных добавок"
+    assert spy["aux"].mb_info["surr_sig"] == mb_ref["surr_sig"] and spy["aux"].mb_info["rows"] == len(idx)
+    # онлайновые переходы: цели формы 27, конечны, и равны целям строки набора с той же цепочкой
+    on = spy["on"]
+    assert len(on) >= 8 and all(r is not None and set(r) == {"mb", "te"} for r in on.aux)
+    assert all(r[k].shape == (27,) and np.isfinite(r[k]).all() for r in on.aux for k in r)
+    buf = torch.load(os.path.join(tmp, "buffer_fl_x.pt"), map_location="cpu", weights_only=False)
+    assert len(buf["A"]) == len(on) and list(buf["A"][:4]) == T.parse_chain(GUIDE)
+    live = dict(A=buf["A"], EPA=buf["EPOCHS"], EP=buf["EP"], STEP=buf["STEP"], SPENT=buf["SPENT"],
+                ERR=buf["ERR"].astype(np.float32))
+    aux = spy["aux"]
+    tab, ens = aux.model
+    with contextlib.redirect_stdout(io.StringIO()):
+        q_on, w_on, _ = MB.precompute(live, np.ones(len(on), bool), names=[PDE], reward_form="delta",
+                                      err_scale=np.ones(1), init_err=np.array([0.811]), gamma=0.99, h=2, lam=0.5,
+                                      budget=BUDGET, model=(tab, ens), log=quiet)
+        t_on, v_on, _ = O.teacher_targets(teacher, live, names=[PDE], reward_form="delta", err_scale=np.ones(1),
+                                          init_err=np.array([0.811]), gamma=0.99, budget=BUDGET, device=CPU, log=quiet)
+    assert w_on.all() and v_on.all()
+    assert np.allclose(np.stack([r["mb"] for r in on.aux]), q_on, atol=1e-6)
+    assert np.allclose(np.stack([r["te"] for r in on.aux]), t_on, atol=1e-6)
+    # состояние суррогата живой цепочки = состояние строки набора (один и тот же chain_states)
+    pi = tab["NAMES"].index(PDE)
+    st_buf, _, _ = MB.chain_states(live, tab, np.array([pi]), np.ones(1), budget=BUDGET)
+    for i in range(len(on)):
+        s0 = i - int(buf["STEP"][i])
+        ld = OA.live_data(buf["A"][s0:i], buf["EPOCHS"][s0:i], buf["ERR"][s0:i])
+        st_l, ok, _ = MB.chain_states(ld, tab, np.array([pi]), np.ones(1), budget=BUDGET)
+        assert ok[i - s0] and all(np.array_equal(st_l[k][i - s0], st_buf[k][i]) for k in st_buf), i
+    # обновления идут, добавки не нулевые и двигают сеть иначе, чем один TD
+    assert re.search(r"mb-aux=[0-9.]+ te-aux=[0-9.]+", out), out[-600:]
+    saved = os.path.join(tmp, "agent_fl_x.pt")
+    ag, mean, std, variant = E.load_agent(saved)                 # агент читается оценкой
+    meta = ag._meta
+    assert meta["rlpd_target_buffer"] == spec and meta["target_buffer"]["used_transitions"] == n_all
+    assert (meta["mb_aux"], meta["mb_h"], meta["teacher_w"]) == (0.5, 2, 0.5) and "mask" in meta["teacher"]
+    assert meta["teacher_from"] == os.path.basename(teacher) and os.path.exists(meta["mb"]["surr_file"])
+    assert meta["mask"] == [int(i) for i in np.where(~T.parse_mask(MASK))[0]], "маску учителя агент не наследует"
+    assert np.array_equal(np.asarray(mean), ck["mean"]) and E.q_values(ag, rand_state(
+        np.random.default_rng(3), mean, std), mean, std, variant).shape == (27,)
+    row = [json.loads(ln) for ln in out.splitlines() if ln.startswith('{"variant"')][-1]
+    assert row["mb_aux"] == 0.5 and row["teacher_w"] == 0.5 and row["rlpd_target_buffer"] == spec
+    assert row["tb_used_transitions"] == n_all and row["aux_online"]["mb"] == row["aux_online"]["calls"] > 0
+    assert row["aux_mb_loss"] > 0 and row["aux_te_loss"] > 0 and row["teacher_units"] == "dlog->delta"
+    out0, spy0 = run_train(tmp, base + ["--rlpd-target-buffer", spec, "--tag", "fl_td"], n_chains=3)
+    assert spy0["aux"] is None and not spy0["off"].has_aux and "mb-aux" not in out0
+    assert np.array_equal(np.stack(spy0["off"].s), S_ref[idx]), "без добавок офлайновая половина та же"
+    sd, sd0 = (torch.load(os.path.join(tmp, f"agent_{t}.pt"), map_location="cpu", weights_only=False)["state_dict"]
+               for t in ("fl_x", "fl_td"))
+    moved = sum(float((sd[k].float() - ck["state_dict"][k].float()).abs().sum()) for k in sd if "running" not in k)
+    diff = sum(float((sd[k].float() - sd0[k].float()).abs().sum()) for k in sd if "running" not in k)
+    assert moved > 0 and diff > 0, "плотные добавки не изменили обновления"
+
+    # ---- буфер, собранный со сбросом оптимизатора, в среде без сбросов: только согласованные переходы
+    out, spy = run_train(tmp, base + ["--rlpd-target-buffer", spec_reset, "--tag", "fl_r", "--mb-work",
+                                      os.path.join(tmp, "work_on")] + aux_flags, n_chains=1)
+    ok = O.keep_consistent(data["A"], data["EP"], data["STEP"], mode="safe")
+    assert "ВНИМАНИЕ: собранный буфер цели записан в среде ['reset']" in out and "согласованные со средой" in out
+    assert 0 < len(spy["off"]) == int(ok[idx].sum()) < len(idx)
+    assert np.array_equal(np.stack(spy["off"].s), S_ref[idx[ok[idx]]])
+
+    # ---- fulltele с расширением: у строк собранного буфера телеметрия нулевая, признак 0
+    out, spy = run_train(tmp, base + ["--rlpd-target-buffer", spec, "--tag", "fl_tele", "--warm-widen",
+                                      "--state-mode", "fulltele", "--mb-work", os.path.join(tmp, "work_on")]
+                         + aux_flags, n_chains=2)
+    off = np.stack(spy["off"].s)
+    assert off.shape == (len(idx), 20, 26, 26) and np.all(off[:, 4:15] == 0.0)
+    assert np.array_equal(off[:, :4], S_ref[idx][:, :4]) and np.array_equal(off[:, 15:], S_ref[idx][:, 4:])
+    assert all(r is not None for r in spy["off"].aux) and re.search(r"mb-aux=[0-9.]+", out)
+    assert E.load_agent(os.path.join(tmp, "agent_fl_tele.pt"))[0]._meta["in_ch"] == 20
+
+    # ---- отказы разбора
+    tb = ["--rlpd-target-buffer", spec]
+    for bad, what in ((FT + tb, "вместе с --rlpd-subdir"),
+                      ([a for a in base if a != "--offline-fix"] + tb, "без --offline-fix"),
+                      ([a for a in base if a != "--rlpd"] + tb, "без --rlpd"),
+                      (base + tb + ["--mb-aux", "0.5", "--hl-gauss"], "--hl-gauss"),
+                      (base + tb + ["--mb-aux", "0.5", "--n-step", "3"], "--n-step"),
+                      (base + tb + ["--mb-aux", "0.5", "--pbrs", "0.5"], "--pbrs"),
+                      (base + tb + ["--teacher-w", "0.5"], "вес без чекпоинта учителя"),
+                      (base + tb + ["--teacher-from", teacher], "учитель без веса"),
+                      ([a for a in base if a not in ("--init-err", "0.811")] + tb + aux_flags, "учитель без --init-err"),
+                      ([("logged" if a == "delta" else a) for a in base if a != "--value-bound"] + tb + aux_flags,
+                       "награда logged"),
+                      ([("cnx_qrdqn" if a == "convnext_dqn" else a) for a in base if a != "--value-bound"] + tb
+                       + ["--mb-aux", "0.5"], "квантильная голова")):
+        must_exit(lambda b=bad: run_train(tmp, b), "2", f"разбор: {what}")
+    print(f"лосс офлайнового рецепта онлайн: офлайновая половина = массивы offline_rl.py ({len(idx)} переходов "
+          f"собранного буфера), цели строк и {len(on)} онлайновых переходов как у offline_rl.py, обновления с "
+          f"добавками, meta и строка результата, fulltele, отказы: OK")
+
+
 def test_defaults(tmp):
     """Прежняя командная строка (решение BASE_NOVB) без новых флагов."""
     old = [a for a in FT if a not in ("--value-bound", "--keep-opt", "--keep-opt-mode", "safe", "--mask", MASK)]
     out, spy = run_train(tmp, old + ["--tag", "old_x"], n_chains=3)
     assert "тёплый старт" not in out and "BatchNorm" not in out and "off" in spy
+    # новые флаги выключены: буфер без плотных целей, лосс и действия — те же числа, что до правок
+    assert spy["aux"] is None and not spy["off"].has_aux and not spy["on"].has_aux
+    steps = step_lines(out)
+    assert len(steps) >= 8, steps
+    if torch.__version__.split("+")[0] == REF_TORCH:
+        assert steps == REF_STEPS, f"q-loss прежней командной строки изменился: {steps}"
+        sd = torch.load(os.path.join(tmp, "agent_old_x.pt"), map_location="cpu", weights_only=False)["state_dict"]
+        got = float(sum(v.double().abs().sum() for v in sd.values()))
+        assert abs(got - REF_ABS) < 1e-6 * REF_ABS, f"веса прежней командной строки изменились: {got!r}"
     eps = [float(x) for x in re.findall(r"eps=([0-9.]+)\)", out)]
     want = [T.EPS_END + (T.EPS_START - T.EPS_END) * np.exp(-k / T.EPS_DECAY) for k in range(len(eps))]
     assert eps and np.allclose(eps, want, atol=0.006), (eps[:4], want[:4])
@@ -557,6 +772,9 @@ def main():
         test_tele_maps()
         test_finetune_main(tmp, path, ck)
         test_fulltele_main(tmp, path, ck)
+        import agent_combo as AC
+        with AC.one_thread():           # крошечные таблицы: потоки OpenMP у бустинга только мешают
+            test_full_loss(tmp, path, ck)
         test_defaults(tmp)
     print("ВСЕ ПРОВЕРКИ ОНЛАЙНОВОГО ДООБУЧЕНИЯ И FULLTELE ПРОЙДЕНЫ")
 
