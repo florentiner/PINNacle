@@ -7395,6 +7395,30 @@
    ]
   },
   {
+   "id": "pb2d-w33-blind",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-resnp",
    "wave": 33,
    "group": "H06",
@@ -7729,6 +7753,30 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-blind-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-a"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-a.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_blind_g"
     }
    ]
   },
@@ -8071,6 +8119,30 @@
    ]
   },
   {
+   "id": "pb2d-w33-blind-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-b"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-b.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-resnp-b",
    "wave": 33,
    "group": "H06",
@@ -8405,6 +8477,30 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-blind-s42",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 42",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-s42"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-s42.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42 --tag t3m_ete_blind_g"
     }
    ]
   },
@@ -8747,6 +8843,30 @@
    ]
   },
   {
+   "id": "pb2d-w33-blind-s43",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-s43"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-s43.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 43 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-resnp-s43",
    "wave": 33,
    "group": "H06",
@@ -9081,6 +9201,30 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-blind-s44",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-s44"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-s44.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44 --tag t3m_ete_blind_g"
     }
    ]
   },
@@ -9423,6 +9567,30 @@
    ]
   },
   {
+   "id": "pb2d-w33-blind-s45",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 45",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-s45"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-s45.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-resnp-s45",
    "wave": 33,
    "group": "H06",
@@ -9761,6 +9929,30 @@
    ]
   },
   {
+   "id": "pb2d-w33-blind-s46",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-s46"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-s46.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 46 --tag t3m_ete_blind_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-resnp-s46",
    "wave": 33,
    "group": "H06",
@@ -10095,6 +10287,30 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-blind-c",
+   "wave": 33,
+   "group": "H06",
+   "hours": 4.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "лучший вариант, кодировщик resnet, с предобучением, без маски, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_blind-c"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_blind-c.pt --teacher-w 0.5 --state-mode blind --seeds 1 --model-tag ete_blind"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_ete_blind_g"
     }
    ]
   },
