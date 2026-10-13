@@ -1194,7 +1194,12 @@ for _i, _ks in enumerate(((1,), (2,), (3,)) if PREFIX == "pb2d" else
 GUARD = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
 W33_SRC = ",".join(tbuf(k) for k in range(max(1, W28_K // 4))) if W28_K else ""
 W33_CV = "/kaggle/working"
-W33_SPLIT = (("", S5), ("-a", "42,43"), ("-b", "44,45,46"))   # целиком и двумя кернелами: квота раздроблена
+# целиком, двумя кернелами и по одному сиду на кернел: остаток недельной квоты раздроблен по аккаунтам
+W33_SPLIT = (("", S5), ("-a", "42,43"), ("-b", "44,45,46")) + tuple((f"-s{x}", str(x)) for x in range(42, 47))
+# исходный агент статьи (исходный свёрточный кодировщик + DQN, буфер и дообучение онлайн) в нашем
+# протоколе: 7000 эпох, все 27 действий, без стража — до сих пор он оценивался только при 31 000 эпох
+ORIG_CK = ("rl_arch/agents_online/their_dqn_ns2d_full_seed42.pt" if NS2D
+           else "rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt")
 
 
 def free_eval(model, tag, sd, guard=True):
@@ -1233,7 +1238,14 @@ if W28_K:
                     note=f"без маски, {'со стражем' if _g else 'без стража'}: готовый чекпоинт {_nm}, сиды {_sd}")
         for _nm, _enc, _pre in (("cnx", "convnext", ""), ("cnxm", "convnext", "probe"),
                                 ("cnxwm", "convnextw", "probe"), ("cnxhrm", "convnexthr", "probe")):
+            # на pb2d кодировщик предобучается в кернеле; на ns2d берётся уже сохранённый оттуда файл
+            if _pre and PREFIX != "pb2d":
+                _pre = f"rl_arch/encoders/cvprobe_w33cv_enc_mae_{_enc}.pt"
             w33_job(_nm, _enc, _pre, sd=_sd, sfx=_sfx)
+        for _g in (False, True):
+            add(f"w33-orig-{'g' if _g else 'f'}{_sfx}", 33, "H06", [free_eval(ORIG_CK, "t3m_orig", _sd, guard=_g)],
+                0.5 + MAP_EH, needs=[ORIG_CK],
+                note=f"исходный агент статьи в нашем протоколе, {'со стражем' if _g else 'без стража'}, сиды {_sd}")
         w33_job("noctx", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, ctx=False)
         # повторы четверти собранного буфера (волна 32) без маски: держится ли лучший результат на
         # других наборах сборщиков при всех 27 действиях
