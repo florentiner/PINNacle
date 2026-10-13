@@ -1231,6 +1231,15 @@ HLG_VARIANTS = ("cnn_dqn", "convnext_dqn", "cnn_cql", "cnx_cql")
 TWO_NETS_VARIANTS = ("convnext_dqn", "cnx_cql")
 TWO_NETS_CENTER = ("max", "mean")
 TWO_NETS_HEAD = ("linear", "dueling")
+# как сеть параметров раскладывает преимущества шага и длительности (--two-nets-mode):
+# additive — сумма двух независимых голов (прежнее), joint — одна голова на все пары (шаг,
+# длительность) оптимизатора, auto — авторегрессия: шаг по [признаки, оптимизатор], длительность
+# по [признаки, оптимизатор, шаг]
+TWO_NETS_MODE = ("additive", "joint", "auto")
+# --two-nets-shared: идёт ли градиент сети параметров в общий энкодер (--two-nets-shared-grad)
+TWO_NETS_SHARED_GRAD = ("both", "stop")
+TWO_NETS_AUTO_EMB = 16          # размер вложений оптимизатора и шага у auto
+TWO_NETS_AUTO_HIDDEN = 64       # скрытый слой голов auto при головах linear (dueling — ширина признаков)
 
 
 def compose_two_nets(q_opt, a_lr, a_ep, center="max"):
@@ -1244,15 +1253,43 @@ def compose_two_nets(q_opt, a_lr, a_ep, center="max"):
     оптимизатора; шаг и эпохи по-прежнему выбирает сеть B, но оптимизатор жадного совместного
     действия — argmax_o [Q_opt[o] + размах A_lr[o] + размах A_ep[o]], то есть сеть A одна его уже
     не определяет."""
-    if center == "max":
-        a_lr = a_lr - a_lr.amax(2, keepdim=True)
-        a_ep = a_ep - a_ep.amax(2, keepdim=True)
-    elif center == "mean":
-        a_lr = a_lr - a_lr.mean(2, keepdim=True)
-        a_ep = a_ep - a_ep.mean(2, keepdim=True)
-    else:
-        raise ValueError(f"центрирование двух сетей {center!r}: выбор {TWO_NETS_CENTER}")
+    a_lr, a_ep = _two_centered(a_lr, center), _two_centered(a_ep, center)
     q = q_opt[:, :, None, None] + a_lr[:, :, :, None] + a_ep[:, :, None, :]
+    return q.reshape(q.shape[0], N_ACTIONS)
+
+
+def _two_centered(a, center):
+    """Преимущества минус их максимум или среднее по последней оси (значения одного параметра)."""
+    if center == "max":
+        return a - a.amax(-1, keepdim=True)
+    if center == "mean":
+        return a - a.mean(-1, keepdim=True)
+    raise ValueError(f"центрирование двух сетей {center!r}: выбор {TWO_NETS_CENTER}")
+
+
+def compose_two_nets_joint(q_opt, a_par, center="max"):
+    """Совместное Q при --two-nets-mode joint: у оптимизатора одна голова на все пары (шаг,
+    длительность), a_par — (B, 3, 9), пара p = lr*3 + ep:
+        Q27[o, l, e] = Q_opt[o] + (A[o, l, e] - c_{l,e} A[o, ., .]).
+    Сумма по шагу и длительности не предполагается: голова задаёт любую таблицу 3x3, в том числе
+    со взаимодействием шага и длительности. center='max': Q_opt[o] = max_{l,e} Q27[o, l, e], жадное
+    совместное действие = оптимизатор по сети A, затем лучшая пара по сети B. center='mean':
+    Q_opt[o] — среднее по парам; пару по-прежнему выбирает сеть B, оптимизатор — сумма сетей."""
+    q = q_opt[:, :, None] + _two_centered(a_par, center)
+    return q.reshape(q.shape[0], N_ACTIONS)
+
+
+def compose_two_nets_auto(q_opt, a_lr, a_ep, center="max"):
+    """Совместное Q при --two-nets-mode auto (авторегрессия): a_lr — (B, 3, 3) преимущества шага
+    при оптимизаторе, a_ep — (B, 3, 3, 3) преимущества длительности при оптимизаторе и шаге:
+        Q27[o, l, e] = Q_opt[o] + (A_lr[o, l] - c_l A_lr[o, .]) + (A_ep[o, l, e] - c_e A_ep[o, l, .]).
+    Длительность зависит от шага, поэтому суммы по шагу и длительности здесь нет. center='max':
+    Q_opt[o] + A_lr[o, l] - max_l = max_e Q27[o, l, .], Q_opt[o] = max_{l,e} Q27[o, ., .], и жадное
+    совместное действие равно последовательному выбору оптимизатор -> шаг -> длительность.
+    center='mean': Q_opt[o] и Q_opt[o] + A_lr[o, l] - mean_l — средние по вложенным параметрам;
+    совместный argmax тогда с последовательным выбором не совпадает (длительность при выбранном
+    шаге по-прежнему даёт сеть B)."""
+    q = q_opt[:, :, None, None] + _two_centered(a_lr, center)[:, :, :, None] + _two_centered(a_ep, center)
     return q.reshape(q.shape[0], N_ACTIONS)
 
 
@@ -1277,6 +1314,61 @@ class ParamHeads(nn.Module):
         return (torch.stack([h(z) for h in self.lr], 1), torch.stack([h(z) for h in self.ep], 1))
 
 
+class JointParamHeads(nn.Module):
+    """Головы сети параметров при --two-nets-mode joint: у каждого оптимизатора ОДНА голова на все
+    его пары (шаг, длительность) — n_pairs выходов, пара p = lr*3 + ep. forward -> (A,), A — (B, 3, 9).
+    Новый оптимизатор — ещё одна голова на его собственное число пар; выходов у сети B — сумма
+    по оптимизаторам, а не произведение на число оптимизаторов. kind — как у ParamHeads."""
+
+    def __init__(self, in_dim, kind="linear", n_opt=3, n_pairs=9):
+        super().__init__()
+
+        def mk():
+            if kind == "dueling":
+                return nn.Sequential(nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, n_pairs))
+            return nn.Linear(in_dim, n_pairs)
+        self.par = nn.ModuleList([mk() for _ in range(n_opt)])
+
+    def forward(self, z):
+        return (torch.stack([h(z) for h in self.par], 1),)
+
+
+class AutoParamHeads(nn.Module):
+    """Головы сети параметров при --two-nets-mode auto (авторегрессия): вложение оптимизатора и
+    вложение шага; голова шага считает A_lr[o, .] по [признаки, emb(o)], голова длительности —
+    A_ep[o, l, .] по [признаки, emb(o), emb(l)]. forward -> (A_lr (B, 3, 3), A_ep (B, 3, 3, 3)) за
+    один проход: вложения перебирают все оптимизаторы и шаги. Выходов 3 + 3 при любом числе
+    оптимизаторов: новый оптимизатор или новое значение параметра — одна строка вложения (и один
+    выход своей головы), новый параметр — ещё одна голова и одно вложение, рост линейный.
+    У обеих голов есть скрытый слой: линейный слой по [признаки, вложение] дал бы зависимость от
+    оптимизатора и шага только сдвигом, не зависящим от состояния. kind='linear' — скрытый слой
+    TWO_NETS_AUTO_HIDDEN, 'dueling' — шириной в признаки (как поток преимуществ головы статьи)."""
+
+    def __init__(self, in_dim, kind="linear", n_opt=3, n_lr=3, n_ep=3, emb=TWO_NETS_AUTO_EMB):
+        super().__init__()
+        hid = in_dim if kind == "dueling" else TWO_NETS_AUTO_HIDDEN
+        self.emb_o = nn.Embedding(n_opt, emb)
+        self.emb_l = nn.Embedding(n_lr, emb)
+        self.lr = nn.Sequential(nn.Linear(in_dim + emb, hid), nn.ReLU(), nn.Linear(hid, n_lr))
+        self.ep = nn.Sequential(nn.Linear(in_dim + 2 * emb, hid), nn.ReLU(), nn.Linear(hid, n_ep))
+
+    def forward(self, z):
+        b, eo, el = z.shape[0], self.emb_o.weight, self.emb_l.weight
+        zo = torch.cat([z[:, None, :].expand(b, len(eo), -1), eo[None].expand(b, -1, -1)], 2)
+        zol = torch.cat([zo[:, :, None, :].expand(b, len(eo), len(el), -1),
+                         el[None, None].expand(b, len(eo), -1, -1)], 3)
+        return self.lr(zo), self.ep(zol)
+
+
+def make_param_heads(mode, in_dim, kind="linear"):
+    """Головы сети параметров по --two-nets-mode."""
+    if mode == "joint":
+        return JointParamHeads(in_dim, kind)
+    if mode == "auto":
+        return AutoParamHeads(in_dim, kind)
+    return ParamHeads(in_dim, kind)
+
+
 class QNet:
     """Encoder + head with a target copy; variant-specific loss.
 
@@ -1294,10 +1386,18 @@ class QNet:
     Наружу (q_online, q_target, q_heads, q_scalar) — совместное Q по 27 действиям из
     compose_two_nets с центрированием two_center; выходы сетей по отдельности — q_parts, выбор
     «оптимизатор, затем параметры» — hier_action. two_head — вид голов (TWO_NETS_HEAD).
+    two_mode (TWO_NETS_MODE) — головы сети B и состав совместного Q: additive — ParamHeads и
+    compose_two_nets (прежнее), joint — JointParamHeads и compose_two_nets_joint, auto —
+    AutoParamHeads и compose_two_nets_auto. two_shared — у сети B нет своего энкодера, её головы
+    берут признаки энкодера сети A (как в коде статьи: RL/rl_algorithms.py подаёт сети параметров
+    свёрточные признаки сети оптимизатора — там это признаки до MLP энкодера, здесь выход
+    энкодера целиком); model[2] тогда пустой nn.Identity, ключей '2.*' в чекпоинте нет. two_shared_grad: 'both' — лосс сети B учит и общий энкодер, 'stop' — признаки
+    для сети B отрезаны от графа, энкодер учит только сеть A.
     При значениях по умолчанию сеть и имена параметров прежние."""
 
     def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1, bins=0,
-                 two_nets=False, two_center="max", two_head="linear"):
+                 two_nets=False, two_center="max", two_head="linear", two_mode="additive",
+                 two_shared=False, two_shared_grad="both"):
         import torch
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
@@ -1323,7 +1423,11 @@ class QNet:
         self._hlg = None
         self.two_nets = bool(two_nets)
         self.two_center, self.two_head = two_center, two_head
-        self._enc_idx = (0, 2) if self.two_nets else (0,)      # где в model лежат энкодеры
+        self.two_mode = two_mode or "additive"
+        self.two_shared = bool(two_shared)
+        self.two_shared_grad = two_shared_grad or "both"
+        # где в model лежат энкодеры (у общего энкодера он один)
+        self._enc_idx = (0, 2) if self.two_nets and not self.two_shared else (0,)
         if self.two_nets:
             if variant not in TWO_NETS_VARIANTS:
                 raise ValueError(f"две сети (two_nets) есть только у {TWO_NETS_VARIANTS}, не у {variant}")
@@ -1332,6 +1436,13 @@ class QNet:
             if two_center not in TWO_NETS_CENTER or two_head not in TWO_NETS_HEAD:
                 raise ValueError(f"две сети: центрирование {two_center!r} из {TWO_NETS_CENTER}, "
                                  f"головы {two_head!r} из {TWO_NETS_HEAD}")
+            if self.two_mode not in TWO_NETS_MODE or self.two_shared_grad not in TWO_NETS_SHARED_GRAD:
+                raise ValueError(f"две сети: состав {self.two_mode!r} из {TWO_NETS_MODE}, градиент в общий "
+                                 f"энкодер {self.two_shared_grad!r} из {TWO_NETS_SHARED_GRAD}")
+            if self.two_shared_grad != "both" and not self.two_shared:
+                raise ValueError("две сети: two_shared_grad='stop' имеет смысл только с общим энкодером (two_shared)")
+        elif self.two_shared or self.two_mode != "additive" or self.two_shared_grad != "both":
+            raise ValueError("two_mode, two_shared и two_shared_grad задаются только вместе с two_nets")
         self.enc = make_encoder(enc_kind, in_ch)
         if self.two_nets:
             # сеть A: голова на оптимизаторы (dueling — дуэлинговая голова статьи, Q = V + A - mean A)
@@ -1340,9 +1451,9 @@ class QNet:
                 self.head = DuelingHead(self.enc.out_dim, 3)
             else:
                 self.head = nn.Linear(self.enc.out_dim, 3)
-            # сеть B: свой энкодер (не общий с A) и головы параметров по оптимизаторам
-            self.enc_b = make_encoder(enc_kind, in_ch)
-            self.head_b = ParamHeads(self.enc_b.out_dim, two_head)
+            # сеть B: свой энкодер (или признаки энкодера сети A при two_shared) и головы параметров
+            self.enc_b = nn.Identity() if self.two_shared else make_encoder(enc_kind, in_ch)
+            self.head_b = make_param_heads(self.two_mode, self.enc.out_dim, two_head)
         elif self.bins:
             if variant not in HLG_VARIANTS or self.ens > 1:
                 raise ValueError(f"голова HL-Gauss (bins={self.bins}) есть только у {HLG_VARIANTS} с одной головой")
@@ -1401,28 +1512,55 @@ class QNet:
         return n
 
     def n_params_nets(self):
-        """Две сети: число параметров сети оптимизатора (A) и сети параметров (B)."""
+        """Две сети: число параметров сети оптимизатора (A) и сети параметров (B). У общего
+        энкодера он целиком засчитан сети A, у сети B — только головы."""
         cnt = lambda i: sum(p.numel() for p in self.model[i].parameters())  # noqa: E731
         return cnt(0) + cnt(1), cnt(2) + cnt(3)
 
+    def n_outputs_nets(self):
+        """Две сети: число выходов сети оптимизатора (A) и сети параметров (B) — выходные нейроны
+        последних слоёв голов (у auto это 3 шага + 3 длительности при любом числе оптимизаторов)."""
+        last = lambda m: [l for l in m.modules() if isinstance(l, nn.Linear)][-1].out_features  # noqa: E731
+        b = self.model[3]
+        heads = {"additive": lambda: list(b.lr) + list(b.ep), "joint": lambda: list(b.par),
+                 "auto": lambda: [b.lr, b.ep]}[self.two_mode]()
+        return 3, sum(last(h) for h in heads)
+
+    def _two_parts(self, model, x):
+        """Выходы двух сетей: (Q_opt, *выходы голов сети B)."""
+        z = model[0](x)
+        if self.two_shared:
+            zb = z.detach() if self.two_shared_grad == "stop" else z
+        else:
+            zb = model[2](x)
+        return (model[1](z),) + tuple(model[3](zb))
+
     def q_parts(self, x, target=False):
-        """Две сети по отдельности: Q_opt (B, 3) сети A и нецентрированные A_lr, A_ep (B, 3, 3)
-        сети B (оптимизатор, значение параметра)."""
-        m = self.target if target else self.model
-        a_lr, a_ep = m[3](m[2](x))
-        return m[1](m[0](x)), a_lr, a_ep
+        """Две сети по отдельности: Q_opt (B, 3) сети A и нецентрированные преимущества сети B.
+        additive: A_lr, A_ep — (B, 3, 3) (оптимизатор, значение параметра); joint: A — (B, 3, 9)
+        (оптимизатор, пара lr*3 + ep); auto: A_lr — (B, 3, 3), A_ep — (B, 3, 3, 3) (оптимизатор, шаг,
+        длительность)."""
+        return self._two_parts(self.target if target else self.model, x)
 
     def hier_action(self, x):
-        """Выбор статьи: оптимизатор — argmax сети A, затем его шаг и число эпох — независимые
-        argmax голов сети B. Возвращает номера действий (B,), a = opt*9 + lr*3 + ep."""
-        q_o, a_lr, a_ep = self.q_parts(x)
+        """Выбор статьи: оптимизатор — argmax сети A, затем его параметры по сети B. additive: шаг
+        и число эпох — независимые argmax; joint: лучшая пара (шаг, эпохи) оптимизатора; auto:
+        последовательно шаг, затем число эпох при этом шаге. Возвращает номера действий (B,),
+        a = opt*9 + lr*3 + ep; при центрировании max это argmax совместного Q."""
+        q_o, *par = self.q_parts(x)
         o = q_o.argmax(1)
         rows = torch.arange(len(o), device=o.device)
-        return o * 9 + a_lr[rows, o].argmax(1) * 3 + a_ep[rows, o].argmax(1)
+        if self.two_mode == "joint":
+            return o * 9 + par[0][rows, o].argmax(1)
+        l = par[0][rows, o].argmax(1)
+        if self.two_mode == "auto":
+            return o * 9 + l * 3 + par[1][rows, o, l].argmax(1)
+        return o * 9 + l * 3 + par[1][rows, o].argmax(1)
 
     def _joint(self, model, x):
-        a_lr, a_ep = model[3](model[2](x))
-        return compose_two_nets(model[1](model[0](x)), a_lr, a_ep, self.two_center)
+        compose = {"additive": compose_two_nets, "joint": compose_two_nets_joint,
+                   "auto": compose_two_nets_auto}[self.two_mode]
+        return compose(*self._two_parts(model, x), center=self.two_center)
 
     def _heads(self, model, x):
         """Все головы: (головы, B, A) или (головы, B, A, nq)."""
@@ -1521,9 +1659,15 @@ def ckpt_arch(ck):
         # бины лежат в квантильной голове, там хватает n_quantiles); ключ есть только у таких
         out["bins"] = int(hg[2])
     if meta.get("two_nets"):
-        # --two-nets: вторая сеть лежит в ключах '2.*' и '3.*'; поля есть только у таких чекпоинтов
+        # --two-nets: вторая сеть лежит в ключах '2.*' и '3.*'; поля есть только у таких чекпоинтов.
+        # Чекпоинты до --two-nets-mode и --two-nets-shared этих полей не несут: additive, свой энкодер
         out.update(two_nets=True, two_center=(meta.get("two_nets_center") or "max"),
-                   two_head=(meta.get("two_nets_head") or "linear"))
+                   two_head=(meta.get("two_nets_head") or "linear"),
+                   two_mode=(meta.get("two_nets_mode") or "additive"),
+                   two_shared=bool(meta.get("two_nets_shared")))
+        if out["two_shared"]:
+            # на значения Q не влияет; нужен дообучению с чекпоинта (тот же путь градиента)
+            out["two_shared_grad"] = meta.get("two_nets_shared_grad") or "both"
     return out
 
 
@@ -1694,8 +1838,8 @@ def load_encoder_init(net, path):
     чекпоинт агента (variant + state_dict, берутся ключи '0.*' — энкодер другого агента); голый
     state_dict энкодера. Если у сети больше входных каналов, чем у весов (скалярный контекст),
     в первую свёртку копируются веса первых каналов, остальные каналы остаются со свежей
-    инициализацией (их имена — в partial). У двух сетей (--two-nets) веса получают оба энкодера;
-    из чекпоинта такого агента берётся энкодер сети оптимизатора ('0.*').
+    инициализацией (их имена — в partial). У двух сетей (--two-nets) веса получают оба энкодера
+    (с --two-nets-shared он один); из чекпоинта такого агента берётся энкодер сети оптимизатора ('0.*').
     Возвращает dict(source, encoder, ssl, mean, std, partial)."""
     src = path
     if not os.path.exists(path):
@@ -1890,7 +2034,10 @@ def train_variant(variant, data, train_mask, args, seed):
     def mk_net():
         return QNet(variant, device, in_ch=in_ch, encoder=getattr(args, "encoder", "auto"), ens=n_ens,
                     bins=n_bins, two_nets=two, two_center=getattr(args, "two_nets_center", "max"),
-                    two_head=getattr(args, "two_nets_head", "linear"))
+                    two_head=getattr(args, "two_nets_head", "linear"),
+                    two_mode=getattr(args, "two_nets_mode", "additive"),
+                    two_shared=bool(getattr(args, "two_nets_shared", False)),
+                    two_shared_grad=getattr(args, "two_nets_shared_grad", "both"))
 
     net = mk_net()
     enc_info = None
@@ -1924,9 +2071,14 @@ def train_variant(variant, data, train_mask, args, seed):
     aux_info = {}
     if two:
         n_a, n_b = net.n_params_nets()
-        aux_info.update(n_params_opt_net=int(n_a), n_params_par_net=int(n_b))
+        o_a, o_b = net.n_outputs_nets()
+        aux_info.update(n_params_opt_net=int(n_a), n_params_par_net=int(n_b),
+                        n_out_opt_net=int(o_a), n_out_par_net=int(o_b))
         print(f"  [{variant} s{seed}] две сети: оптимизатор {n_a} параметров, параметры {n_b}; "
-              f"совместное Q, центрирование {net.two_center}, головы {net.two_head}", flush=True)
+              f"совместное Q, центрирование {net.two_center}, головы {net.two_head}; "
+              f"состав {net.two_mode}, выходов {o_a} + {o_b}, энкодер "
+              + (f"общий (градиент сети параметров: {net.two_shared_grad})" if net.two_shared
+                 else "у каждой сети свой"), flush=True)
     if (net.frozen and enc_info and enc_info["mean"] is not None
             and getattr(args, "state_mode", "full") == "full"):
         # замороженный энкодер ждёт вход в той нормировке, в которой предобучался: статистики
@@ -2511,9 +2663,11 @@ def verify_ckpt(path, net, n=4):
     two = (bool(getattr(net, "two_nets", False)), bool(getattr(ag, "two_nets", False)))
     if any(two):
         # --two-nets: загруженная сеть — тоже две сети с тем же центрированием и теми же головами
-        same = (two[0] == two[1] and getattr(ag, "two_center", None) == getattr(net, "two_center", None)
-                and getattr(ag, "two_head", None) == getattr(net, "two_head", None))
+        # и тем же составом совместного Q, и так же устроенным энкодером сети параметров
+        same = (two[0] == two[1] and all(getattr(ag, k, None) == getattr(net, k, None)
+                                         for k in ("two_center", "two_head", "two_mode", "two_shared")))
         out.update(two_nets=two[1], two_nets_center=getattr(ag, "two_center", None),
+                   two_nets_mode=getattr(ag, "two_mode", None), two_nets_shared=getattr(ag, "two_shared", None),
                    ok=bool(out["ok"] and same))
     return out
 
@@ -2745,7 +2899,30 @@ def main():
     ap.add_argument("--two-nets-head", default="linear", choices=list(TWO_NETS_HEAD),
                     help="--two-nets: головы. linear — линейные слои, как голова лучшего рецепта; dueling — "
                          "как в статье: дуэлинговая голова со скрытым слоем у сети A, её поток преимуществ у "
-                         "голов сети B")
+                         "голов сети B. У --two-nets-mode auto головы сети B всегда со скрытым слоем: linear — "
+                         f"{TWO_NETS_AUTO_HIDDEN} нейронов, dueling — шириной в признаки энкодера")
+    ap.add_argument("--two-nets-mode", default="additive", choices=list(TWO_NETS_MODE),
+                    help="--two-nets: как сеть B раскладывает шаг и длительность. additive (прежнее) — у "
+                         "оптимизатора голова шага и голова длительности, их преимущества складываются: 3 + 3 "
+                         "выхода на оптимизатор, но взаимодействие шага с длительностью не выразить, плотные "
+                         "цели по 27 действиям (--mb-aux, --teacher-w) с таким взаимодействием не выучить. "
+                         "joint — у оптимизатора одна голова на все его пары (шаг, длительность): "
+                         "Q27[o,l,e] = Q_opt[o] + (A[o,l,e] - c A[o,.,.]), 9 выходов на оптимизатор, любая "
+                         "таблица; новый оптимизатор — один выход сети A и одна голова сети B. auto — "
+                         "авторегрессия: вложение оптимизатора, голова шага по [признаки, emb(o)], голова "
+                         "длительности по [признаки, emb(o), emb(l)]: Q27[o,l,e] = Q_opt[o] + (A_lr[o,l] - c) "
+                         "+ (A_ep[o,l,e] - c A_ep[o,l,.]); выходов 3 + 3 при любом числе оптимизаторов, рост "
+                         "по числу параметров линейный, при --two-nets-center max жадное действие — "
+                         "последовательный выбор оптимизатор -> шаг -> длительность. В meta: two_nets_mode")
+    ap.add_argument("--two-nets-shared", action="store_true",
+                    help="--two-nets: у сети B нет своего энкодера, её головы берут признаки энкодера сети A "
+                         "(как в коде статьи: сети параметров подаются свёрточные признаки сети оптимизатора). "
+                         "Параметров почти вдвое меньше; работает со всеми --two-nets-mode. В meta: "
+                         "two_nets_shared")
+    ap.add_argument("--two-nets-shared-grad", default="both", choices=list(TWO_NETS_SHARED_GRAD),
+                    help="--two-nets-shared: both — лосс сети B учит и общий энкодер (так и в коде статьи: сумма "
+                         "двух лоссов идёт назад через признаки сети оптимизатора); stop — признаки для сети B "
+                         "отрезаны от графа, энкодер учит только сеть A, головы сети B учатся на готовых признаках")
     ap.add_argument("--no-verify", action="store_true",
                     help="Не проверять сохранённый чекпоинт через online_eval_env.load_agent")
     args = ap.parse_args()
@@ -2785,8 +2962,13 @@ def main():
                      "а голова HL-Gauss отдаёт распределение по бинам")
         if args.aux_next > 0:
             ap.error("--two-nets несовместим с --aux-next: вспомогательная голова стоит на одном энкодере")
-    elif args.two_nets_center != "max" or args.two_nets_head != "linear":
-        ap.error("--two-nets-center и --two-nets-head задаются вместе с --two-nets")
+        if args.two_nets_shared_grad != "both" and not args.two_nets_shared:
+            ap.error("--two-nets-shared-grad задаётся вместе с --two-nets-shared (у сети параметров --two-nets "
+                     "без него свой энкодер)")
+    elif (args.two_nets_center != "max" or args.two_nets_head != "linear" or args.two_nets_mode != "additive"
+          or args.two_nets_shared or args.two_nets_shared_grad != "both"):
+        ap.error("--two-nets-center, --two-nets-head, --two-nets-mode, --two-nets-shared и "
+                 "--two-nets-shared-grad задаются вместе с --two-nets")
     if args.aux_next < 0:
         ap.error("--aux-next >= 0")
     if args.aux_next > 0:
@@ -3028,7 +3210,10 @@ def main():
         arm.update(mb_max_rows=int(args.mb_max_rows))
     if args.two_nets:
         # по полю two_nets в meta чекпоинта offline_rl.ckpt_arch строит обе сети
-        arm.update(two_nets=True, two_nets_center=args.two_nets_center, two_nets_head=args.two_nets_head)
+        arm.update(two_nets=True, two_nets_center=args.two_nets_center, two_nets_head=args.two_nets_head,
+                   two_nets_mode=args.two_nets_mode, two_nets_shared=bool(args.two_nets_shared))
+        if args.two_nets_shared:
+            arm.update(two_nets_shared_grad=args.two_nets_shared_grad)
     # суррогат модельных целей не должен видеть отложенную задачу (--holdout): её папки убираются
     # из --mb-subdirs. Список — в том же порядке, что у agent_combo.py --extra-only-target без
     # --extra-data (учитель без строк цели), поэтому таблица и ансамбль в кэше --mb-work общие
