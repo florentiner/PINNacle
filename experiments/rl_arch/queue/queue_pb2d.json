@@ -7363,6 +7363,54 @@
    ]
   },
   {
+   "id": "pb2d-w33-nm-tbq0-g",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq1-g",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq2-g",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 2 четверти собранного, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_tbq2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-nm-tbquart-g-a",
    "wave": 33,
    "group": "H06",
@@ -7551,6 +7599,54 @@
    ]
   },
   {
+   "id": "pb2d-w33-nm-tbq0-g-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq1-g-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq2-g-a",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 2 четверти собранного, сиды 42,43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ete_tbq2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w33-nm-tbquart-g-b",
    "wave": 33,
    "group": "H06",
@@ -7735,6 +7831,54 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_noctx_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq0-g-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 0 четверти собранного, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_tbq0_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq1-g-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 1 четверти собранного, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_tbq1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w33-nm-tbq2-g-b",
+   "wave": 33,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt"
+   ],
+   "note": "без маски, со стражем: повтор 2 четверти собранного, сиды 44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44,45,46 --tag t3m_ete_tbq2_g"
     }
    ]
   },

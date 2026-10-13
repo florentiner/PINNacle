@@ -1235,6 +1235,12 @@ if W28_K:
                                 ("cnxwm", "convnextw", "probe"), ("cnxhrm", "convnexthr", "probe")):
             w33_job(_nm, _enc, _pre, sd=_sd, sfx=_sfx)
         w33_job("noctx", "resnet", ENC_MAE, sd=_sd, sfx=_sfx, ctx=False)
+        # повторы четверти собранного буфера (волна 32) без маски: держится ли лучший результат на
+        # других наборах сборщиков при всех 27 действиях
+        for _i in range(3 if PREFIX == "pb2d" else 2):
+            _ck = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_tbq{_i}_seed1.pt"
+            add(f"w33-nm-tbq{_i}-g{_sfx}", 33, "H06", [free_eval(_ck, f"t3m_ete_tbq{_i}", _sd)],
+                0.5 + MAP_EH, needs=[_ck], note=f"без маски, со стражем: повтор {_i} четверти собранного, сиды {_sd}")
 
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
