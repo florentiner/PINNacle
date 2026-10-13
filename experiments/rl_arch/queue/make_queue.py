@@ -1406,6 +1406,28 @@ if W28_K:
             add(f"w37-it{_r}-ev-s{_x}", 37, "H06", [free_eval(_new, f"t3m_{_mt}", str(_x))], 1.5, needs=[_new],
                 note=f"круг {_r}: оценка агента после переобучения, сид {_x}, без маски")
 
+# ---------------------------------------------------------------- волна 38
+# Дообучение онлайн лоссом офлайнового рецепта: офлайновая половина батча — направленно собранный
+# буфер (а не исходный), на обеих половинах плотные цели модели среды и учителя. Старт с лучшего
+# офлайнового агента, все 27 действий. Учитель готовый (тот же, что учил стартового агента).
+if W28_K:
+    _wk = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_tbquart_seed1.pt"
+    _ffl = (FT_TR.replace(FT_CK, _wk).replace(" --mask adam:0.01,pso", "")
+            .replace(f"--rlpd-subdir {SUBDIR}", f"--rlpd-target-buffer {W33_SRC}")
+            + f" {MB} --teacher-from {W36_TEACH} --teacher-w 0.5")
+    _tag = f"{Q}_ffl_tbq_s42"
+    _ag = f"rl_arch/agents_online/{_tag}.pt"
+    add("w38-ffl-tr", 38, "H06", [(TRAIN, f"{_ffl} --tag {_tag}")], 9.8, needs=[_wk, W36_TEACH],
+        note="дообучение онлайн лоссом офлайнового рецепта на собранном буфере, все 27 действий")
+    # обучение и оценка одним кернелом (внешний запуск оценки не нужен)
+    add("w38-ffl-auto", 38, "H06",
+        [(TRAIN, _ffl.replace("--hours 9", "--hours 8") + f" --tag {_tag}a"),
+         free_eval(f"agent_{_tag}a.pt", "t3m_ffl", "42,43,44" if PREFIX == "pb2d" else "42,43")],
+        11.5, needs=[_wk, W36_TEACH], note="дообучение онлайн лоссом офлайнового рецепта и оценка одним кернелом")
+    for _x in range(42, 47):
+        add(f"w38-ffl-ev-s{_x}", 38, "H06", [free_eval(_ag, "t3m_ffl", str(_x))], 1.5, needs=[_ag],
+            note=f"оценка, сид {_x}: дообучение онлайн лоссом офлайнового рецепта")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

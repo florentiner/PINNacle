@@ -14275,6 +14275,124 @@
    ]
   },
   {
+   "id": "w38-ffl-tr",
+   "wave": 38,
+   "group": "H06",
+   "hours": 9.8,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt",
+    "rl_arch/agents_online/q_teach_mbpo_tbquart.pt"
+   ],
+   "note": "дообучение онлайн лоссом офлайнового рецепта на собранном буфере, все 27 действий",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_liddriven --hours 9 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --offline-fix --offline-reward delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --teacher-from rl_arch/agents_online/q_teach_mbpo_tbquart.pt --teacher-w 0.5 --tag q_ffl_tbq_s42"
+    }
+   ]
+  },
+  {
+   "id": "w38-ffl-auto",
+   "wave": 38,
+   "group": "H06",
+   "hours": 11.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt",
+    "rl_arch/agents_online/q_teach_mbpo_tbquart.pt"
+   ],
+   "note": "дообучение онлайн лоссом офлайнового рецепта и оценка одним кернелом",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde ns2d_liddriven --hours 8 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --offline-fix --offline-reward delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --teacher-from rl_arch/agents_online/q_teach_mbpo_tbquart.pt --teacher-w 0.5 --tag q_ffl_tbq_s42a"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file agent_q_ffl_tbq_s42a.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
+   "id": "w38-ffl-ev-s42",
+   "wave": 38,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ffl_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 42: дообучение онлайн лоссом офлайнового рецепта",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ffl_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
+   "id": "w38-ffl-ev-s43",
+   "wave": 38,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ffl_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 43: дообучение онлайн лоссом офлайнового рецепта",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ffl_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
+   "id": "w38-ffl-ev-s44",
+   "wave": 38,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ffl_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 44: дообучение онлайн лоссом офлайнового рецепта",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ffl_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
+   "id": "w38-ffl-ev-s45",
+   "wave": 38,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ffl_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 45: дообучение онлайн лоссом офлайнового рецепта",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ffl_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
+   "id": "w38-ffl-ev-s46",
+   "wave": 38,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/q_ffl_tbq_s42.pt"
+   ],
+   "note": "оценка, сид 46: дообучение онлайн лоссом офлайнового рецепта",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_ffl_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",
