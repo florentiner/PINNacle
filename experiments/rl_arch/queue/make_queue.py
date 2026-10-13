@@ -1195,7 +1195,7 @@ GUARD = "--guard-rollback 1.0 --guard-fallback LBFGS:1:500"
 W33_SRC = ",".join(tbuf(k) for k in range(max(1, W28_K // 4))) if W28_K else ""
 W33_CV = "/kaggle/working"
 # целиком, двумя кернелами и по одному сиду на кернел: остаток недельной квоты раздроблен по аккаунтам
-W33_SPLIT = ((("", S5), ("-a", "42,43"), ("-b", "44,45,46")) + tuple((f"-s{x}", str(x)) for x in range(42, 47))
+W33_SPLIT = ((("", S5), ("-a", "42,43"), ("-b", "44,45,46")) + tuple((f"-s{x}", str(x)) for x in range(42, 52))
              + (("-c", seeds(47, 51)),))        # -c: сиды 47-51, вместе с 42-46 — подтверждение на 10 сидах
 # исходный агент статьи (исходный свёрточный кодировщик + DQN, буфер и дообучение онлайн) в нашем
 # протоколе: 7000 эпох, все 27 действий, без стража — до сих пор он оценивался только при 31 000 эпох
@@ -1326,6 +1326,20 @@ if W28_K:
         9.8, needs=[_wk], note="дообучение онлайн (RLPD) от лучшего офлайнового агента, все 27 действий")
     add("w35-ft2-ev", 35, "H06", [free_eval(_ag2, "t3m_ft2", S5)], 0.5 + MAP_EH, needs=[_ag2],
         note="оценка: дообучение онлайн от лучшего офлайнового агента, без маски")
+    # обучение и оценка одним кернелом (внешний запуск оценки не нужен): 8 часов обучения, 3 или 2 сида
+    _asd = "42,43,44" if PREFIX == "pb2d" else "42,43"
+    for _nm2, _tg, _ex in (("ftt2", _tag, " --state-mode fulltele --warm-widen"), ("ft2", _tag2, "")):
+        add(f"w35-{_nm2}-auto", 35, "H06",
+            [(TRAIN, FT_TR.replace(FT_CK, _wk).replace(" --mask adam:0.01,pso", "").replace("--hours 9", "--hours 8")
+                     + f"{_ex} --tag {_tg}a"),
+             free_eval(f"agent_{_tg}a.pt", f"t3m_{_nm2}", _asd)],
+            11.5, needs=[_wk], note=f"дообучение онлайн ({_nm2}) и оценка одним кернелом")
+    # те же оценки по одному сиду на кернел: считаются одновременно, результат на 4 часа раньше
+    for _x in range(42, 47):
+        add(f"w35-ftt2-ev-s{_x}", 35, "H06", [free_eval(_ag, "t3m_ftt2", str(_x))], 1.5, needs=[_ag],
+            note=f"оценка, сид {_x}: дообучение онлайн с сигналами обучения от лучшего агента")
+        add(f"w35-ft2-ev-s{_x}", 35, "H06", [free_eval(_ag2, "t3m_ft2", str(_x))], 1.5, needs=[_ag2],
+            note=f"оценка, сид {_x}: дообучение онлайн от лучшего агента")
 
 # ---------------------------------------------------------------- волна 36
 # Как лучше соединить две сети (сеть оптимизатора и сеть его параметров, как в исходном агенте): три
@@ -1349,6 +1363,48 @@ for _nm, _fl in ((("one", ""),
              free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", "42,43,44")],
             1.0 + 0.6 * MAP_EH, needs=[ENC_MAE, W36_TEACH],
             note=f"две сети, вариант {_nm}, сид обучения {_m}, три сида среды, без маски")
+
+# ---------------------------------------------------------------- волна 37
+# Чередование: лучший агент сам решает уравнение на новых сидах с долей пробных действий (больше проб
+# там, где лосс перестал падать), все состояния с картами пишутся в буфер; затем учитель, модель среды
+# и агент заново учатся офлайн полным рецептом на старых и новых данных. Половина прогонов идёт без
+# стража: при страже действие, поднявшее лосс, откатывается и в данные не попадает, а агенту полезно
+# видеть и такие исходы. Прогоны по одному сиду на кернел — все одновременно.
+if W28_K:
+    _it_old = W33_SRC
+    _it_ck = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_tbquart_seed1.pt"
+    for _r in (1, 2):
+        _buf = f"{W28_SHORT}_it{_r}"
+        _prev = _it_ck if _r == 1 else f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_it{_r - 1}_seed1.pt"
+        for _i in range(8):
+            _sd = 100 * _r + _i
+            _gd = GUARD if _i % 2 == 0 else ""
+            add(f"w37-it{_r}-roll-{_i}", 37, "H06",
+                [(EVAL, f"--policy agent --model-file {_prev} {_gd} {KEEPS} --save-buffer {_buf} --explore-eps 0.1 "
+                        f"--explore-stall 0.5 --stall-ratio 0.95 "
+                        + t3ev(f"{_buf}_roll", str(_sd), hours=MAP_EH))],
+                1.5, needs=[_prev], note=f"круг {_r}: прогон агента с пробными действиями, сид {_sd}, "
+                                         + ("со стражем" if _gd else "без стража"))
+        _src = ",".join([_it_old] + [f"rl_arch/buffers_new/{W28_SHORT}_it{k}" for k in range(1, _r + 1)])
+        _tt, _mt = f"{TEACH}_it{_r}", f"ete_it{_r}"
+        add(f"w37-it{_r}-train", 37, "H06",
+            [(COMBO, f"{TEACH_TR} --target-buffer {_src} --tag {_tt}"),
+             (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {_src} "
+                       f"--teacher-from rl_arch/agents_online/{_tt}.pt --teacher-w 0.5 --seeds 1 --model-tag {_mt}")],
+            1.5, needs=[ENC_MAE], note=f"круг {_r}: учитель и агент заново на старых и новых данных")
+        # тот же круг одним кернелом без внешнего запуска: ждёт файлы прогонов в HF, учит, оценивает
+        if _r == 1:
+            add(f"w37-it{_r}-auto", 37, "H06",
+                [("experiments/rl_arch/wait_hf.py", f"--path rl_arch/buffers_new/{_buf}/{SUBDIR} --n 8 --min 4 --hours 3.5"),
+                 (COMBO, f"{TEACH_TR} --target-buffer {_src} --tag {_tt}a"),
+                 (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {_src} "
+                           f"--teacher-from rl_arch/agents_online/{_tt}a.pt --teacher-w 0.5 --seeds 1 --model-tag {_mt}"),
+                 free_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}", S5)],
+                5.0 + MAP_EH, needs=[ENC_MAE], note=f"круг {_r} одним кернелом: ждёт прогоны, учит, оценивает на 5 сидах")
+        _new = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_{_mt}_seed1.pt"
+        for _x in range(42, 47):
+            add(f"w37-it{_r}-ev-s{_x}", 37, "H06", [free_eval(_new, f"t3m_{_mt}", str(_x))], 1.5, needs=[_new],
+                note=f"круг {_r}: оценка агента после переобучения, сид {_x}, без маски")
 
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
