@@ -17,7 +17,7 @@ K_max стадий) без GPU, без сети и без обучения PINN,
     с правилом равны целям offline_rl.py; офлайновая половина обрезана тем же правилом; онлайновые
     цепочки кончаются на допуске или на K-й стадии терминальным переходом (d = 1), конец по K_max не
     бутстрепится; отказы разбора;
-  * paper/lit_review/work/track3/epochs_to_threshold.py на синтетических строках оценки.
+  * experiments/rl_arch/epochs_to_threshold.py на синтетических строках оценки.
 
     DDEBACKEND=pytorch HF_HUB_OFFLINE=1 python experiments/rl_arch/tests/test_stop_rule.py
 """
@@ -358,7 +358,7 @@ def test_online(ckpt, tmp):
 
 
 def test_epochs_to_threshold(tmp):
-    path = os.path.join(ROOT, "paper", "lit_review", "work", "track3", "epochs_to_threshold.py")
+    path = os.path.join(ROOT, "experiments", "rl_arch", "epochs_to_threshold.py")
     spec = importlib.util.spec_from_file_location("epochs_to_threshold", path)
     ett = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ett)

@@ -1,7 +1,7 @@
 """Эпохи до порога ошибки по строкам оценки (без GPU): сколько эпох и стадий цепочки прошло, пока
 измеренная ошибка впервые не опустилась до порога, рядом с итоговой ошибкой.
 
-    python paper/lit_review/work/track3/epochs_to_threshold.py <каталог строк> [--tags t3m_ffl_g,t3m_ete_two_g]
+    python experiments/rl_arch/epochs_to_threshold.py <каталог строк> [--tags t3m_ffl_g,t3m_ete_two_g]
         [--rel 0.05,0.02,0.01] [--abs 0.02,0.01] [--final-rel 0.1] [--kmax 10] [--seeds] [--json out.json]
 
 Строки — JSON-файлы online_eval_env.py (rl_arch/online_env/<pde>_<тег>_seed<сид>.json), как у
@@ -47,7 +47,7 @@ import os
 import statistics as st
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-META_PATHS = (os.path.join(HERE, "..", "..", "..", "..", "experiments", "rl_arch", "track3", "pde_meta.json"),)
+META_PATHS = (os.path.join(HERE, "track3", "pde_meta.json"),)
 
 
 def load_meta(path=None):

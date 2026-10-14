@@ -1458,7 +1458,7 @@ if NS2D:
 # ниже 0.011), работает только K_max (14 цепочек из 17, 25 переходов из 195). Онлайновые эпизоды pb2d
 # (итог агента 0.006-0.010) допуска достигают чаще. Сравнение — с тем же методом без правила (pb2d: t3m_ffl_g, волны 38-39;
 # ns2d: t3m_ete_two_g, волны 33 и 39), рядом с итоговой ошибкой — эпохи до порога
-# (paper/lit_review/work/track3/epochs_to_threshold.py). Все оценки без маски.
+# (experiments/rl_arch/epochs_to_threshold.py). Все оценки без маски.
 W40_TOL = round(0.01 * INIT_ERR, 5)
 W40_RULE = f"--train-tol {W40_TOL} --train-kmax 10"
 if PREFIX == "pb2d":
