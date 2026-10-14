@@ -18,6 +18,12 @@
 оценка ценности в модели, поэтому это добавка к TD-лоссу, а не его замена:
 W * Huber(Q(s, .) - Q_mb(s, .)).
 
+Правило остановки эпизода обучения (offline_rl.py, online_train_env.py --train-tol T / --train-kmax K;
+статья PINN-PELINE, формула (11)): продолжение обрывается и там, где средняя по членам ошибка после
+действия не больше T (единицы тренера, tol_log) или исполнено K стадий цепочки (_done). Цели учителя под
+тем же правилом — продолжение его политики в суррогате до остановки (policy_rollout). По умолчанию
+правило выключено, цели прежние.
+
 Единицы награды — те же, что у тренера (offline_rl.episodes_to_arrays_chains):
     delta   (E_до - E_после) / err_scale;
     dlog    log10 E_до - log10 E_после, обрезка [-3, 3] (от масштаба ошибки не зависит);
@@ -162,18 +168,38 @@ def _reward(form, l, ln, scale):
     return (10.0 ** l[None] - 10.0 ** ln) / scale[None]
 
 
-def _done(st, budget):
-    """Эпизод кончился: бюджет выбран (без бюджета — K_MAX шагов цепочки буфера) или расходимость."""
+def _done(st, budget, kmax=0, tl=None):
+    """Эпизод кончился: бюджет выбран (без бюджета — K_MAX шагов цепочки буфера) или расходимость.
+    Правило остановки эпизода обучения (offline_rl.py --train-tol / --train-kmax): kmax > 0 — исполнено
+    kmax стадий цепочки; tl — log10 допуска по номеру задачи таблицы (tol_log): ошибка дошла до допуска."""
     end = st["spent"] >= budget if budget else st["step"] >= S.K_MAX
-    return end | (st["l"] >= S.L_HI - 1e-9)
+    end = end | (st["l"] >= S.L_HI - 1e-9)
+    if kmax:
+        end = end | (st["step"] >= int(kmax))
+    if tl is not None:
+        end = end | (st["l"] <= tl[st["pde"]])
+    return end
+
+
+def tol_log(tab, pidx, err_scale, tol):
+    """log10 допуска правила остановки в единицах суррогата (исходная ошибка rmse+brmse) по номеру задачи
+    таблицы: tol задан в единицах тренера, ошибка суррогата = ошибка тренера * err_scale задачи. tol = 0 —
+    None (правило по ошибке выключено); у задач таблицы вне набора тренера допуска нет (-inf)."""
+    if not (tol and float(tol) > 0):
+        return None
+    tl = np.full(len(tab["NAMES"]), -np.inf)
+    tl[np.asarray(pidx, dtype=np.int64)] = np.log10(np.maximum(float(tol) * np.asarray(err_scale, dtype=np.float64),
+                                                               1e-300))
+    return tl
 
 
 def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budget=0, smdp_scale=0.0,
-              chunk=1500, log=None):
+              chunk=1500, log=None, kmax=0, tl=None):
     """Q_mb (n, 27) для состояний st (см. докстринг модуля). l_rew — log10 ошибки «до» для награды
     первого действия (у первого шага цепочки это init_err тренера, а не E0 таблицы), zero_first —
     строки, где награда первого действия по правилу тренера равна нулю. Возвращает (Q, средний
-    разброс log10 ошибки по членам на первом действии)."""
+    разброс log10 ошибки по членам на первом действии). kmax, tl — правило остановки эпизода обучения
+    (_done): продолжения за остановкой нет."""
     import agent_combo as AC
     if form not in FORMS:
         raise ValueError(f"модельные цели: награда {form!r} не поддержана, нужна одна из {FORMS}")
@@ -197,7 +223,7 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
         unc.append(P.std(0).mean())
         disc = g_act[a].copy()
         cur = AC.next_state(rep, a, ep, P.mean(0))
-        idx = np.where(~_done(cur, budget))[0]
+        idx = np.where(~_done(cur, budget, kmax, tl))[0]
         cur, sc = AC.take(cur, idx), scale[rows][rep_i]
         for _ in range(1, h):
             k = len(idx)
@@ -215,7 +241,7 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
             disc[idx] *= g_act[best]
             flat = np.arange(k) * na + best
             nxt = AC.next_state(AC.take(rep2, flat), best, ep2[flat], P2.mean(0)[flat])
-            keep = np.where(go & ~_done(nxt, budget))[0]
+            keep = np.where(go & ~_done(nxt, budget, kmax, tl))[0]
             cur, idx = AC.take(nxt, keep), idx[keep]
         Q[rows] = q.reshape(m, na)
         if log is not None and c0 == 0 and n > chunk:
@@ -224,7 +250,7 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
 
 
 def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, beam=3, budget=0,
-                   smdp_scale=0.0, chunk=250, log=None):
+                   smdp_scale=0.0, chunk=250, log=None, kmax=0, tl=None):
     """Немиопический вариант lookahead (--mb-full): Q_mb(s, a) = r~(s, a) + g(a) * V~(s1), где V~ —
     лучшая пессимистичная СУММА наград продолжения, найденная лучевым поиском в суррогате:
 
@@ -250,7 +276,7 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
     H=4, beam=3: 5130 (в 3.5 раза). Время = mb_sec жадного расчёта той же задачи (он в строке
     результата) на это отношение; замер на ноутбуке: около 0.05 млн строк в секунду на член и поток.
     Память: chunk * 27 * beam * 27 строк признаков за раз (chunk=250, beam=3: 547 тыс. строк, ~120 МБ).
-    Сигнатура и возврат — как у lookahead."""
+    Сигнатура и возврат — как у lookahead (kmax, tl — правило остановки эпизода обучения)."""
     import agent_combo as AC
     if form not in FORMS:
         raise ValueError(f"модельные цели: награда {form!r} не поддержана, нужна одна из {FORMS}")
@@ -275,7 +301,7 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
         unc.append(P.std(0).mean())
         sc = scale[rows][rep_i]                                   # масштаб ошибки корня (пары s, a)
         cur = AC.next_state(rep, a, ep, P.mean(0))
-        root = np.where(~_done(cur, budget))[0]                   # корень каждого узла луча
+        root = np.where(~_done(cur, budget, kmax, tl))[0]         # корень каждого узла луча
         node = AC.take(cur, root)
         acc = np.zeros(len(root))                                 # сумма наград продолжения до узла
         disc = np.ones(len(root))                                 # произведение дисконтов до узла
@@ -295,7 +321,7 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
             if depth == h - 1:
                 break
             nxt = AC.next_state(rep2, a2, ep2, P2.mean(0))
-            cand = np.where(~_done(nxt, budget))[0]
+            cand = np.where(~_done(nxt, budget, kmax, tl))[0]
             if not len(cand):
                 break
             # beam потомков на корень: сначала лучший по накопленной сумме в каждом семействе
@@ -319,14 +345,70 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
     return Q, float(np.mean(unc)) if unc else 0.0
 
 
+def policy_rollout(ens, tab, st, l_rew, zero_first, scale, form, gamma, lam, act, budget=0, smdp_scale=0.0,
+                   kmax=0, tl=None, chunk=1500, max_steps=1000):
+    """Ценность Q (n, 27) политики act в суррогате до конца эпизода: для пары (состояние, действие a)
+        Q(s, a) = r~(s, a) + g(a) * [ r~(s1, act(s1)) + g * [ ... ] ]   до остановки,
+    r~ = среднее по членам награды - lam * её разброс (как у lookahead), следующее состояние — среднее
+    членов. В отличие от lookahead продолжение выбирает политика act (состояния суррогата -> номера
+    действий), а не лучшая немедленная награда, обрыва на неположительной награде и предела глубины нет:
+    эпизод идёт до остановки (_done: бюджет, расходимость, правило остановки kmax / tl; без бюджета —
+    K_MAX шагов; max_steps — страховка). l_rew, zero_first, scale — как у lookahead. Это цели учителя
+    под правилом остановки эпизода обучения (offline_rl.teacher_targets): Q учителя считает ценность до
+    конца бюджета, и обрезать её правилом нельзя, а продолжение его же политикой в суррогате — можно."""
+    import agent_combo as AC
+    if form not in FORMS:
+        raise ValueError(f"цели политики в суррогате: награда {form!r} не поддержана, нужна одна из {FORMS}")
+    n = len(st["l"])
+    na = len(S.ACTIONS)
+    acts = np.arange(na)
+    g_act = (float(gamma) ** (S.EPOCHS / float(smdp_scale)) if smdp_scale
+             else np.full(na, float(gamma)))
+    Q = np.zeros((n, na))
+    for c0 in range(0, n, chunk):
+        rows = np.arange(c0, min(n, c0 + chunk))
+        m = len(rows)
+        rep_i = np.repeat(np.arange(m), na)
+        rep = AC.take(st, rows[rep_i])
+        a = np.tile(acts, m)
+        P, ep = _predict(ens, tab, rep, a, budget)
+        Rm = _reward(form, l_rew[rows][rep_i], P, scale[rows][rep_i])
+        q = Rm.mean(0) - lam * Rm.std(0)
+        q[zero_first[rows][rep_i]] = 0.0
+        disc = g_act[a].copy()
+        sc = scale[rows][rep_i]
+        cur = AC.next_state(rep, a, ep, P.mean(0))
+        idx = np.where(~_done(cur, budget, kmax, tl))[0]
+        cur = AC.take(cur, idx)
+        for _ in range(int(max_steps)):
+            if not len(idx):
+                break
+            a2 = np.asarray(act(cur), dtype=np.int64)
+            P2, ep2 = _predict(ens, tab, cur, a2, budget)
+            R2 = _reward(form, cur["l"], P2, sc[idx])
+            q[idx] += disc[idx] * (R2.mean(0) - lam * R2.std(0))
+            disc[idx] *= g_act[a2]
+            nxt = AC.next_state(cur, a2, ep2, P2.mean(0))
+            go = np.where(~_done(nxt, budget, kmax, tl))[0]
+            cur, idx = AC.take(nxt, go), idx[go]
+        Q[rows] = q.reshape(m, na)
+    return Q
+
+
 def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma, h=3, lam=0.5,
                budget=0, smdp_scale=0.0, subdirs="all", table="", members=5, work="agent_combo_work",
-               quick=False, model=None, log=None, tab=None, full=False, beam=3, max_rows=0, rows_seed=0):
+               quick=False, model=None, log=None, tab=None, full=False, beam=3, max_rows=0, rows_seed=0,
+               tol=0.0, kmax=0, keep=None):
     """Цели Q_mb для обучающих строк набора тренера. names — задачи набора (в порядке data['PDE']),
     err_scale и init_err — по задачам, в единицах тренера (init_err=None: награда первого шага 0).
     model=(tab, ens) — готовые таблица и ансамбль (тесты), иначе они строятся build_model. tab —
     готовая таблица вместо сборки по subdirs / table (урезанная target_subset: --target-chains),
     ансамбль учится на ней.
+    tol, kmax — правило остановки эпизода обучения (offline_rl.py --train-tol / --train-kmax): просмотр
+    вперёд кончается, когда средняя по членам ошибка после действия не больше tol (единицы тренера) или
+    исполнено kmax стадий цепочки; награда последнего действия засчитывается, дальше — ноль. По
+    умолчанию выключено (прежние цели бит в бит). keep — словарь: в keep["model"] кладутся таблица и
+    ансамбль (их же берут цели учителя под правилом остановки).
     Возвращает (QMB float32 (N, 27), MBW bool (N,) — у каких строк цель есть, сводка)."""
     log = log or (lambda *a: print(*a, flush=True))
     t0 = time.time()
@@ -341,9 +423,13 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
     else:
         tab, ens = model
         info = dict(surr_rows=int(len(tab["A"])), surr_sig="given", surr_members=int(ens.members))
+    if keep is not None:
+        keep["model"] = (tab, ens)
     pidx = np.array([tab["NAMES"].index(nm) for nm in names], dtype=np.int64)
     err_scale = np.asarray(err_scale, dtype=np.float64)
     assert err_scale.shape == (len(names),), (err_scale.shape, len(names))
+    tl = tol_log(tab, pidx, err_scale, tol)
+    kmax = int(kmax or 0)
     st, valid, first = chain_states(data, tab, pidx, err_scale, budget)
     pl = np.asarray(data["PDE"], dtype=np.int64) if "PDE" in data else np.zeros(n, dtype=np.int64)
     l_rew = st["l"].copy()
@@ -368,11 +454,11 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
         if full:
             q, unc = lookahead_full(ens, tab, sub, l_rew[rows], zero_first[rows], err_scale[pl][rows],
                                     reward_form, gamma, int(h), float(lam), int(beam), int(budget),
-                                    float(smdp_scale), log=log)
+                                    float(smdp_scale), log=log, kmax=kmax, tl=tl)
         else:
             q, unc = lookahead(ens, tab, sub, l_rew[rows], zero_first[rows],
                                err_scale[pl][rows], reward_form, gamma, int(h), float(lam), int(budget),
-                               float(smdp_scale), log=log)
+                               float(smdp_scale), log=log, kmax=kmax, tl=tl)
         assert q.shape == (len(rows), QMB.shape[1]), q.shape
         if not np.isfinite(q).all():
             raise ValueError("модельные цели: нечисловые значения Q_mb")
@@ -389,6 +475,8 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
         info.update(search="full", search_beam=int(beam))
     if max_rows:
         info.update(rows_cap=int(max_rows), capped=capped)
+    if tl is not None or kmax:
+        info.update(stop_tol=float(tol or 0.0), stop_kmax=kmax)
     log(f"модельные цели: строк {info['rows']} (пропущено {info['skipped']}"
         + (f", из них сверх --mb-max-rows {capped}" if capped else "") + f"), награда {reward_form}, "
         + (f"полный просмотр (луч {beam}), " if full else "")

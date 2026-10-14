@@ -23,6 +23,16 @@
 преобразование переходов offline_rl.py --target-buffer) вместо исходного случайного буфера;
 --mb-aux / --teacher-from --teacher-w — плотные добавки по всем 27 действиям на обеих половинах
 батча (у онлайнового перехода цели считаются при записи в буфер). Без этих флагов лосс — один TD.
+
+Правило остановки эпизода ОБУЧЕНИЯ (статья PINN-PELINE, формула (11)), те же флаги, что у offline_rl.py:
+--train-tol T — эпизод кончается после стадии, на которой ошибка (rmse+brmse в единицах тренера, как
+--init-err) не больше T; --train-kmax K — не больше K стадий. Оба конца терминальны (d = 1). Офлайновая
+половина батча (--rlpd-target-buffer или --rlpd-subdir, нужен --offline-fix) обрезается тем же
+правилом (offline_rl.stop_rule_cut), плотные цели (--mb-aux, --teacher-w) обеих половин за остановку не
+смотрят. Прежние флаги остаются как были: --tolerance (строго меньше, только онлайновая половина —
+так учились лидеры трека 1) и --max-chain-steps (предел цикла и нормировка шага в контексте, ctx_kmax
+чекпоинта; конец цепочки по нему бутстрепится, d = 0). Оценка (online_eval_env.py) по-прежнему идёт
+до конца бюджета.
 """
 from __future__ import annotations
 
@@ -50,7 +60,7 @@ from online_eval_env import (ACTION_TABLE, AE_MODEL_PARAMS, GRID_RANGE, LOSS_TYP
                              flat_params, tele_display_every, tele_observe)
 from offline_rl import (QNet, apply_state_mode, chain_ctx, STATE_MODES, PDE_DESC_CH,  # noqa: E402
                         MAP_ENCODERS, ckpt_arch, keep_consistent, loss_state, pde_desc, pde_meta,
-                        state_channels, subdir_to_pde)
+                        state_channels, stop_rule_cut, subdir_to_pde, train_end)
 import tele_maps as TM  # noqa: E402
 import online_aux as OA  # noqa: E402
 
@@ -828,6 +838,15 @@ def main():
     ap.add_argument("--hours", type=float, default=11.0, help="лимит по времени (сессия Kaggle)")
     ap.add_argument("--max-chain-steps", type=int, default=12, help="K_max из статьи")
     ap.add_argument("--tolerance", type=float, default=0.0, help="досрочный конец цепочки по ошибке")
+    ap.add_argument("--train-tol", type=float, default=0.0,
+                    help="правило остановки эпизода обучения (статья, формула (11)), как у offline_rl.py: стадия с "
+                         "ошибкой (rmse+brmse в единицах тренера, как --init-err) <= T терминальна; той же отсечкой "
+                         "обрезается офлайновая половина батча, плотные цели за неё не смотрят. 0 — выключено. "
+                         "В отличие от --tolerance (строго меньше, только онлайновая половина) действует на обе половины")
+    ap.add_argument("--train-kmax", type=int, default=0,
+                    help="K_max статьи: эпизод обучения кончается после K стадий, последний переход терминален (d=1) "
+                         "на обеих половинах батча (офлайновые цепочки обрезаются на K-й стадии). Не больше "
+                         "--max-chain-steps (тот остаётся пределом цикла и нормировкой шага в контексте). 0 — выключено")
     ap.add_argument("--n-save-models", type=int, default=10)
     ap.add_argument("--ae-epochs", type=int, default=10000)
     ap.add_argument("--batch-size", type=int, default=32)
@@ -1287,6 +1306,21 @@ def main():
         if bad:
             ap.error("--mb-aux и --teacher-w несовместимы с " + ", ".join(bad) + ": у этих веток свой лосс, "
                      "своя сеть или другая награда — плотные цели в них не добавляются")
+    stop_on = args.train_tol > 0 or args.train_kmax > 0
+    if args.train_tol < 0 or args.train_kmax < 0:
+        ap.error("--train-tol >= 0, --train-kmax >= 0")
+    if stop_on:
+        if args.tolerance > 0:
+            ap.error("--train-tol / --train-kmax и --tolerance вместе не задаются: прежний допуск действует только на "
+                     "онлайновую половину, новое правило — на обе")
+        if args.train_kmax > args.max_chain_steps:
+            ap.error("--train-kmax не больше --max-chain-steps: иначе цепочка кончится по пределу цикла с бутстрепом")
+        if (args.rlpd or args.qwm or args.preload) and not args.self_prior and not args.offline_fix:
+            ap.error("--train-tol / --train-kmax с офлайновым буфером требуют --offline-fix: без границ цепочек "
+                     "офлайновую половину не обрезать тем же правилом")
+        bad = [f for f, on in (("--n-step > 1", args.n_step > 1), ("--go-explore", args.go_explore)) if on]
+        if bad:
+            ap.error("--train-tol / --train-kmax несовместимы с " + ", ".join(bad))
     run_meta = dict(ctx_kmax=args.max_chain_steps, ctx_budget=args.budget,
                     ctx_err=("none" if args.ctx_no_err else "err"),
                     mask=[int(i) for i in np.where(~allowed)[0]],
@@ -1302,6 +1336,9 @@ def main():
                     lbfgs_tol=(None if args.lbfgs_tol is None or args.lbfgs_tol < 0 else float(args.lbfgs_tol)),
                     err_norm=args.err_norm, online_reward=args.online_reward,
                     scalar_ctx=bool(args.scalar_ctx), train_pdes=[args.pde])
+    if stop_on:
+        # правило остановки обучения: в meta агента и в строке результата, только когда включено
+        run_meta.update(train_tol=float(args.train_tol), train_kmax=int(args.train_kmax))
     n_ctx = (SCALAR_CH if args.scalar_ctx else 0) + (PDE_DESC_CH if args.pde_ctx else 0)
     # каналы наблюдения до контекста: 4 карты, 10 tele или 15 fulltele (карты + телеметрия + признак)
     n_obs = TM.obs_channels(args.state_mode)
@@ -1482,6 +1519,8 @@ def main():
     off_buf = None
     aux = None                  # плотные добавки офлайнового рецепта (online_aux.Aux); None — прежний лосс
     aux_row = {}                # поля новых флагов для строки результата
+    if stop_on:
+        aux_row.update(train_tol=float(args.train_tol), train_kmax=int(args.train_kmax))
     if (args.rlpd or args.qwm) and not args.self_prior:
         # при self-prior внешний буфер не нужен вовсе — опорную половину даст
         # собственный замороженный прайор; качать 300МБ незачем
@@ -1504,6 +1543,13 @@ def main():
                                     init_err=args.init_err if args.offline_fix else None,
                                     budget=args.episode_budget if args.offline_fix else 0,
                                     err_scale=err_scale if args.offline_fix else 1.0)
+        if stop_on:
+            # офлайновая половина — тем же правилом остановки, что онлайновые эпизоды (и offline_rl.py):
+            # цепочка кончается терминальным переходом на допуске или на K-й стадии, дальше переходов нет
+            od, stop_off = stop_rule_cut(od, args.train_tol, args.train_kmax, gamma=GAMMA,
+                                         log=lambda *x: print(*x, flush=True))
+            run_meta["stop_rule_offline"] = {k: v for k, v in stop_off.items() if not k.startswith("stop_")}
+            aux_row.update(stop_rule_offline=dict(run_meta["stop_rule_offline"]))
         if fulltele:
             # в буфере телеметрии нет: её каналы нулевые, признак наличия 0 (tele_maps.py)
             od["S"], od["S2"] = TM.fulltele_batch(od["S"]), TM.fulltele_batch(od["S2"])
@@ -1539,7 +1585,8 @@ def main():
                          budget=int(args.episode_budget), smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0),
                          mb_h=args.mb_h, mb_lam=args.mb_lam, mb_subdirs=args.mb_subdirs, mb_table=args.mb_table,
                          mb_members=args.mb_members, mb_work=args.mb_work, quick=bool(args.smoke),
-                         teacher_from=args.teacher_from, device=dev, log=lambda *x: print(*x, flush=True))
+                         teacher_from=args.teacher_from, device=dev, log=lambda *x: print(*x, flush=True),
+                         tol=float(args.train_tol), kmax=int(args.train_kmax))
             off_aux = aux.offline(od, otr, episodes=tb_eps)
             run_meta.update(aux.meta())
         env_now = OA.env_label(args.keep_opt, args.keep_opt_mode)
@@ -1627,6 +1674,9 @@ def main():
                                 init_err=args.init_err if args.offline_fix else None,
                                 budget=args.episode_budget if args.offline_fix else 0,
                                 err_scale=err_scale if args.offline_fix else 1.0)
+        if stop_on:
+            od, _ = stop_rule_cut(od, args.train_tol, args.train_kmax, gamma=GAMMA,
+                                  log=lambda *x: print(*x, flush=True))
         if args.state_mode != "full":
             od["S"] = apply_state_mode(od["S"], args.state_mode, seed=101, pde=subdir_to_pde(args.preload))
             od["S2"] = apply_state_mode(od["S2"], args.state_mode, seed=202, pde=subdir_to_pde(args.preload))
@@ -1895,6 +1945,11 @@ def main():
             prev_err = err
             done = 1 if (args.tolerance > 0 and err < args.tolerance) else 0
             end_reason = "tolerance" if done == 1 else ""
+            if not done and stop_on:
+                # правило остановки обучения (--train-tol, --train-kmax): допуск или K-я стадия — терминал
+                # (d = 1), как конец цепочки в офлайновой половине
+                end_reason = train_end(err, step + 1, args.train_tol, args.train_kmax)
+                done = 1 if end_reason else 0
             if args.episode_budget and spent >= args.episode_budget:
                 # бюджет исчерпан: для метрики трека это настоящий конец эпизода
                 done, end_reason = 1, (end_reason or "budget")

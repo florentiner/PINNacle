@@ -14473,6 +14473,171 @@
    ]
   },
   {
+   "id": "w40-twosr-s42",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.4,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_tbquart.pt"
+   ],
+   "note": "две сети (линейная голова) с правилом остановки обучения (допуск 1% E0, K_max 10): обучение и сид 42",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_tbquart.pt --teacher-w 0.5 --two-nets --train-tol 0.0049 --train-kmax 10 --seeds 1 --model-tag ete_twosr"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s43",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 43 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s44",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 44 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s45",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 45",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s46",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 46 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s47",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 47 (добор до 10 сидов)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s48",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 48 (добор до 10 сидов)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s49",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 49 (добор до 10 сидов)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s50",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 50 (добор до 10 сидов)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s51",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 51 (добор до 10 сидов)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

@@ -13433,6 +13433,135 @@
    ]
   },
   {
+   "id": "pb2d-w40-fflsr-tr",
+   "wave": 40,
+   "group": "H06",
+   "hours": 5.8,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "дообучение онлайн лоссом рецепта с правилом остановки обучения (допуск 1% E0, K_max 10), 5 часов как у w38-ffl-auto; в 2.5 часа не помещается",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --pde poissonboltzmann2d --hours 5 --save-agent --save-every 5 --save-buffer --rlpd --rlpd-utd 8 --rlpd-target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --offline-fix --offline-reward delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --scalar-ctx --ctx-no-err --keep-opt --keep-opt-mode safe --warm-start rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt --warm-strict --eps-start 0.1 --lr 3e-4 --seed 42 --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --train-tol 0.00811 --train-kmax 10 --tag qpb2d_fflsr_tbq_s42"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-fflsr-ev-a",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt"
+   ],
+   "note": "оценка дообучения с правилом остановки, со стражем, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_fflsr_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-fflsr-ev-b",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt"
+   ],
+   "note": "оценка дообучения с правилом остановки, со стражем, сиды 45,46,47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45,46,47 --tag t3m_fflsr_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-fflsr-ev-c",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt"
+   ],
+   "note": "оценка дообучения с правилом остановки, со стражем, сиды 48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 48,49,50,51 --tag t3m_fflsr_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-fflsr-ev-fa",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt"
+   ],
+   "note": "оценка дообучения с правилом остановки, без стража, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_fflsr_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-fflsr-ev-fb",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt"
+   ],
+   "note": "оценка дообучения с правилом остановки, без стража, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_fflsr_tbq_s42.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_fflsr_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-ffl-free-a",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt"
+   ],
+   "note": "контроль без стража: дообучение волны 38 без правила остановки, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_ffl_free"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-ffl-free-b",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt"
+   ],
+   "note": "контроль без стража: дообучение волны 38 без правила остановки, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_ffl_free"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

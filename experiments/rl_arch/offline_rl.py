@@ -38,6 +38,9 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
                                     что учитель agent_combo.py с теми же N и K (mb_targets.target_subset)
     --target-buffer SPEC            данные задачи только из собранных заново файлов с картами
                                     (collect_active.py --save-buffer), исходный буфер не читается (target_buffer.py)
+    --train-tol T --train-kmax K    правило остановки эпизода обучения из статьи (формула (11)): цепочка кончается
+                                    терминальным переходом на ошибке <= T или на K-й стадии (stop_rule_cut);
+                                    модельные цели и цели учителя за остановку не смотрят
 Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
@@ -693,6 +696,106 @@ def merge_online_buffers(data, paths, reward_form="delta", init_err=None, budget
     return out
 
 
+# --------------------------------------------------------------------------
+# Правило остановки эпизода ОБУЧЕНИЯ (статья PINN-PELINE, раздел 2, формула (11), и раздел 3,
+# «Stopping criterion»): эпизод кончается, когда ошибка относительно эталона дошла до допуска
+# (e(θ_k) <= ε), после K_max стадий или при расходимости. Оценка по-прежнему идёт до конца бюджета
+# (раздел 4 и приложение E статьи), правило касается только данных и целей обучения.
+#
+# Единицы ошибки — единицы тренера, те же, что у --init-err и награды: rmse+brmse (сумма RMSE
+# решения и границы относительно эталона, формула (15) статьи при λ = 1), у смеси УрЧП с
+# --err-norm init — доля ошибки необученной сети E0. Числа ε в статье нет.
+# Расходимость правило не трогает: её обработка прежняя (загрузчик: нечисловая ошибка -> цепочка
+# кончается терминальным переходом с ошибкой не меньше 1; суррогат: ошибка на верхнем пределе
+# таблицы L_HI; онлайн: нечисловые метрики -> done=-1, переход не пишется).
+# --------------------------------------------------------------------------
+
+def stop_hit(err, tol) -> bool:
+    """Ошибка дошла до допуска: tol > 0 и err <= tol (формула (11) статьи: e(θ_k) <= ε)."""
+    return bool(tol is not None and float(tol) > 0 and np.isfinite(err) and float(err) <= float(tol))
+
+
+def train_end(err, n_stages: int, tol=0.0, kmax: int = 0) -> str:
+    """Причина конца эпизода обучения после стадии номер n_stages (с 1) с ошибкой err после неё:
+    'tolerance' — ошибка не больше допуска, 'kmax' — исполнено kmax стадий, '' — эпизод идёт дальше.
+    Оба конца терминальны (d = 1): ценности за остановкой нет."""
+    if stop_hit(err, tol):
+        return "tolerance"
+    if kmax and int(n_stages) >= int(kmax):
+        return "kmax"
+    return ""
+
+
+def stop_rule_cut(data, tol=0.0, kmax: int = 0, gamma=None, log=None):
+    """Цепочки набора тренера обрезаются правилом остановки эпизода обучения: на первом переходе,
+    после которого ошибка ERR <= tol (tol > 0), или на стадии номер kmax (STEP == kmax - 1, kmax > 0)
+    цепочка кончается — переход терминален (D = 1), её дальнейшие переходы выбрасываются. RTG и FIRST
+    пересчитываются. Нужны массивы загрузчика с chain_fix (EP, STEP, ERR, D, R).
+    tol = 0 и kmax = 0 — правило выключено: возвращается тот же объект data без изменений.
+    Возвращает (data, сводка: сколько цепочек обрезано по допуску и по K_max, сколько переходов
+    выброшено, сколько концов стало терминальными)."""
+    if not (tol and float(tol) > 0) and not (kmax and int(kmax) > 0):
+        return data, {}
+    for k in ("EP", "STEP", "ERR", "D", "R"):
+        if k not in data:
+            raise ValueError("правило остановки обучения требует набор, загруженный с --chain-fix")
+    g = GAMMA if gamma is None else float(gamma)
+    EP = np.asarray(data["EP"])
+    STEP = np.asarray(data["STEP"], dtype=np.int64)
+    ERR = np.asarray(data["ERR"], dtype=np.float64)
+    n = len(EP)
+    hit_t = (ERR <= float(tol)) & np.isfinite(ERR) if tol and float(tol) > 0 else np.zeros(n, dtype=bool)
+    hit_k = STEP >= int(kmax) - 1 if kmax and int(kmax) > 0 else np.zeros(n, dtype=bool)
+    keep = np.ones(n, dtype=bool)
+    end = np.zeros(n, dtype=bool)
+    st = dict(stop_tol=float(tol or 0.0), stop_kmax=int(kmax or 0), chains_tol=0, chains_kmax=0,
+              dropped=0, made_terminal=0)
+    starts = np.r_[0, np.where(EP[1:] != EP[:-1])[0] + 1] if n else np.zeros(0, dtype=np.int64)
+    ends = np.r_[starts[1:], n] if n else np.zeros(0, dtype=np.int64)
+    D0 = np.asarray(data["D"])
+    for a0, b0 in zip(starts, ends):
+        hit = np.where(hit_t[a0:b0] | hit_k[a0:b0])[0]
+        if not len(hit):
+            continue
+        j = a0 + int(hit[0])
+        st["chains_tol" if hit_t[j] else "chains_kmax"] += 1
+        st["made_terminal"] += int(D0[j] == 0)
+        keep[j + 1:b0] = False
+        end[j] = True
+    st["dropped"] = int((~keep).sum())
+    out = {}
+    for k, v in data.items():
+        if isinstance(v, np.ndarray) and v.ndim >= 1 and len(v) == n:
+            out[k] = v[keep]
+        else:
+            out[k] = v
+    D = np.asarray(out["D"], dtype=np.float32).copy()
+    D[end[keep]] = 1.0
+    out["D"] = D
+    R, EP2 = np.asarray(out["R"]), np.asarray(out["EP"])
+    RTG = np.zeros(len(R), dtype=np.float32)
+    FIRST = np.zeros(len(R), dtype=np.float32)
+    s2 = np.r_[0, np.where(EP2[1:] != EP2[:-1])[0] + 1] if len(R) else np.zeros(0, dtype=np.int64)
+    e2 = np.r_[s2[1:], len(R)] if len(R) else np.zeros(0, dtype=np.int64)
+    for a0, b0 in zip(s2, e2):
+        run = 0.0
+        for i in range(b0 - 1, a0 - 1, -1):
+            run = float(R[i]) + g * run * (1.0 - float(D[i]))
+            RTG[i] = run
+        FIRST[a0] = 1.0
+    if "RTG" in data:
+        out["RTG"] = RTG
+    if "FIRST" in data:
+        out["FIRST"] = FIRST
+    if isinstance(data.get("STATS"), dict):
+        out["STATS"] = dict(data["STATS"], stop_rule=dict(st))
+    if log is not None:
+        log(f"правило остановки обучения (допуск {st['stop_tol']:g}, K_max {st['stop_kmax'] or 'нет'}): цепочек "
+            f"обрезано по допуску {st['chains_tol']}, по K_max {st['chains_kmax']}; выброшено переходов "
+            f"{st['dropped']} из {n}, новых терминальных концов {st['made_terminal']}")
+    return out, st
+
+
 ALL_SUBDIRS = ("burgers1d", "burgers2d", "grayscott", "heat2d_complexgeometry",
                "heat2d_longtime", "heat2d_multiscale", "heat2d_varyingcoef", "heatinv", "heatnd",
                "kuramoto_sivashinsky", "ns2d_backstep", "ns2d_liddriven", "ns2d_longtime",
@@ -838,6 +941,17 @@ def teacher_scalar_q(ck, data, device, names, err_scale):
     import mb_targets as MB
     import agent_combo as AC
     S_ = MB.S
+    q_of, rows = _teacher_scalar_net(ck, device, names)
+    tab = dict(CTX=np.stack([S_.pde_ctx(rows[n]) for n in names]), NAMES=list(names))
+    st, valid, first = MB.chain_states(data, tab, np.arange(len(names)), err_scale, budget=AC.BUDGET)
+    obs = AC.agent_obs(tab["CTX"][st["pde"]], st["step"], st["spent"], st["pa"], st["l"])
+    return q_of(obs), valid, first, st["l"]
+
+
+def _teacher_scalar_net(ck, device, names):
+    """Сеть учителя на скалярах (agent_combo.py: stat_dqn, state_mode=loss) после проверок чекпоинта:
+    (функция наблюдения agent_combo.agent_obs (n, 15) -> Q (n, 27), строки pde_meta.json)."""
+    import agent_combo as AC
     meta = ck.get("meta") or {}
     sd = ck["state_dict"]
     arch = ckpt_arch(ck)
@@ -859,24 +973,75 @@ def teacher_scalar_q(ck, data, device, names, err_scale):
     miss = [n for n in names if n not in rows]
     if miss:
         raise ValueError(f"учитель: задач {miss} нет в track3/pde_meta.json")
-    tab = dict(CTX=np.stack([S_.pde_ctx(rows[n]) for n in names]), NAMES=list(names))
-    st, valid, first = MB.chain_states(data, tab, np.arange(len(names)), err_scale, budget=AC.BUDGET)
-    obs = AC.agent_obs(tab["CTX"][st["pde"]], st["step"], st["spent"], st["pa"], st["l"])
     net = QNet("stat_dqn", device, **arch)
     net.model.load_state_dict(sd)
     net.model.eval()
     mean = np.asarray(ck["mean"], np.float32).reshape(1, in_ch)
     std = np.asarray(ck["std"], np.float32).reshape(1, in_ch)
-    out = np.zeros((len(obs), N_ACTIONS), dtype=np.float32)
-    with torch.no_grad():
-        for k in range(0, len(obs), 512):
-            # постоянные плоскости, как их подаёт оценка (add_scalar_ctx + описатель задачи)
-            x = torch.as_tensor((obs[k:k + 512] - mean) / std, device=device).float()
-            out[k:k + 512] = net.q_scalar(x[:, :, None, None].expand(-1, -1, 26, 26)).float().cpu().numpy()
-    return out, valid, first, st["l"]
+
+    def q_of(obs):
+        out = np.zeros((len(obs), N_ACTIONS), dtype=np.float32)
+        with torch.no_grad():
+            for k in range(0, len(obs), 512):
+                # постоянные плоскости, как их подаёт оценка (add_scalar_ctx + описатель задачи)
+                x = torch.as_tensor((obs[k:k + 512] - mean) / std, device=device).float()
+                out[k:k + 512] = net.q_scalar(x[:, :, None, None].expand(-1, -1, 26, 26)).float().cpu().numpy()
+        return out
+    return q_of, rows
 
 
-def teacher_targets(path, data, names, reward_form, err_scale, init_err, gamma, device, budget=0, log=None):
+def teacher_rule_targets(ck, data, names, reward_form, err_scale, init_err, gamma, device, model, lam=0.5,
+                         budget=0, tol=0.0, kmax=0, smdp_scale=0.0):
+    """Цели учителя под правилом остановки эпизода обучения (--train-tol, --train-kmax).
+
+    Q учителя agent_combo.py — убыль ошибки до конца ЕГО эпизода (до бюджета, без допуска и без
+    K_max), обрезать её правилом нельзя: неизвестно, на какой стадии продолжение учителя дошло бы до
+    допуска и сколько стадий оно заняло бы. Поэтому под правилом цель строки — ценность продолжения
+    ПОЛИТИКИ учителя (жадное действие по его Q, его маска) в том же суррогате, что у модельных целей
+    (mb_targets.policy_rollout): первое действие a, дальше действия учителя, пессимистичная награда
+    r~ = среднее - lam * разброс по членам, дисконт ученика, конец — бюджет, расходимость, допуск
+    (средняя ошибка суррогата <= tol), K_max стадий цепочки. Единицы награды — тренера (delta | dlog),
+    первый шаг цепочки — от init_err, как у mb_targets.precompute. Возвращает (Q (N, 27), valid):
+    valid — строка в цепочке с началом, расход меньше бюджета учителя и бюджета ученика."""
+    import mb_targets as MB
+    import agent_combo as AC
+    S_ = MB.S
+    tab, ens = model
+    n = len(data["A"])
+    q_of, rows = _teacher_scalar_net(ck, device, names)
+    pidx = np.array([tab["NAMES"].index(nm) for nm in names], dtype=np.int64)
+    err_scale = np.asarray(err_scale, dtype=np.float64)
+    init_err = np.asarray(init_err, dtype=np.float64)
+    st, valid, first = MB.chain_states(data, tab, pidx, err_scale, budget)
+    valid &= np.asarray(data["SPENT"]) < AC.BUDGET
+    pl = np.asarray(data["PDE"], dtype=np.int64) if "PDE" in data else np.zeros(n, dtype=np.int64)
+    l_rew = st["l"].copy()
+    l_rew[first] = S_._log(init_err[pl] * err_scale[pl])[first]
+    # описатель задачи — как у teacher_scalar_q (pde_meta.json), по номеру задачи в таблице суррогата
+    ctx_t = np.zeros((len(tab["NAMES"]), np.asarray(tab["CTX"]).shape[1]), dtype=np.float64)
+    for k, nm in enumerate(names):
+        ctx_t[pidx[k]] = S_.pde_ctx(rows[nm])
+    allowed = np.ones(N_ACTIONS, dtype=bool)
+    allowed[[int(i) for i in (ck.get("meta") or {}).get("mask", [])]] = False
+
+    def act(s):
+        q = q_of(AC.agent_obs(ctx_t[s["pde"]], s["step"], s["spent"], s["pa"], s["l"])).astype(np.float64)
+        q[:, ~allowed] = -np.inf
+        return q.argmax(1)
+
+    Q = np.zeros((n, N_ACTIONS), dtype=np.float64)
+    rows_v = np.where(valid)[0]
+    if len(rows_v):
+        sub = {k: v[rows_v] for k, v in st.items()}
+        Q[rows_v] = MB.policy_rollout(ens, tab, sub, l_rew[rows_v], np.zeros(len(rows_v), dtype=bool),
+                                      err_scale[pl][rows_v], reward_form, gamma, float(lam), act,
+                                      budget=int(budget), smdp_scale=float(smdp_scale), kmax=int(kmax or 0),
+                                      tl=MB.tol_log(tab, pidx, err_scale, tol))
+    return Q, valid
+
+
+def teacher_targets(path, data, names, reward_form, err_scale, init_err, gamma, device, budget=0, log=None,
+                    tol=0.0, kmax=0, model=None, lam=0.5, smdp_scale=0.0):
     """--teacher-w: Q учителя в единицах награды тренера на строках его набора.
 
     Учитель agent_combo.py учится на награде «убыль log10 ошибки за действие» с дисконтом 1:
@@ -891,7 +1056,10 @@ def teacher_targets(path, data, names, reward_form, err_scale, init_err, gamma, 
     names — задачи набора (в порядке data['PDE']), err_scale и init_err — по задачам в единицах
     тренера, как у mb_targets.precompute. Возвращает (Q float32 (N, 27), у каких строк цель есть
     bool (N,), сводка). Цель есть не у всех: строка вне цепочки с началом, расход не меньше бюджета
-    учителя, строка до каркаса учителя (--guide: он решает только после каркаса), чужая задача."""
+    учителя, строка до каркаса учителя (--guide: он решает только после каркаса), чужая задача.
+    tol > 0 или kmax > 0 — правило остановки эпизода обучения (--train-tol, --train-kmax): цель — ценность
+    продолжения политики учителя в суррогате model=(таблица, ансамбль) до остановки
+    (teacher_rule_targets; lam — пессимизм, как у модельных целей). По умолчанию выключено."""
     log = log or (lambda *a: print(*a, flush=True))
     t0 = time.time()
     if reward_form not in ("delta", "dlog"):
@@ -915,36 +1083,48 @@ def teacher_targets(path, data, names, reward_form, err_scale, init_err, gamma, 
     err_scale = np.asarray(err_scale, dtype=np.float64)
     init_err = np.asarray(init_err, dtype=np.float64)
     assert err_scale.shape == (len(names),) and init_err.shape == (len(names),), (err_scale.shape, init_err.shape)
-    q, valid, first, l = teacher_scalar_q(ck, data, device, names, err_scale)
-    assert q.shape == (n, N_ACTIONS) and valid.shape == (n,) and l.shape == (n,)
+    rule = bool((tol and float(tol) > 0) or (kmax and int(kmax) > 0))
     pl = np.asarray(data["PDE"], dtype=np.int64) if "PDE" in data else np.zeros(n, dtype=np.int64)
+    if rule:
+        if model is None:
+            raise ValueError("--teacher-w с правилом остановки обучения: нужен суррогат (model) — цель учителя "
+                             "считается продолжением его политики в суррогате до остановки")
+        out, valid = teacher_rule_targets(ck, data, names, reward_form, err_scale, init_err, gamma, device, model,
+                                          lam=lam, budget=budget, tol=tol, kmax=kmax, smdp_scale=smdp_scale)
+    else:
+        q, valid, first, l = teacher_scalar_q(ck, data, device, names, err_scale)
+        assert q.shape == (n, N_ACTIONS) and valid.shape == (n,) and l.shape == (n,)
     guide_ep = int(meta.get("guide_epochs", 0) or 0)
     valid = valid & (np.asarray(data["SPENT"]) >= guide_ep)
     known = meta.get("train_pdes")
     if known:
         valid &= np.isin(pl, [k for k, nm in enumerate(names) if nm in known])
-    # текущая ошибка в единицах тренера: у первого шага — init_err, дальше — ошибка после прошлого действия
-    base = np.where(first, init_err[pl], np.r_[1.0, np.asarray(data["ERR"], dtype=np.float64)[:-1]])
-    q64 = q.astype(np.float64)
-    if reward_form == "dlog":
-        out = (np.log10(np.maximum(base, 1e-8)) - (l - np.log10(err_scale[pl])))[:, None] + q64
-    else:
-        out = base[:, None] - 10.0 ** (l[:, None] - np.maximum(q64, TEACHER_QMIN)) / err_scale[pl][:, None]
+    if not rule:
+        # текущая ошибка в единицах тренера: у первого шага — init_err, дальше — ошибка после прошлого действия
+        base = np.where(first, init_err[pl], np.r_[1.0, np.asarray(data["ERR"], dtype=np.float64)[:-1]])
+        q64 = q.astype(np.float64)
+        if reward_form == "dlog":
+            out = (np.log10(np.maximum(base, 1e-8)) - (l - np.log10(err_scale[pl])))[:, None] + q64
+        else:
+            out = base[:, None] - 10.0 ** (l[:, None] - np.maximum(q64, TEACHER_QMIN)) / err_scale[pl][:, None]
     valid &= np.isfinite(out).all(1)
     out = np.where(valid[:, None], out, 0.0).astype(np.float32)
     g_t = float(meta.get("gamma", 1.0))
-    info = dict(rows=int(valid.sum()), skipped=int(n - valid.sum()), units=f"dlog->{reward_form}",
+    info = dict(rows=int(valid.sum()), skipped=int(n - valid.sum()),
+                units=(f"rollout->{reward_form}" if rule else f"dlog->{reward_form}"),
                 gamma=g_t, guide_epochs=guide_ep, mask_n=len(meta.get("mask", [])),
                 q_mean=float(out[valid].mean()) if valid.any() else 0.0,
                 q_best_mean=float(out[valid].max(1).mean()) if valid.any() else 0.0,
                 sec=round(time.time() - t0, 1))
+    if rule:
+        info.update(stop_tol=float(tol or 0.0), stop_kmax=int(kmax or 0))
     log(f"учитель {os.path.basename(path)}: цель у {info['rows']} строк из {n} (каркас учителя {guide_ep} "
         f"эпох, маска {info['mask_n']} действий), единицы {info['units']}: средний Q {info['q_mean']:.4f}, "
         f"лучшего действия {info['q_best_mean']:.4f}, {info['sec']} с")
-    if int(budget) != int(meta.get("ctx_budget", 0) or 0):
+    if int(budget) != int(meta.get("ctx_budget", 0) or 0) and not rule:
         log(f"ВНИМАНИЕ: учитель обучен на эпизодах в {meta.get('ctx_budget')} эпох, цепочки ученика обрезаны по "
             f"{budget or 'без бюджета'}: Q учителя считает остаток своего бюджета")
-    if abs(g_t - float(gamma)) > 1e-9:
+    if abs(g_t - float(gamma)) > 1e-9 and not rule:
         log(f"учитель: дисконт учителя {g_t:g}, ученика {float(gamma):g} — цель переведена как сумма наград "
             "без дисконта (см. teacher_targets)")
     if not valid.any():
@@ -2705,6 +2885,15 @@ def main():
                          "при --reward-form delta = init_err - E_1 вместо нуля")
     ap.add_argument("--episode-budget", type=int, default=0,
                     help="Обрезать офлайновые цепочки по бюджету эпох (нужен --chain-fix)")
+    ap.add_argument("--train-tol", type=float, default=0.0,
+                    help="Правило остановки эпизода обучения (статья, формула (11)): цепочка кончается на первом "
+                         "переходе с ошибкой после действия <= T (единицы тренера, как --init-err: rmse+brmse, у "
+                         "смеси с --err-norm init — доля E0); переход терминален, дальше переходов нет. Модельные "
+                         "цели (--mb-aux) и цели учителя (--teacher-w) кончаются там же. 0 — выключено. Нужен --chain-fix")
+    ap.add_argument("--train-kmax", type=int, default=0,
+                    help="Правило остановки эпизода обучения: не больше K стадий (статья: K_max = 10); K-я стадия "
+                         "терминальна, модельные цели и цели учителя дальше K-й стадии не смотрят. 0 — выключено. "
+                         "Нормировку шага в контексте (--ctx-kmax) не меняет. Нужен --chain-fix")
     ap.add_argument("--value-bound", action="store_true",
                     help="Ограничить бутстреп-цель физическими пределами: 0 <= V(s') <= "
                          "ошибка в s' (нужны --chain-fix и --reward-form delta, без --pbrs)")
@@ -3061,6 +3250,16 @@ def main():
         ap.error("--reward-form требует --chain-fix")
     if (args.init_err is not None or args.episode_budget) and not args.chain_fix:
         ap.error("--init-err и --episode-budget требуют --chain-fix")
+    if args.train_tol < 0 or args.train_kmax < 0:
+        ap.error("--train-tol >= 0, --train-kmax >= 0")
+    stop_on = args.train_tol > 0 or args.train_kmax > 0
+    if stop_on and not args.chain_fix:
+        ap.error("--train-tol и --train-kmax требуют --chain-fix: без границ цепочек правило остановки не применить")
+    if stop_on and args.reward_form not in ("delta", "dlog"):
+        ap.error("--train-tol и --train-kmax требуют --reward-form delta или dlog: награда-уровень (logged, level) "
+                 "и награда модели авторов (model) не складываются в ценность до остановки")
+    if stop_on and args.distill_from:
+        ap.error("--train-tol и --train-kmax несовместимы с --distill-from: Q учителя на картах правило не обрезает")
     if args.value_bound and (not args.chain_fix or args.reward_form != "delta" or args.pbrs):
         ap.error("--value-bound требует --chain-fix --reward-form delta и несовместим с --pbrs")
     if args.value_bound and multi and args.err_norm != "init":
@@ -3124,6 +3323,12 @@ def main():
         data, tc_tab, tc_info = MB.target_subset(
             data, subdir_to_pde(args.subdir), args.target_chains, args.data_seed,
             budget=int(args.episode_budget), subdirs=args.mb_subdirs, table=args.mb_table, work=args.mb_work)
+    stop_info = {}
+    if stop_on:
+        # правило остановки эпизода обучения: после выбора цепочек (--target-chains сопоставляет цепочки
+        # тренера и таблицы по полному содержимому), до контекста, отложенной части и плотных целей
+        data, stop_info = stop_rule_cut(data, args.train_tol, args.train_kmax, gamma=GAMMA,
+                                        log=lambda *x: print(*x, flush=True))
     if args.scalar_ctx and args.variant in ("cnx_bcq", "cnx_smdp"):
         ap.error("--scalar-ctx не поддержан для cnx_bcq и cnx_smdp")
     if args.scalar_ctx and not args.chain_fix:
@@ -3208,6 +3413,10 @@ def main():
         arm.update(mb_full=True, mb_beam=int(args.mb_beam))
     if args.mb_max_rows:
         arm.update(mb_max_rows=int(args.mb_max_rows))
+    if stop_on:
+        # правило остановки обучения: в строке результата и в meta чекпоинта, только когда включено
+        arm.update(train_tol=float(args.train_tol), train_kmax=int(args.train_kmax),
+                   stop_rule={k: v for k, v in stop_info.items() if not k.startswith("stop_")})
     if args.two_nets:
         # по полю two_nets в meta чекпоинта offline_rl.ckpt_arch строит обе сети
         arm.update(two_nets=True, two_nets_center=args.two_nets_center, two_nets_head=args.two_nets_head,
@@ -3248,6 +3457,10 @@ def main():
         else:
             mb_scale = np.ones(1)
             mb_init = None if args.init_err is None else np.array([float(args.init_err)])
+    # правило остановки: суррогат нужен и целям учителя (их ценность считается продолжением политики
+    # учителя в суррогате до остановки, см. teacher_targets) — один и тот же ансамбль на обе добавки
+    stop_kw = dict(tol=float(args.train_tol), kmax=int(args.train_kmax)) if stop_on else {}
+    surr = {}
     if args.mb_aux > 0:
         import mb_targets as MB
         data["QMB"], data["MBW"], mb_info = MB.precompute(
@@ -3258,15 +3471,28 @@ def main():
             subdirs=mb_subdirs, table=args.mb_table, members=args.mb_members,
             work=args.mb_work, quick=bool(args.smoke), tab=tc_tab,
             full=bool(args.mb_full), beam=int(args.mb_beam), max_rows=int(args.mb_max_rows),
-            rows_seed=int(args.data_seed))
+            rows_seed=int(args.data_seed), **stop_kw, **({"keep": surr} if stop_on else {}))
         run_meta["mb"] = dict(mb_info)
     args._teacher_soft_mask = []
     if args.teacher_w > 0:
         import torch as _t
+        te_kw = {}
+        if stop_on:
+            if not surr:
+                import mb_targets as MB
+                _lg = lambda *x: print(*x, flush=True)  # noqa: E731
+                if tc_tab is not None:
+                    tab_s, ens_s, _ = MB.fit_model(tc_tab, args.mb_members, args.mb_work, bool(args.smoke), _lg)
+                else:
+                    tab_s, ens_s, _ = MB.build_model(names, mb_subdirs, args.mb_table, args.mb_members,
+                                                     args.mb_work, bool(args.smoke), _lg)
+                surr["model"] = (tab_s, ens_s)
+            te_kw = dict(stop_kw, model=surr["model"], lam=float(args.mb_lam),
+                         smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0))
         data["QTE"], data["TEV"], te_info = teacher_targets(
             args.teacher_from, data, names=names, reward_form=args.reward_form, err_scale=mb_scale,
             init_err=mb_init, gamma=float(GAMMA), budget=int(args.episode_budget),
-            device=_t.device("cuda" if _t.cuda.is_available() and not args.cpu else "cpu"))
+            device=_t.device("cuda" if _t.cuda.is_available() and not args.cpu else "cpu"), **te_kw)
         # маску учителя ученик НЕ наследует (у него свой TD по всем действиям); она только в meta
         args._teacher_soft_mask = te_info.pop("mask")
         te_info["train_rows"] = int((data["TEV"] & train_mask).sum())

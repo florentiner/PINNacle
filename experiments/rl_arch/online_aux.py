@@ -25,6 +25,12 @@
 Обрезка бюджетом: суррогат обрезает действие остатком бюджета (step_features) — как среда тренера
 (epochs = min(номинал, бюджет - потрачено)); эпизод в модели кончается, когда бюджет выбран, — как
 done в тренере при --episode-budget.
+
+Правило остановки эпизода обучения (online_train_env.py --train-tol / --train-kmax, как у offline_rl.py):
+tol и kmax передаются в precompute и teacher_targets, поэтому цели обеих половин за остановку не
+смотрят (просмотр вперёд кончается на допуске и на K-й стадии; цель учителя — продолжение его политики
+в суррогате до остановки, для неё суррогат строится и при --mb-aux 0). Офлайновая половина обрезается
+тем же правилом до расчёта целей (offline_rl.stop_rule_cut в online_train_env.py).
 """
 from __future__ import annotations
 
@@ -132,7 +138,7 @@ class Aux:
 
     def __init__(self, pde, w_mb=0.0, w_te=0.0, reward_form="delta", err_scale=1.0, init_err=None, gamma=0.99,
                  budget=0, smdp_scale=0.0, mb_h=3, mb_lam=0.5, mb_subdirs="all", mb_table="", mb_members=5,
-                 mb_work="agent_combo_work", quick=False, teacher_from="", device=None, log=print):
+                 mb_work="agent_combo_work", quick=False, teacher_from="", device=None, log=print, tol=0.0, kmax=0):
         self.pde, self.w_mb, self.w_te = pde, float(w_mb or 0.0), float(w_te or 0.0)
         self.form, self.gamma = reward_form, float(gamma)
         self.scale = np.array([float(err_scale)])
@@ -145,6 +151,9 @@ class Aux:
         self.model = None                   # (таблица суррогата, ансамбль)
         self.mb_info, self.te_info, self.te_mask = {}, {}, []
         self.live_n = dict(calls=0, mb=0, te=0, mb_err=0, te_err=0)
+        # правило остановки эпизода обучения: 0 и 0 — выключено (прежние цели)
+        self.tol, self.kmax = float(tol or 0.0), int(kmax or 0)
+        self.stop_kw = dict(tol=self.tol, kmax=self.kmax) if (self.tol > 0 or self.kmax > 0) else {}
         self.last = {}                      # значения добавок на последнем обновлении
 
     # ---- модель среды ------------------------------------------------------------------------
@@ -180,13 +189,15 @@ class Aux:
         import mb_targets as MB
         return MB.precompute(data, mask, names=[self.pde], reward_form=self.form, err_scale=self.scale,
                              init_err=self.init, gamma=self.gamma, h=self.h, lam=self.lam, budget=self.budget,
-                             smdp_scale=self.smdp_scale, model=self.model, log=log)
+                             smdp_scale=self.smdp_scale, model=self.model, log=log, **self.stop_kw)
 
     def _te(self, data, log):
         import offline_rl as O
+        kw = (dict(self.stop_kw, model=self.model, lam=self.lam, smdp_scale=self.smdp_scale)
+              if self.stop_kw else {})
         return O.teacher_targets(self.teacher_file(), data, names=[self.pde], reward_form=self.form,
                                  err_scale=self.scale, init_err=self.init, gamma=self.gamma,
-                                 budget=self.budget, device=self.device, log=log)
+                                 budget=self.budget, device=self.device, log=log, **kw)
 
     def offline(self, data, train_mask, episodes=None, model=None):
         """Цели строк офлайновой половины (data — массивы тренера с chain_fix, train_mask — обучающие
@@ -201,6 +212,8 @@ class Aux:
             # сведения о суррогате (отпечаток, файл ансамбля) — от fit_model, остальное — от расчёта целей
             self.mb_info.update({k: v for k, v in info.items() if not k.startswith("surr_")})
         if self.w_te:
+            if self.stop_kw and self.model is None:
+                self.build_model(episodes, model)       # цели учителя под правилом остановки идут через суррогат
             out["QTE"], tev, info = self._te(data, self.log)
             self.te_mask = list(info.pop("mask"))
             out["TEW"] = tev & train_mask
@@ -260,6 +273,8 @@ class Aux:
         m = dict(mb_aux=self.w_mb, mb_h=self.h, mb_lam=self.lam, mb_subdirs=self.subdirs,
                  mb_members=self.members, mb_table=os.path.basename(self.table), teacher_w=self.w_te,
                  teacher_from=os.path.basename(self.teacher or ""))
+        if self.stop_kw:
+            m.update(aux_stop_tol=self.tol, aux_stop_kmax=self.kmax)
         if self.w_mb:
             m["mb"] = dict(self.mb_info)                # mb.surr_file читает щит оценки (--shield auto)
         if self.w_te:
