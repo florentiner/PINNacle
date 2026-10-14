@@ -1591,6 +1591,22 @@ if W28_K:
         add("w41-holdpre-b", 41, "H06", [free_eval(w41_hf_model(_mt, 1), f"t3m_{_mt}", _halves[1])], _eh(_halves[1]),
             needs=[w41_hf_model(_mt, 1)], note=f"кодировщик без карт {SUBDIR}: сиды {_halves[1]}")
 
+# ---------------------------------------------------------------- волна 43
+# Повторные обучения волны 41 показали, что разброс между обучениями — главный источник ошибки: pb2d
+# 0.0118, 0.0123 и 0.0319 у трёх обучений одного рецепта, ns2d 0.0473, 0.0616 и 0.0603. Комитет из этих
+# трёх обучений (среднее Q, тот же рецепт и данные, в отличие от комитета волны 35 на разных наборах):
+# снимает ли усреднение зависимость от удачного обучения. Оценка по сиду на кернел — остаток квоты кусками.
+if W28_K:
+    _arch = "two" if NS2D else "one"
+    _first = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_{'ete_two' if NS2D else 'ete_tbquart'}_seed1.pt"
+    _cm3 = [_first] + [w41_hf_model(f"w41{_arch}", m) for m in (2, 3)]
+    for _x in range(42, 52):
+        add(f"w43-cmt3-s{_x}", 43, "H06",
+            [(EVAL, f"--policy agent --model-files {','.join(_cm3)} --ensemble mean {GUARD} {KEEPS} "
+                    + t3ev(f"t3m_cmt3{_arch}_g", str(_x), hours=MAP_EH))],
+            1.0 if not NS2D else 1.9, needs=_cm3,
+            note=f"комитет трёх обучений лидера ({_arch}), среднее Q, сид {_x}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
