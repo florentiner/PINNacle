@@ -13562,6 +13562,55 @@
    ]
   },
   {
+   "id": "pb2d-w40-sr-tr",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "офлайновый рецепт с правилом остановки обучения: только обучение",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --train-tol 0.00811 --train-kmax 10 --seeds 1 --model-tag ete_sr"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-sr-ev-a",
+   "wave": 40,
+   "group": "H06",
+   "hours": 2.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_sr_seed1.pt"
+   ],
+   "note": "офлайновый рецепт с правилом остановки обучения, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_sr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_ete_sr_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w40-sr-ev-b",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_sr_seed1.pt"
+   ],
+   "note": "офлайновый рецепт с правилом остановки обучения, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_sr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_ete_sr_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

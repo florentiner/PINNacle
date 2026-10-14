@@ -1504,6 +1504,25 @@ if NS2D:
     for _x in range(43, 52):
         add(f"w40-twosr-ev-s{_x}", 40, "H06", [free_eval(_m40, f"t3m_{_mt}", str(_x))], 1.5, needs=[_m40],
             note=f"две сети с правилом остановки обучения, сид {_x}" + (" (добор до 10 сидов)" if _x > 46 else ""))
+    # остаток квоты недели — куски по 1-2 часа: обучение отдельным кернелом, сид 42 — тоже отдельным
+    add("w40-twosr-tr", 40, "H06",
+        [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {W33_SRC} --teacher-from {W36_TEACH} "
+                   f"--teacher-w 0.5 --two-nets {W40_RULE} --seeds 1 --model-tag {_mt}")],
+        1.0, needs=[ENC_MAE, W36_TEACH], note="две сети с правилом остановки обучения: только обучение")
+    add("w40-twosr-ev-s42", 40, "H06", [free_eval(_m40, f"t3m_{_mt}", "42")], 1.5, needs=[_m40],
+        note="две сети с правилом остановки обучения, сид 42")
+if PREFIX == "pb2d":
+    # то же правило на офлайновом рецепте pb2d (одна сеть): обучение 0.5 часа помещается в остаток квоты недели,
+    # онлайновое (w40-fflsr-tr, 5 часов) — нет. Пара — t3m_ete_tbquart_g (тот же рецепт и учитель без правила)
+    _mt = "ete_sr"
+    _m40 = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_{_mt}_seed1.pt"
+    add("w40-sr-tr", 40, "H06",
+        [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {W33_SRC} --teacher-from {W36_TEACH} "
+                   f"--teacher-w 0.5 {W40_RULE} --seeds 1 --model-tag {_mt}")],
+        1.0, needs=[ENC_MAE, W36_TEACH], note="офлайновый рецепт с правилом остановки обучения: только обучение")
+    for _nm, _sd in (("a", "42,43,44"), ("b", "45,46")):
+        add(f"w40-sr-ev-{_nm}", 40, "H06", [free_eval(_m40, f"t3m_{_mt}", _sd)], 0.5 + 0.5 * len(_sd.split(",")),
+            needs=[_m40], note=f"офлайновый рецепт с правилом остановки обучения, сиды {_sd}")
 
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",

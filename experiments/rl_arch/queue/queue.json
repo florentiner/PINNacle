@@ -14638,6 +14638,39 @@
    ]
   },
   {
+   "id": "w40-twosr-tr",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_tbquart.pt"
+   ],
+   "note": "две сети с правилом остановки обучения: только обучение",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_tbquart.pt --teacher-w 0.5 --two-nets --train-tol 0.0049 --train-kmax 10 --seeds 1 --model-tag ete_twosr"
+    }
+   ]
+  },
+  {
+   "id": "w40-twosr-ev-s42",
+   "wave": 40,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt"
+   ],
+   "note": "две сети с правилом остановки обучения, сид 42",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_twosr_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42 --tag t3m_ete_twosr_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",
