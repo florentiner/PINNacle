@@ -14393,6 +14393,86 @@
    ]
   },
   {
+   "id": "w39-two-ev-s47",
+   "wave": 39,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "две сети (линейная голова), обученный агент волны 33, сид 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w39-two-ev-s48",
+   "wave": 39,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "две сети (линейная голова), обученный агент волны 33, сид 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 48 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w39-two-ev-s49",
+   "wave": 39,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "две сети (линейная голова), обученный агент волны 33, сид 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 49 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w39-two-ev-s50",
+   "wave": 39,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "две сети (линейная голова), обученный агент волны 33, сид 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
+   "id": "w39-two-ev-s51",
+   "wave": 39,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "две сети (линейная голова), обученный агент волны 33, сид 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 51 --tag t3m_ete_two_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

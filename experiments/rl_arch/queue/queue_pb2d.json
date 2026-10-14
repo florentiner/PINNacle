@@ -13401,6 +13401,38 @@
    ]
   },
   {
+   "id": "pb2d-w39-ffl-ev-a",
+   "wave": 39,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt"
+   ],
+   "note": "дообучение онлайн лоссом рецепта: оценка на сидах 45,46,47,48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45,46,47,48 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w39-ffl-ev-b",
+   "wave": 39,
+   "group": "H06",
+   "hours": 3.0,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt"
+   ],
+   "note": "дообучение онлайн лоссом рецепта: оценка на сидах 49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_ffl_tbq_s42a.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 49,50,51 --tag t3m_ffl_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
