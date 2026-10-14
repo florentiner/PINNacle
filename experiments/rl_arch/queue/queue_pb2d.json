@@ -13611,6 +13611,114 @@
    ]
   },
   {
+   "id": "pb2d-w41-lead-m2",
+   "wave": 41,
+   "group": "H06",
+   "hours": 4.3,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) заново, сид обучения 2, сиды 42,43,44,45,46,47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w41one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3m_w41one_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w41-other-m2",
+   "wave": 41,
+   "group": "H06",
+   "hours": 2.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "вторая архитектура (two), сид обучения 2, 5 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w41two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w41two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w41two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w41-lead-m3",
+   "wave": 41,
+   "group": "H06",
+   "hours": 4.3,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) заново, сид обучения 3, сиды 42,43,44,45,46,47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 3 --model-tag w41one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3m_w41one_m3_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w41-other-m3",
+   "wave": 41,
+   "group": "H06",
+   "hours": 2.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "вторая архитектура (two), сид обучения 3, 5 сидов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 3 --model-tag w41two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w41two_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w41two_m3_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w41-holdpre",
+   "wave": 41,
+   "group": "H06",
+   "hours": 5.8,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "кодировщик предобучен без карт poisson_boltzmann_2d (21 задача), лидер (one), сиды 42,43,44,45,46,47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w41hopb2d --subdirs burgers1d,burgers2d,grayscott,heat2d_complexgeometry,heat2d_longtime,heat2d_multiscale,heat2d_varyingcoef,heatinv,heatnd,kuramoto_sivashinsky,ns2d_backstep,ns2d_liddriven,ns2d_longtime,poisson2d_classic,poisson2d_manyarea,poisson3d_complexgeometry,poissoninv,poissonnd,wave1d,wave2d_heterogeneous,wave2d_longtime --configs level,ssl-mae-resnet --save-encoder --hours 1.0 --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init /kaggle/working/cvprobe_w41hopb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w41hoone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w41hoone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46,47,48,49,50,51 --tag t3m_w41hoone_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

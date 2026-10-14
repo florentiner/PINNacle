@@ -1524,6 +1524,73 @@ if PREFIX == "pb2d":
         add(f"w40-sr-ev-{_nm}", 40, "H06", [free_eval(_m40, f"t3m_{_mt}", _sd)], 0.5 + 0.5 * len(_sd.split(",")),
             needs=[_m40], note=f"офлайновый рецепт с правилом остановки обучения, сиды {_sd}")
 
+# ---------------------------------------------------------------- волна 41
+# Подтверждение лидеров на двух уравнениях (14 октября, три новых аккаунта). Лидеры на 10 сидах: pb2d —
+# офлайновый рецепт с одной сетью (t3m_ete_tbquart_g, 0.0118), ns2d — он же с двумя сетями (t3m_ete_two_g,
+# 0.0473). У каждого одно обучение, а разброс между обучениями того же рецепта велик (0.0147 и 0.0198 у
+# повторов волны 36), поэтому:
+#   1) лидер учится заново ещё дважды (сид обучения 2 и 3, тот же учитель и данные), оценка на 10 сидах;
+#   2) вторая архитектура (pb2d — две сети, ns2d — одна) дважды на 5 сидах: одна ли архитектура на оба
+#      уравнения;
+#   3) кодировщик предобучается без карт целевого уравнения (21 задача вместо 22), затем лидер учится с ним
+#      и оценивается на 10 сидах: перенос предобучения на новое уравнение.
+# Сид ns2d стоит 1.0-1.3 часа, поэтому оценка на 10 сидах делится на кернел обучения с сидами 42-46 и
+# кернел оценки сидов 47-51 по чекпоинту из HF.
+# папки буферов всех 22 задач (как offline_rl.ALL_SUBDIRS; на них предобучен ENC_MAE)
+ALL_SUBDIRS22 = ("burgers1d", "burgers2d", "grayscott", "heat2d_complexgeometry", "heat2d_longtime",
+                 "heat2d_multiscale", "heat2d_varyingcoef", "heatinv", "heatnd", "kuramoto_sivashinsky",
+                 "ns2d_backstep", "ns2d_liddriven", "ns2d_longtime", "poisson2d_classic", "poisson2d_manyarea",
+                 "poisson3d_complexgeometry", "poisson_boltzmann_2d", "poissoninv", "poissonnd", "wave1d",
+                 "wave2d_heterogeneous", "wave2d_longtime")
+W41_TEACH = {"one": W36_TEACH, "two": f"rl_arch/agents_online/{TEACH}_two.pt"}
+W41_LEAD = "two" if NS2D else "one"
+W41_OTHER = "one" if NS2D else "two"
+
+
+def w41_train(arch, m, mt, init=ENC_MAE):
+    return (OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE.replace(ENC_MAE, init)} --target-buffer {W33_SRC} "
+                     f"--teacher-from {W41_TEACH[arch]} --teacher-w 0.5 {'--two-nets' if arch == 'two' else ''} "
+                     f"--seeds {m} --model-tag {mt}")
+
+
+def w41_hf_model(mt, m):
+    return f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_{mt}_seed{m}.pt"
+
+
+if W28_K:
+    _halves = (("42,43,44,45,46", "47,48,49,50,51") if NS2D else ("42,43,44,45,46,47,48,49,50,51", ""))
+    _eh = (lambda sd: 0.4 + 1.2 * len(sd.split(","))) if NS2D else (lambda sd: 0.3 + 0.3 * len(sd.split(",")))
+    for _m in (2, 3):
+        _mt = f"w41{W41_LEAD}"
+        add(f"w41-lead-m{_m}", 41, "H06",
+            [w41_train(W41_LEAD, _m, _mt), free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _halves[0])],
+            1.0 + _eh(_halves[0]), needs=[ENC_MAE, W41_TEACH[W41_LEAD]],
+            note=f"лидер ({W41_LEAD}) заново, сид обучения {_m}, сиды {_halves[0]}")
+        if _halves[1]:
+            add(f"w41-lead-m{_m}-b", 41, "H06",
+                [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _halves[1])], _eh(_halves[1]),
+                needs=[w41_hf_model(_mt, _m)], note=f"лидер ({W41_LEAD}) заново, сид обучения {_m}, сиды {_halves[1]}")
+        _mo = f"w41{W41_OTHER}"
+        add(f"w41-other-m{_m}", 41, "H06",
+            [w41_train(W41_OTHER, _m, _mo), free_eval(off_model("convnext_dqn", _mo, _m), f"t3m_{_mo}_m{_m}", S5)],
+            1.0 + _eh(S5), needs=[ENC_MAE, W41_TEACH[W41_OTHER]],
+            note=f"вторая архитектура ({W41_OTHER}), сид обучения {_m}, 5 сидов")
+    # предобучение без карт целевого уравнения
+    _cvtag = f"w41ho{W28_SHORT}"
+    _subs = ",".join(x for x in ALL_SUBDIRS22 if x != SUBDIR)
+    _enc = f"{W33_CV}/cvprobe_{_cvtag}_enc_mae_resnet.pt"
+    _mt = f"w41ho{W41_LEAD}"
+    add("w41-holdpre", 41, "H06",
+        [(CVPROBE, f"--tag {_cvtag} --subdirs {_subs} --configs level,ssl-mae-resnet --save-encoder --hours 1.0 "
+                   f"--out-dir {W33_CV}"),
+         w41_train(W41_LEAD, 1, _mt, init=_enc),
+         free_eval(off_model("convnext_dqn", _mt), f"t3m_{_mt}", _halves[0])],
+        2.5 + _eh(_halves[0]), needs=[W41_TEACH[W41_LEAD]],
+        note=f"кодировщик предобучен без карт {SUBDIR} (21 задача), лидер ({W41_LEAD}), сиды {_halves[0]}")
+    if _halves[1]:
+        add("w41-holdpre-b", 41, "H06", [free_eval(w41_hf_model(_mt, 1), f"t3m_{_mt}", _halves[1])], _eh(_halves[1]),
+            needs=[w41_hf_model(_mt, 1)], note=f"кодировщик без карт {SUBDIR}: сиды {_halves[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
