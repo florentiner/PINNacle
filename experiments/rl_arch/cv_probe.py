@@ -32,7 +32,20 @@
     frozen      энкодер после ssl-mae заморожен, учится только голова (качество представления;
                 признаки считаются один раз — так подешевело бы обучение агента); frozen-con — то же
                 после ssl-con
-                --save-encoder пишет веса предобученного энкодера (cvprobe_<tag>_enc_<mae|con>_<энкодер>.pt,
+    Замены MAE для предобучения энкодера агента (волна 49; не в порядке по умолчанию, обычно с --pretrain-only):
+    ssl-vae     β-VAE: из вектора признаков — среднее и лог-дисперсия латента (--vae-dim), декодер
+                восстанавливает всю нормированную карту (уровень и форму), лосс = восстановление + --vae-beta * KL
+    ssl-dyn     самопредсказание в латенте с действием (SPR/SGI): модель перехода по (z, действие)
+                предсказывает проекцию следующих карт цепочки от EMA-копии энкодера (--dyn-ema), плюс обратная
+                динамика — действие по (z, z') с весом --dyn-inv; пара (карты, следующие карты) под общим
+                элементом D4. Нужны переходы внутри цепочки (последний шаг цепочки пропускается)
+    ssl-out     исход с учителем по всем задачам: признаки энкодера + скаляры и действие (без текущей ошибки:
+                у агента её нет, уровень энкодер должен достать из карт) -> изменение log10 ошибки (Huber)
+    ssl-maeout  ssl-mae + голова исхода ssl-out на незамаскированных картах с весом --out-w
+                У ssl-out и ssl-maeout предобучение видит цель y всех строк: их R² в режиме фолдов
+                оптимистичен (флаг ssl_saw_labels в отчёте), в «лучший конфиг с картами» они не идут.
+                --save-encoder пишет веса предобученного энкодера (cvprobe_<tag>_enc_<вид>_<энкодер>.pt,
+                вид — mae, con, vae, dyn, out, maeout;
                 в HF rl_arch/encoders/) для offline_rl.py --encoder-init
     lopo:level, lopo:best   «исключить УрЧП»: level и лучший конфиг с картами на --lopo задачах
 
@@ -108,7 +121,12 @@ BASES = {
     "ssl-con":    dict(maps="raw", err=True, ssl="con"),
     "frozen":     dict(maps="raw", err=True, ssl="mae", frozen=True),
     "frozen-con": dict(maps="raw", err=True, ssl="con", frozen=True),
+    "ssl-vae":    dict(maps="raw", err=True, ssl="vae"),
+    "ssl-dyn":    dict(maps="raw", err=True, ssl="dyn"),
+    "ssl-out":    dict(maps="raw", err=True, ssl="out"),
+    "ssl-maeout": dict(maps="raw", err=True, ssl="maeout"),
 }
+SSL_LABELS = ("out", "maeout")      # предобучение видит исход y: в режиме фолдов R² оптимистичен
 NOT_MAPS = ("scalars", "level", "level-hgb", "shuffle")     # не кандидаты в «лучший конфиг с картами»
 DEFAULT_CONFIGS = (["scalars", "level", "level-hgb"] + [f"maps-{e}" for e in DEFAULT_ENCODERS]
                    + ["shape", "shuffle", "stack2", "delta", "aug-d4", "aug-shift", "ssl-mae", "ssl-con",
@@ -287,6 +305,11 @@ class Data:
                           or (self.step[prev[has]] != self.step[has] - 1).any()):
             raise SystemExit("строки цепочек идут не подряд: предыдущий шаг не найден")
         self.prev = prev
+        # следующий шаг той же цепочки (карты после действия: ssl-dyn); -1 у последнего шага цепочки
+        nxt = np.arange(self.n) + 1
+        ok = nxt < self.n
+        ok[ok] = (self.ch[nxt[ok]] == self.ch[ok]) & (self.step[nxt[ok]] == self.step[ok] + 1)
+        self.nxt = np.where(ok, nxt, -1)
         feat, self.cols = features(tab)
         self.feat_t = torch.as_tensor(feat, device=dev)
         self.y_t = torch.as_tensor(self.y, dtype=torch.float32, device=dev)
@@ -539,23 +562,115 @@ def nt_xent(z, temp=0.2):
     return F.cross_entropy(sim, tgt)
 
 
-def pretrain(kind, enc_name, D, args, dev, log=print):
-    """Самообучение энкодера на ВСЕХ картах (метки не используются; стартовые нулевые карты
-    пропущены). mae — блоки 4x4 скрыты (обнулены после нормировки), декодер из вектора признаков
-    восстанавливает ФОРМУ карты (shape_norm) в скрытых пикселях: обобщённый вариант SimMIM/MAE,
-    одинаковый для свёрточных энкодеров и ViT. con — SimCLR: два вида (D4, сдвиг, шум), NT-Xent.
-    Возвращает dict(state, stats, seconds, loss_first, loss_last)."""
-    t0 = time.time()
-    torch.manual_seed(args.seed + 17)
+class OutHead(nn.Module):
+    """Голова исхода (ssl-out, ssl-maeout): как у Probe, но признаки энкодера подаются готовыми."""
+
+    def __init__(self, zdim, n_scal, width=256):
+        super().__init__()
+        self.zn = nn.LayerNorm(zdim)
+        self.scal = nn.Sequential(nn.Linear(n_scal, 128), nn.GELU())
+        self.head = nn.Sequential(nn.Linear(zdim + 128, width), nn.GELU(), nn.Linear(width, width), nn.GELU(),
+                                  nn.Linear(width, 1))
+
+    def forward(self, z, s):
+        return self.head(torch.cat([self.zn(z.float()), self.scal(s).float()], 1)).squeeze(-1)
+
+
+class VaeHead(nn.Module):
+    """β-VAE поверх энкодера (ssl-vae): среднее и лог-дисперсия латента из вектора признаков, декодер —
+    MLP во всю карту (C x H x W)."""
+
+    def __init__(self, zdim, dim, out):
+        super().__init__()
+        self.mu, self.lv = nn.Linear(zdim, dim), nn.Linear(zdim, dim)
+        self.dec = nn.Sequential(nn.Linear(dim, 512), nn.GELU(), nn.Linear(512, out))
+
+    def forward(self, z, gen=None):
+        z = z.float()
+        mu, lv = self.mu(z), self.lv(z).clamp(-10.0, 10.0)
+        eps = torch.randn(mu.shape, generator=gen, device=mu.device)
+        return self.dec(mu + eps * torch.exp(0.5 * lv)), mu, lv
+
+
+class DynHead(nn.Module):
+    """Самопредсказание с действием (ssl-dyn, SPR/SGI): остаточная модель перехода в пространстве признаков
+    энкодера (действие — вложение), проекция и предсказатель как у BYOL, обратная динамика (действие по z, z')."""
+
+    def __init__(self, zdim, n_act=27, proj=128):
+        super().__init__()
+        self.act = nn.Embedding(n_act, 64)
+        self.trans = nn.Sequential(nn.Linear(zdim + 64, 512), nn.LayerNorm(512), nn.ReLU(), nn.Linear(512, zdim))
+        self.proj = nn.Sequential(nn.Linear(zdim, 256), nn.LayerNorm(256), nn.ReLU(), nn.Linear(256, proj))
+        self.pred = nn.Sequential(nn.Linear(proj, 256), nn.ReLU(), nn.Linear(256, proj))
+        self.inv = nn.Sequential(nn.Linear(2 * zdim, 256), nn.ReLU(), nn.Linear(256, n_act))
+
+    def forward(self, z, a):
+        h = z + self.trans(torch.cat([z, self.act(a).to(z.dtype)], 1))
+        return self.pred(self.proj(h))
+
+
+def pretrain_rows(kind, D):
+    """Строки предобучения: карты не нулевые (шаг > 0); у ssl-dyn — ещё и следующий шаг цепочки есть,
+    у ssl-out / ssl-maeout — исход конечен. Возвращает (строки статистик нормировки, строки обучения):
+    статистики у всех видов считаются по одним и тем же строкам, что и у mae."""
     rows = np.where(D.step > 0)[0]
     if len(rows) < 8:
         rows = np.arange(D.n)
-    stats = map_stats(D, rows, seed=args.seed)
+    if kind == "dyn":
+        tr = rows[D.nxt[rows] >= 0]
+        if len(tr) < 2:
+            raise SystemExit("ssl-dyn: нет переходов внутри цепочек (нужны карты следующего шага)")
+        return rows, tr
+    if kind in SSL_LABELS:
+        return rows, rows[np.isfinite(D.y[rows])]
+    return rows, rows
+
+
+def pretrain(kind, enc_name, D, args, dev, log=print):
+    """Самообучение энкодера на ВСЕХ картах (стартовые нулевые карты пропущены). mae — блоки 4x4 скрыты
+    (обнулены после нормировки), декодер из вектора признаков восстанавливает ФОРМУ карты (shape_norm) в
+    скрытых пикселях: обобщённый вариант SimMIM/MAE, одинаковый для свёрточных энкодеров и ViT. con — SimCLR:
+    два вида (D4, сдвиг, шум), NT-Xent. Замены MAE (волна 49): vae, dyn, out, maeout — см. описание модуля;
+    dyn и out/maeout используют переходы буферов (действие, карты следующего шага, исход), метки mae и con
+    не используют. Возвращает dict(state, stats, seconds, loss_first, loss_last, loss_parts, ...)."""
+    t0 = time.time()
+    torch.manual_seed(args.seed + 17)
+    stat_rows, rows = pretrain_rows(kind, D)
+    stats = map_stats(D, stat_rows, seed=args.seed)
     enc = make_encoder(enc_name, D.C, D.H).to(dev)
+    zdim = int(enc.out_dim)
+    tgt = Fn = yn = None
+    if kind in ("out", "maeout"):
+        cols = [i for g in ("base", "act") for i in range(D.cols[g].start, D.cols[g].stop)]
+        rt = torch.as_tensor(rows, device=dev)
+        Fs = D.feat_t[:, cols]
+        sd = Fs[rt].std(0)
+        sd = torch.where(sd < 1e-6, torch.ones_like(sd), sd)
+        Fn = ((Fs - Fs[rt].mean(0)) / sd).clamp(-10.0, 10.0)
+        yn = (D.y_t - D.y_t[rt].mean()) / D.y_t[rt].std().clamp_min(1e-6)
     if kind == "mae":
         aux = nn.Sequential(nn.Linear(enc.out_dim, 512), nn.GELU(), nn.Linear(512, D.C * D.H * D.W)).to(dev)
-    else:
+    elif kind == "con":
         aux = nn.Sequential(nn.Linear(enc.out_dim, 256), nn.ReLU(), nn.Linear(256, 64)).to(dev)
+    elif kind == "vae":
+        aux = VaeHead(zdim, args.vae_dim, D.C * D.H * D.W).to(dev)
+    elif kind == "dyn":
+        import copy
+        aux = DynHead(zdim).to(dev)
+        tgt = nn.ModuleList([copy.deepcopy(enc), copy.deepcopy(aux.proj)]).to(dev)   # EMA-цель (BYOL/SPR)
+        src = nn.ModuleList([enc, aux.proj])
+        for p in tgt.parameters():
+            p.requires_grad_(False)
+        nxt_t = torch.as_tensor(D.nxt, device=dev)
+        act_t = torch.as_tensor(D.A, device=dev)
+    elif kind == "out":
+        aux = OutHead(zdim, Fn.shape[1]).to(dev)
+    elif kind == "maeout":
+        aux = nn.ModuleDict(dict(
+            mae=nn.Sequential(nn.Linear(zdim, 512), nn.GELU(), nn.Linear(512, D.C * D.H * D.W)),
+            out=OutHead(zdim, Fn.shape[1]))).to(dev)
+    else:
+        raise ValueError(f"неизвестный вид предобучения {kind!r}")
     params = list(enc.parameters()) + list(aux.parameters())
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=args.wd)
     bs = min(args.batch, len(rows))
@@ -570,36 +685,102 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
     gen = _gen(dev, args.seed + 23)
     rows_t = torch.as_tensor(rows, device=dev)
     first = last = None
+    parts_last = {}
     log_every = 1 if n_ep <= 20 else n_ep // 10
+    npix = D.C * D.H * D.W
+
+    def mae_loss(out, raw, m):
+        rec = out.float().view_as(raw)
+        return (((rec - shape_norm(raw)) ** 2) * m).sum() / (m.sum().clamp_min(1) * D.C)
+
     for ep in range(n_ep):
         perm = rows_t[torch.randperm(len(rows_t), device=dev)]
         tot, k = 0.0, 0
+        parts = {}
         for i in range(0, len(perm) - bs + 1, bs):
-            raw, _ = D.fetch(perm[i:i + bs])
+            idx = perm[i:i + bs]
+            raw, _ = D.fetch(idx)
             x = build_input("raw", raw, None, stats)
+            part = {}
             if kind == "mae":
                 m = block_mask(len(x), D.H, D.W, args.mae_ratio, gen, dev)
                 v = x.masked_fill(m, 0.0)
-            else:
+                with _autocast(amp):
+                    out = aux(enc(v))
+                loss = mae_loss(out, raw, m)     # лосс в float32, вне смешанной точности
+            elif kind == "con":
                 v = torch.cat([aug_shift(aug_d4(x, gen), gen, args.shift) for _ in range(2)])
                 v = v + 0.05 * torch.randn(v.shape, generator=gen, device=dev)
-            with _autocast(amp):
-                out = aux(enc(v))
-            if kind == "mae":                    # лосс в float32, вне смешанной точности
-                rec = out.float().view_as(x)
-                loss = (((rec - shape_norm(raw)) ** 2) * m).sum() / (m.sum().clamp_min(1) * D.C)
-            else:
+                with _autocast(amp):
+                    out = aux(enc(v))
                 loss = nt_xent(out, args.con_temp)
+            elif kind == "vae":
+                with _autocast(amp):
+                    z = enc(x)
+                rec, mu, lv = aux(z, gen)
+                r = ((rec.float().view_as(x) - x.clamp(-10.0, 10.0)) ** 2).sum((1, 2, 3)).mean()
+                kl = (-0.5 * (1.0 + lv - mu ** 2 - lv.exp()).sum(1)).mean()
+                loss = (r + args.vae_beta * kl) / npix
+                part = dict(rec=r.item() / npix, kl=kl.item())
+            elif kind == "dyn":
+                raw2, _ = D.fetch(nxt_t[idx])
+                xx = aug_d4(torch.cat([x, build_input("raw", raw2, None, stats)], 1), gen)  # общий элемент D4
+                x1, x2 = xx[:, :D.C], xx[:, D.C:]
+                a = act_t[idx]
+                with _autocast(amp):
+                    zz = enc(torch.cat([x1, x2]))
+                    z1, z2 = zz[:len(x1)], zz[len(x1):]
+                    p = aux(z1, a)
+                    logits = aux.inv(torch.cat([z1, z2], 1))
+                    with torch.no_grad():
+                        t = tgt[1](tgt[0](x2))
+                spr = (2.0 - 2.0 * F.cosine_similarity(p.float(), t.float(), dim=1)).mean()
+                inv = F.cross_entropy(logits.float(), a)
+                loss = spr + args.dyn_inv * inv
+                part = dict(spr=spr.item(), inv=inv.item(),
+                            inv_acc=(logits.argmax(1) == a).float().mean().item())
+            elif kind == "out":
+                with _autocast(amp):
+                    pr = aux(enc(x), Fn[idx])
+                loss = F.huber_loss(pr.float(), yn[idx], delta=1.0)
+            else:                                # maeout
+                m = block_mask(len(x), D.H, D.W, args.mae_ratio, gen, dev)
+                v = x.masked_fill(m, 0.0)
+                with _autocast(amp):
+                    zz = enc(torch.cat([v, x]))
+                    out = aux["mae"](zz[:len(x)])
+                    pr = aux["out"](zz[len(x):], Fn[idx])
+                lm = mae_loss(out, raw, m)
+                lo = F.huber_loss(pr.float(), yn[idx], delta=1.0)
+                loss = lm + args.out_w * lo
+                part = dict(mae=lm.item(), out=lo.item())
             if _step(loss, opt, sched, scaler, params):
                 tot, k = tot + loss.item(), k + 1
+                for key, val in part.items():
+                    parts[key] = parts.get(key, 0.0) + val
+                if tgt is not None:              # EMA-цель: веса — скользящее среднее, буферы BatchNorm — копия
+                    with torch.no_grad():
+                        for pt, po in zip(tgt.parameters(), src.parameters()):
+                            pt.mul_(args.dyn_ema).add_(po.detach(), alpha=1.0 - args.dyn_ema)
+                        for bt, bo in zip(tgt.buffers(), src.buffers()):
+                            bt.copy_(bo)
         last = tot / max(1, k)
         first = last if first is None else first
+        parts_last = {key: val / max(1, k) for key, val in parts.items()}
         if (ep + 1) % log_every == 0 or ep + 1 == n_ep:
-            log(f"    {kind}/{enc_name} эпоха {ep + 1}/{n_ep}: лосс {last:.4f}")
+            log(f"    {kind}/{enc_name} эпоха {ep + 1}/{n_ep}: лосс {last:.4f}"
+                + "".join(f", {key} {val:.4f}" for key, val in parts_last.items()))
     enc.eval()
     state = {k: v.detach().cpu().clone() for k, v in enc.state_dict().items()}
     return dict(state=state, stats=stats, seconds=time.time() - t0, loss_first=first, loss_last=last,
-                epochs=int(n_ep), steps=int(steps), n_maps=int(len(rows)))
+                epochs=int(n_ep), steps=int(steps), n_maps=int(len(rows)), loss_parts=parts_last)
+
+
+def ssl_args(kind, args):
+    """Параметры предобучения вида kind (в файл энкодера и отчёт)."""
+    keys = dict(mae=("mae_ratio",), con=("con_temp", "shift"), vae=("vae_beta", "vae_dim"),
+                dyn=("dyn_ema", "dyn_inv"), out=(), maeout=("mae_ratio", "out_w")).get(kind, ())
+    return {k: getattr(args, k) for k in keys}
 
 
 def save_encoder(pre, kind, enc_name, D, args, log=print):
@@ -613,6 +794,7 @@ def save_encoder(pre, kind, enc_name, D, args, log=print):
                     state_dict=pre["state"], mean=mean, std=std, tag=args.tag,
                     ssl_epochs=int(pre.get("epochs", args.ssl_epochs)), ssl_steps=pre.get("steps"),
                     n_maps=pre.get("n_maps"), loss_first=pre["loss_first"], loss_last=pre["loss_last"],
+                    loss_parts=pre.get("loss_parts") or {}, ssl_args=ssl_args(kind, args),
                     pdes=list(D.names), fingerprint=D.fingerprint), path)
     up = False
     if not args.no_upload:
@@ -897,7 +1079,7 @@ def best_maps_config(report):
     """Лучший конфиг с картами в распределении: по выигрышу над level, иначе по R²."""
     best, score = None, -np.inf
     for name, e in report["configs"].items():
-        if e.get("kind") != "cv" or e.get("base") in NOT_MAPS:
+        if e.get("kind") != "cv" or e.get("base") in NOT_MAPS or e.get("ssl_saw_labels"):
             continue
         g = (e.get("gain_over_level") or {}).get("r2_y")
         s = g[0] if g and np.isfinite(g[0]) else e.get("r2_y", float("nan")) - 10.0
@@ -1014,6 +1196,8 @@ def run_cv(name, sp, D, fold_row, args, dev, cache, log=print):
                epochs=args.epochs, folds=len(fold_r2))
     if pre and pre.get("file"):
         ent["encoder_file"] = f"{ENC_DIR}/{os.path.basename(pre['file'])}"
+    if sp.get("ssl") in SSL_LABELS:
+        ent["ssl_saw_labels"] = True             # предобучение видело y отложенных фолдов: R² оптимистичен
     ent.update(metrics(D, np.arange(D.n), oof))
     return ent, oof
 
@@ -1235,6 +1419,11 @@ def build_parser():
                         "0 — по --ssl-epochs, как раньше")
     g.add_argument("--mae-ratio", type=float, default=0.6)
     g.add_argument("--con-temp", type=float, default=0.2)
+    g.add_argument("--vae-beta", type=float, default=1.0, help="ssl-vae: вес KL (β-VAE; лосс на пиксель)")
+    g.add_argument("--vae-dim", type=int, default=32, help="ssl-vae: размерность латента")
+    g.add_argument("--dyn-ema", type=float, default=0.99, help="ssl-dyn: постоянная EMA целевого энкодера")
+    g.add_argument("--dyn-inv", type=float, default=1.0, help="ssl-dyn: вес обратной динамики")
+    g.add_argument("--out-w", type=float, default=1.0, help="ssl-maeout: вес головы исхода рядом с MAE")
     g.add_argument("--shift", type=int, default=2, help="наибольший сдвиг aug-shift и видов ssl-con, пикселей")
     g.add_argument("--shuffle-indep", action="store_true", help="shuffle: своя перестановка у каждого канала")
     g.add_argument("--no-amp", action="store_true")
@@ -1413,7 +1602,8 @@ def run_pretrain_only(args, names, log, t0):
                                      file=f"{ENC_DIR}/{os.path.basename(pre['file'])}",
                                      seconds=round(pre["seconds"], 1), loss_first=pre["loss_first"],
                                      loss_last=pre["loss_last"], epochs=pre["epochs"], steps=pre["steps"],
-                                     n_maps=pre["n_maps"])
+                                     n_maps=pre["n_maps"], loss_parts=pre.get("loss_parts") or {},
+                                     ssl_args=ssl_args(sp["ssl"], args))
         log(f"{n}: {pre['steps']} шагов ({pre['epochs']} эпох по {pre['n_maps']} картам), лосс "
             f"{pre['loss_first']:.4f} -> {pre['loss_last']:.4f}, {pre['seconds']:.0f} с")
     report["finished"] = True
