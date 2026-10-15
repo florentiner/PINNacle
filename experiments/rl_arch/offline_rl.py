@@ -54,6 +54,11 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
                                     цепочки (loss — штраф W * relu(G - Q(s,a))^2 / 2, как SIL / optimality
                                     tightening; target — цель TD max(цель, G), как MCAC)
     --teacher-from F1,F2,...        ансамбль учителей: цель учителя — среднее их Q по 27 действиям
+Дообучение энкодера с малым числом параметров (волна 52; по умолчанию full — весь энкодер, как раньше):
+    --ft-mode bn                    учатся только аффинные параметры BatchNorm энкодера (BitFit для норм)
+    --ft-mode lora                  веса энкодера стоят, к каждой Conv2d и Linear добавлен низкоранговый адаптер
+    --lora-rank R --lora-alpha A    (LoRA, Hu et al. ICLR 2022; свёртка kxk -> R каналов, затем 1x1, масштаб A/R)
+    --ft-mode lastblock             учится только последний блок ResNet (body.3) и проекция head
 Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
@@ -1277,6 +1282,97 @@ class TinyViT(nn.Module):
 MAP_ENCODERS = ("convnext", "convnextw", "convnexthr", "resnet", "resnetpos", "vit")      # что принимает --encoder у вариантов cnx_*
 
 
+# --ft-mode: какие параметры энкодера карт учатся при дообучении (волна 52). full — все (прежнее);
+# bn — только аффинные параметры BatchNorm; lora — низкоранговые адаптеры к каждой Conv2d и Linear
+# (веса энкодера стоят) плюс аффинные параметры BatchNorm; lastblock — последний остаточный блок и
+# проекция (FT_LASTBLOCK). Статистики BatchNorm в bn и lora копятся в режиме обучения, как при full;
+# в lastblock замороженная часть энкодера — неизменная функция (режим eval, как у --freeze-encoder).
+FT_MODES = ("full", "bn", "lora", "lastblock")
+# последний блок у энкодеров, где он определён однозначно: у SmallResNet стадия 7x7 из одного блока
+# _Res(64, 128, stride 2) — body.3 — и проекция 128 -> 256 (у resnetpos — 128*7*7 -> 256)
+FT_LASTBLOCK = {"resnet": ("body.3.", "head."), "resnetpos": ("body.3.", "head.")}
+
+
+class LoRAConv2d(nn.Conv2d):
+    """Свёртка с низкоранговой добавкой (LoRA для свёрток): y = conv(x) + (alpha/r) * up(down(x)),
+    down — свёртка с тем же ядром, шагом и отступом в r каналов (без групп: у глубинной свёртки
+    добавка плотная), up — свёртка 1x1 из r каналов, нулевая при создании, так что исходная функция
+    не меняется. Имена весов самой свёртки прежние (weight, bias): в state_dict добавляются только
+    ключи lora_down.weight и lora_up.weight. Создаётся подменой класса готового слоя (lora_wrap)."""
+
+    def _lora_setup(self, r, alpha):
+        kw = dict(device=self.weight.device, dtype=self.weight.dtype)
+        self.lora_down = nn.Conv2d(self.in_channels, r, self.kernel_size, stride=self.stride, padding=self.padding,
+                                   dilation=self.dilation, bias=False, padding_mode=self.padding_mode, **kw)
+        self.lora_up = nn.Conv2d(r, self.out_channels, 1, bias=False, **kw)
+        nn.init.zeros_(self.lora_up.weight)
+        self.lora_scale = float(alpha) / float(r)
+
+    def forward(self, x):
+        return super().forward(x) + self.lora_scale * self.lora_up(self.lora_down(x))
+
+
+class LoRALinear(nn.Linear):
+    """Линейный слой с низкоранговой добавкой: y = W x + b + (alpha/r) * B A x, A (r x in) — как у
+    nn.Linear по умолчанию, B (out x r) нулевая при создании (Hu et al., ICLR 2022)."""
+
+    def _lora_setup(self, r, alpha):
+        kw = dict(device=self.weight.device, dtype=self.weight.dtype)
+        self.lora_down = nn.Linear(self.in_features, r, bias=False, **kw)
+        self.lora_up = nn.Linear(r, self.out_features, bias=False, **kw)
+        nn.init.zeros_(self.lora_up.weight)
+        self.lora_scale = float(alpha) / float(r)
+
+    def forward(self, x):
+        return super().forward(x) + self.lora_scale * self.lora_up(self.lora_down(x))
+
+
+def lora_wrap(enc, r, alpha):
+    """Адаптеры LoRA ко всем Conv2d и Linear энкодера (подмена класса на месте: модуль и его
+    параметры те же, имена прежних ключей не меняются). Возвращает число обёрнутых слоёв.
+    Энкодер с вниманием (nn.MultiheadAttention: проекции вызываются не как слои) не поддержан."""
+    if any(isinstance(m, nn.MultiheadAttention) for m in enc.modules()):
+        raise ValueError("--ft-mode lora: у энкодера с вниманием (vit) проекции внимания не вызываются как слои, "
+                         "адаптеры к ним не встают")
+    mods = [m for m in enc.modules() if type(m) in (nn.Conv2d, nn.Linear)]
+    for m in mods:
+        m.__class__ = LoRAConv2d if type(m) is nn.Conv2d else LoRALinear
+        m._lora_setup(int(r), float(alpha))
+    return len(mods)
+
+
+def is_lora_key(name):
+    return ".lora_down." in f".{name}" or ".lora_up." in f".{name}"
+
+
+def ft_trainable_names(enc, mode, enc_kind):
+    """Имена параметров энкодера, которые учатся в режиме --ft-mode (без свежих каналов keep)."""
+    if mode == "full":
+        return {n for n, _ in enc.named_parameters()}
+    bn = {f"{mn}.{pn}" if mn else pn for mn, m in enc.named_modules()
+          if isinstance(m, nn.modules.batchnorm._BatchNorm) for pn, _ in m.named_parameters(recurse=False)}
+    if mode == "bn":
+        return bn
+    if mode == "lora":
+        return bn | {n for n, _ in enc.named_parameters() if is_lora_key(n)}
+    if mode == "lastblock":
+        pre = FT_LASTBLOCK[enc_kind]
+        return {n for n, _ in enc.named_parameters() if n.startswith(pre)}
+    raise ValueError(f"--ft-mode {mode!r}: выбор {FT_MODES}")
+
+
+def ft_check(mode, enc_kind, enc):
+    """Отказ, если режим у этого энкодера не определён (ValueError с объяснением)."""
+    if mode not in FT_MODES:
+        raise ValueError(f"--ft-mode {mode!r}: выбор {FT_MODES}")
+    if mode == "bn" and not any(isinstance(m, nn.modules.batchnorm._BatchNorm) for m in enc.modules()):
+        raise ValueError(f"--ft-mode bn: у энкодера {enc_kind} нет BatchNorm (есть у {', '.join(FT_LASTBLOCK)}); "
+                         "без них режим — просто замороженный энкодер (--freeze-encoder)")
+    if mode == "lastblock" and enc_kind not in FT_LASTBLOCK:
+        raise ValueError(f"--ft-mode lastblock определён только у {', '.join(FT_LASTBLOCK)} (последний остаточный "
+                         f"блок body.3 и проекция head), не у {enc_kind}")
+
+
 def make_encoder(kind: str, in_ch: int = 4, size: int = 26):
     import torch
     import torch.nn as nn
@@ -1509,11 +1605,14 @@ def wa_update(avg, model, n, mode, decay):
     return avg
 
 
-def recompute_bn(model, forward, X, bs=256):
+def recompute_bn(model, forward, X, bs=256, skip=()):
     """Статистики BatchNorm для усреднённых весов (как torch.optim.swa_utils.update_bn): счётчики сброшены,
-    накопительное среднее (momentum=None) по проходам forward на X в режиме train. Возвращает число слоёв BN."""
+    накопительное среднее (momentum=None) по проходам forward на X в режиме train. skip — слои, которые не
+    трогаются (на проходах стоят в режиме eval). Возвращает число пересчитанных слоёв BN."""
     import torch
-    bns = [m for m in model.modules() if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)]
+    skip_ids = {id(m) for m in skip}
+    bns = [m for m in model.modules() if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)
+           and id(m) not in skip_ids]
     if not bns:
         return 0
     moms = [m.momentum for m in bns]
@@ -1522,6 +1621,8 @@ def recompute_bn(model, forward, X, bs=256):
         m.reset_running_stats()
         m.momentum = None
     model.train(True)
+    for m in skip:
+        m.eval()
     with torch.no_grad():
         for k in range(0, len(X), bs):
             forward(X[k:k + bs])
@@ -1724,11 +1825,15 @@ class QNet:
     свёрточные признаки сети оптимизатора — там это признаки до MLP энкодера, здесь выход
     энкодера целиком); model[2] тогда пустой nn.Identity, ключей '2.*' в чекпоинте нет. two_shared_grad: 'both' — лосс сети B учит и общий энкодер, 'stop' — признаки
     для сети B отрезаны от графа, энкодер учит только сеть A.
+    ft_mode (FT_MODES, --ft-mode) — какие параметры энкодеров карт учатся; у lora адаптеры (ранг
+    lora_rank, масштаб lora_alpha / lora_rank) встают в каждый энкодер сети при создании, до копии
+    в целевую сеть, — их ключи есть в чекпоинте, load_agent строит их по meta (ckpt_arch). Заморозку
+    по режиму включает apply_ft (тренер, после --encoder-init).
     При значениях по умолчанию сеть и имена параметров прежние."""
 
     def __init__(self, variant, device, n_quantiles=32, in_ch=4, encoder="auto", ens=1, bins=0,
                  two_nets=False, two_center="max", two_head="linear", two_mode="additive",
-                 two_shared=False, two_shared_grad="both"):
+                 two_shared=False, two_shared_grad="both", ft_mode="full", lora_rank=4, lora_alpha=8.0):
         import torch
         import torch.nn as nn
         if variant in ("their_dqn", "their_cql"):
@@ -1799,6 +1904,18 @@ class QNet:
         if self.two_nets:
             mods = [self.enc, self.head, self.enc_b, self.head_b]
         self.model = nn.ModuleList(mods).to(device)
+        # --ft-mode: проверка режима у этого энкодера; адаптеры lora — до копии в целевую сеть,
+        # чтобы они были и там (soft_update идёт по тем же параметрам в том же порядке)
+        self.ft_mode = ft_mode or "full"
+        self.lora_rank, self.lora_alpha = int(lora_rank), float(lora_alpha)
+        self._ft_eval = []                  # слои BatchNorm, которые при обучении стоят в режиме eval
+        if self.ft_mode != "full":
+            ft_check(self.ft_mode, enc_kind, self.enc)
+            if self.ft_mode == "lora":
+                if self.lora_rank < 1 or not self.lora_alpha > 0:
+                    raise ValueError(f"--lora-rank >= 1 и --lora-alpha > 0, не {lora_rank} и {lora_alpha}")
+                for i in self._enc_idx:
+                    lora_wrap(self.model[i], self.lora_rank, self.lora_alpha)
         import copy
         self.target = copy.deepcopy(self.model).to(device)
         for p in self.target.parameters():
@@ -1825,12 +1942,48 @@ class QNet:
             if self.frozen:
                 for i in self._enc_idx:
                     self.model[i].eval()
+            for m in self._ft_eval:         # --ft-mode lastblock: замороженная часть энкодера
+                m.eval()
+
+    def apply_ft(self, keep=()):
+        """--ft-mode: обучаемыми в энкодерах (у двух сетей — в обоих) остаются только параметры
+        режима (ft_trainable_names) и keep — свежие входные каналы после --encoder-init (как у
+        freeze_encoder: первая свёртка учится целиком; адаптер lora на ней тогда заморожен и, с нулевым
+        up, ничего не добавляет). У lastblock слои BatchNorm вне последнего блока стоят в режиме eval:
+        их статистики не меняются. Головы учатся целиком. Возвращает dict(обучаемых, всего) по
+        параметрам энкодеров; при full ничего не меняет."""
+        if self.ft_mode == "full":
+            return None
+        if self.frozen:
+            raise ValueError("--ft-mode несовместим с --freeze-encoder")
+        keep = set(keep)
+        n_tr = n_all = 0
+        self._ft_eval = []
+        for i in self._enc_idx:
+            enc = self.model[i]
+            train = ft_trainable_names(enc, self.ft_mode, self.enc_kind)
+            kept_layers = {k.rsplit(".", 1)[0] for k in keep}
+            for name, p in enc.named_parameters():
+                on = name in keep or (name in train and not (is_lora_key(name)
+                                                             and name.split(".lora_")[0] in kept_layers))
+                p.requires_grad_(on)
+                n_tr += p.numel() * on
+                n_all += p.numel()
+            if self.ft_mode == "lastblock":
+                pre = FT_LASTBLOCK[self.enc_kind]
+                self._ft_eval += [m for mn, m in enc.named_modules()
+                                  if isinstance(m, nn.modules.batchnorm._BatchNorm) and not (mn + ".").startswith(pre)]
+        for m in self._ft_eval:
+            m.eval()
+        return dict(trainable=int(n_tr), total=int(n_all))
 
     def freeze_encoder(self, keep=()):
         """--freeze-encoder: градиент идёт только в головы. keep — имена параметров энкодера,
         которые остаются обучаемыми (первый слой, если у входа больше каналов, чем у
         предобученных весов). Возвращает число замороженных параметров. У двух сетей
         замораживаются оба энкодера."""
+        if self.ft_mode != "full":
+            raise ValueError("--freeze-encoder несовместим с --ft-mode")
         n = 0
         for i in self._enc_idx:
             for name, p in self.model[i].named_parameters():
@@ -2003,6 +2156,15 @@ def ckpt_arch(ck):
         if out["two_shared"]:
             # на значения Q не влияет; нужен дообучению с чекпоинта (тот же путь градиента)
             out["two_shared_grad"] = meta.get("two_nets_shared_grad") or "both"
+    ft = meta.get("ft_mode") or "full"
+    if ft != "full":
+        # --ft-mode: у lora в весах есть адаптеры (ключи *.lora_down.*, *.lora_up.*) — сеть строится с ними,
+        # с тем же рангом и масштабом; у bn и lastblock сеть прежняя, режим только записан
+        out["ft_mode"] = ft
+        if ft == "lora":
+            if "lora_rank" not in meta or "lora_alpha" not in meta:
+                raise ValueError("чекпоинт с ft_mode=lora без lora_rank и lora_alpha в meta")
+            out.update(lora_rank=int(meta["lora_rank"]), lora_alpha=float(meta["lora_alpha"]))
     return out
 
 
@@ -2196,6 +2358,9 @@ def load_encoder_init(net, path):
     for i in getattr(net, "_enc_idx", (0,)):        # у двух сетей — оба энкодера (свежие каналы у каждого свои)
         enc = net.model[i]
         own = enc.state_dict()
+        # --ft-mode lora: адаптеры в файле весов не лежат и остаются как созданы (up нулевой)
+        ada = {k: v for k, v in own.items() if is_lora_key(k)}
+        own = {k: v for k, v in own.items() if k not in ada}
         if set(sd) != set(own):
             raise ValueError(f"--encoder-init: имена параметров не совпали с энкодером {net.enc_kind}: "
                              f"лишние {sorted(set(sd) - set(own))[:4]}, нет {sorted(set(own) - set(sd))[:4]}")
@@ -2213,6 +2378,7 @@ def load_encoder_init(net, path):
                     info["partial"].append(k)
             else:
                 raise ValueError(f"--encoder-init: {k}: форма в файле {tuple(w.shape)}, у сети {tuple(v.shape)}")
+        new.update(ada)
         enc.load_state_dict(new)
         net.target[i].load_state_dict(enc.state_dict())
     return info
@@ -2372,8 +2538,17 @@ def train_variant(variant, data, train_mask, args, seed):
                     two_head=getattr(args, "two_nets_head", "linear"),
                     two_mode=getattr(args, "two_nets_mode", "additive"),
                     two_shared=bool(getattr(args, "two_nets_shared", False)),
-                    two_shared_grad=getattr(args, "two_nets_shared_grad", "both"))
+                    two_shared_grad=getattr(args, "two_nets_shared_grad", "both"),
+                    **ft_kw)
 
+    # --ft-mode: сколько энкодера учится (по умолчанию full — весь, прежняя сеть и прежний оптимизатор)
+    ft_mode = getattr(args, "ft_mode", "full") or "full"
+    ft_kw = {}
+    if ft_mode != "full":
+        if variant in ("cnx_bbf",):
+            raise ValueError("--ft-mode несовместим с cnx_bbf: он заново создаёт сеть и оптимизатор")
+        ft_kw = dict(ft_mode=ft_mode, lora_rank=int(getattr(args, "lora_rank", 4)),
+                     lora_alpha=float(getattr(args, "lora_alpha", 8.0)))
     net = mk_net()
     enc_info = None
     if getattr(args, "encoder_init", ""):
@@ -2386,6 +2561,21 @@ def train_variant(variant, data, train_mask, args, seed):
         n_fr = net.freeze_encoder(keep=(enc_info["partial"] if enc_info else ()))
         print(f"  [{variant} s{seed}] энкодер заморожен ({n_fr} параметров), учатся головы"
               + ("" if enc_info else "; --encoder-init не задан: энкодер случайный"), flush=True)
+        opt = torch.optim.Adam([p for p in net.params() if p.requires_grad], lr=float(getattr(args, "lr", 1e-3)),
+                               weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
+    elif ft_mode != "full":
+        ft_n = net.apply_ft(keep=(enc_info["partial"] if enc_info else ()))
+        n_head = sum(p.numel() for i, m in enumerate(net.model) if i not in net._enc_idx
+                     for p in m.parameters() if p.requires_grad)
+        print(f"  [{variant} s{seed}] дообучение энкодера {ft_mode}"
+              + (f" (LoRA ранг {net.lora_rank}, alpha {net.lora_alpha:g})" if ft_mode == "lora" else "")
+              + f": учатся {ft_n['trainable']} из {ft_n['total']} параметров энкодера"
+              + (f" (энкодеров {len(net._enc_idx)})" if len(net._enc_idx) > 1 else "")
+              + (f", свежие каналы {list(enc_info['partial'])} целиком" if enc_info and enc_info["partial"] else "")
+              + f"; головы — {n_head}" + ("" if enc_info else "; --encoder-init не задан: энкодер случайный"),
+              flush=True)
+        ft_info = dict(ft_enc_trainable=ft_n["trainable"], ft_enc_total=ft_n["total"], ft_head_trainable=int(n_head))
+        # оптимизатору — только обучаемые параметры
         opt = torch.optim.Adam([p for p in net.params() if p.requires_grad], lr=float(getattr(args, "lr", 1e-3)),
                                weight_decay=float(getattr(args, "l2", 0.0) or 0.0))
     else:
@@ -2404,6 +2594,8 @@ def train_variant(variant, data, train_mask, args, seed):
     mean[0, :4][flat_ch] = 0.0
     std[0, :4][flat_ch] = 1.0
     aux_info = {}
+    if ft_mode != "full":
+        aux_info.update(ft_info)
     if two:
         n_a, n_b = net.n_params_nets()
         o_a, o_b = net.n_outputs_nets()
@@ -2414,10 +2606,11 @@ def train_variant(variant, data, train_mask, args, seed):
               f"состав {net.two_mode}, выходов {o_a} + {o_b}, энкодер "
               + (f"общий (градиент сети параметров: {net.two_shared_grad})" if net.two_shared
                  else "у каждой сети свой"), flush=True)
-    if (net.frozen and enc_info and enc_info["mean"] is not None
+    if ((net.frozen or ft_mode == "lastblock") and enc_info and enc_info["mean"] is not None
             and getattr(args, "state_mode", "full") == "full"):
         # замороженный энкодер ждёт вход в той нормировке, в которой предобучался: статистики
-        # карт берутся из файла весов (в чекпоинт агента пишутся они же)
+        # карт берутся из файла весов (в чекпоинт агента пишутся они же). То же у --ft-mode lastblock:
+        # его замороженная часть с неизменными статистиками BatchNorm — тот же предобученный энкодер
         m0 = np.asarray(enc_info["mean"], dtype=np.float32).reshape(1, -1, 1, 1)
         s0 = np.asarray(enc_info["std"], dtype=np.float32).reshape(1, -1, 1, 1)
         c = min(4, m0.shape[1], in_ch)
@@ -2798,7 +2991,8 @@ def train_variant(variant, data, train_mask, args, seed):
         net.model.load_state_dict(wa_avg)
         n_bn = 0
         if not net.frozen:
-            n_bn = recompute_bn(net.model, net.q_online, S[to_t(idx).long()], bs=bs)
+            # у --ft-mode lastblock статистики замороженной части не пересчитываются
+            n_bn = recompute_bn(net.model, net.q_online, S[to_t(idx).long()], bs=bs, skip=net._ft_eval)
         net.set_train(False)
         g_avg = greedy_rows()
         # сам режим и распад пишет main() в поля прогона (wa, wa_start, wa_decay); здесь — только итог
@@ -3063,6 +3257,14 @@ def verify_ckpt(path, net, n=4):
         out.update(two_nets=two[1], two_nets_center=getattr(ag, "two_center", None),
                    two_nets_mode=getattr(ag, "two_mode", None), two_nets_shared=getattr(ag, "two_shared", None),
                    ok=bool(out["ok"] and same))
+    ft = (getattr(net, "ft_mode", "full"), getattr(ag, "ft_mode", "full"))
+    if any(f != "full" for f in ft):
+        # --ft-mode: тот же режим, у lora — те же ранг и масштаб адаптеров
+        keys = ("ft_mode", "lora_rank", "lora_alpha") if "lora" in ft else ("ft_mode",)
+        same = all(getattr(ag, k, None) == getattr(net, k, None) for k in keys)
+        out.update(ft_mode=ft[1], ok=bool(out["ok"] and same))
+        if "lora" in ft:
+            out.update(lora_rank=getattr(ag, "lora_rank", None), lora_alpha=getattr(ag, "lora_alpha", None))
     return out
 
 
@@ -3206,6 +3408,17 @@ def main():
     ap.add_argument("--freeze-encoder", action="store_true",
                     help="Заморозить энкодер, учить только головы. С --encoder-init и режимом full "
                          "нормировка карт берётся из файла весов")
+    ap.add_argument("--ft-mode", default="full", choices=list(FT_MODES),
+                    help="Какие параметры энкодера карт учатся (у --two-nets — обоих энкодеров): full — все "
+                         "(как раньше); bn — только аффинные параметры BatchNorm (статистики копятся как при full); "
+                         "lora — веса энкодера стоят, к каждой Conv2d и Linear добавлен адаптер LoRA (плюс аффинные "
+                         "параметры BatchNorm); lastblock — только последний блок ResNet (body.3) и проекция head, "
+                         "остальное — в режиме eval, нормировка карт из файла --encoder-init (как у --freeze-encoder). "
+                         "Головы учатся целиком; свежие каналы первой свёртки после --encoder-init — тоже. "
+                         "Режим, ранг и масштаб пишутся в meta чекпоинта")
+    ap.add_argument("--lora-rank", type=int, default=4, help="--ft-mode lora: ранг адаптеров")
+    ap.add_argument("--lora-alpha", type=float, default=8.0,
+                    help="--ft-mode lora: масштаб добавки alpha / rank")
     ap.add_argument("--ens", type=int, default=1,
                     help="REDQ: число Q-голов на общем энкодере (1 = одна голова, как раньше). "
                          "Действие и Q на оценке — по среднему голов")
@@ -3386,7 +3599,28 @@ def main():
     kill_tag = f"offline_{args.variant}" + run_suffix(args, "multi" if args.subdirs else args.subdir)
     exit_if_killed(kill_tag, remote=True, what="обучение")
     new_arch = (args.encoder != "auto" or args.ens != 1 or args.encoder_init or args.freeze_encoder
-                or args.two_nets)
+                or args.two_nets or args.ft_mode != "full")
+    if args.ft_mode != "full":
+        # отказы до загрузки данных; энкодер, у которого режим не определён, отвергает ft_check
+        if args.freeze_encoder:
+            ap.error("--ft-mode несовместим с --freeze-encoder (тот замораживает энкодер целиком)")
+        if args.variant in ("cnx_bbf", "cnx_smdp"):
+            ap.error("--ft-mode несовместим с cnx_bbf (он заново создаёт сеть и оптимизатор) и cnx_smdp (свой тренер)")
+        _kind = {"their_dqn": "their", "their_cql": "their", "stat_dqn": "stat"}.get(
+            args.variant, ("convnext" if args.encoder == "auto" else args.encoder) if args.variant in CNX_VARIANTS
+            else "cnn")
+        try:
+            ft_check(args.ft_mode, _kind, make_encoder(_kind, 4))
+            if args.ft_mode == "lora":
+                lora_wrap(make_encoder(_kind, 4), max(1, args.lora_rank), 1.0)
+        except ValueError as e:
+            ap.error(str(e))
+        if args.ft_mode == "lora" and (args.lora_rank < 1 or not args.lora_alpha > 0):
+            ap.error("--lora-rank >= 1 и --lora-alpha > 0")
+    elif args.lora_rank != 4 or args.lora_alpha != 8.0:
+        ap.error("--lora-rank и --lora-alpha задаются вместе с --ft-mode lora")
+    if args.ft_mode in ("bn", "lastblock") and (args.lora_rank != 4 or args.lora_alpha != 8.0):
+        ap.error("--lora-rank и --lora-alpha задаются вместе с --ft-mode lora")
     new_loss = (args.mb_aux > 0 or args.pani_w > 0 or args.distill_w > 0 or args.distill_top > 0
                 or args.mask_schedule or args.teacher_w > 0)
     if args.ens < 1 or (args.ens > 1 and not 1 <= args.ens_min <= args.ens):
@@ -3745,6 +3979,12 @@ def main():
                    two_nets_mode=args.two_nets_mode, two_nets_shared=bool(args.two_nets_shared))
         if args.two_nets_shared:
             arm.update(two_nets_shared_grad=args.two_nets_shared_grad)
+    if args.ft_mode != "full":
+        # по полям ft_mode, lora_rank, lora_alpha в meta чекпоинта offline_rl.ckpt_arch строит адаптеры;
+        # число обучаемых параметров энкодера — в строке сида (ft_enc_trainable, ft_enc_total)
+        arm.update(ft_mode=args.ft_mode)
+        if args.ft_mode == "lora":
+            arm.update(lora_rank=int(args.lora_rank), lora_alpha=float(args.lora_alpha))
     # суррогат модельных целей не должен видеть отложенную задачу (--holdout): её папки убираются
     # из --mb-subdirs. Список — в том же порядке, что у agent_combo.py --extra-only-target без
     # --extra-data (учитель без строк цели), поэтому таблица и ансамбль в кэше --mb-work общие
