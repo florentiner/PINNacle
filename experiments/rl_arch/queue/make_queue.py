@@ -1688,6 +1688,27 @@ if W28_K:
         1.2, needs=[b for _, b in _main + _extra] + [ENC_MAE],
         note=f"отбор агентов без оценки в среде: суррогат и FQE, основных {len(_main)}, дополнительных {len(_extra)}")
 
+# ---------------------------------------------------------------- волна 48
+# Две сети без потери на pb2d. Сумма additive (лидер ns2d) на pb2d хуже одной сети в 1.5-2 раза: она не
+# выражает взаимодействие шага и длительности. Три варианта, у которых число выходов растёт как сумма,
+# а не произведение числа значений параметров: дуэлинговая голова (одно обучение волны 33 дало 0.0169),
+# последовательный выбор со своим энкодером (с общим энкодером волна 36 дала 0.031 и 0.148) и сумма плюс
+# взаимодействие ранга 1 (--two-nets-mode lowrank). По три обучения (сид обучения 1-3, учитель двух сетей
+# волны 33), каждое на сидах 42-46. Сначала pb2d; на ns2d — победитель.
+W48_ARMS = (("duel", "--two-nets --two-nets-head dueling"),
+            ("auto", "--two-nets --two-nets-mode auto"),
+            ("lowrank", "--two-nets --two-nets-mode lowrank"))
+if PREFIX == "pb2d":
+    for _nm, _fl in W48_ARMS:
+        for _m in (1, 2, 3):
+            _mt = f"w48{_nm}"
+            add(f"w48-{_nm}-m{_m}", 48, "H06",
+                [(OFFLINE, f"--variant convnext_dqn {MAP_BASE} {RECIPE} --target-buffer {W33_SRC} "
+                           f"--teacher-from {W41_TEACH['two']} --teacher-w 0.5 {_fl} --seeds {_m} --model-tag {_mt}"),
+                 free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", S5)],
+                1.0 + 0.6 * MAP_EH * 2, needs=[ENC_MAE, W41_TEACH["two"]],
+                note=f"две сети ({_nm}), сид обучения {_m}, сиды 42-46")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

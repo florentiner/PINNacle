@@ -265,7 +265,7 @@ def mode_meta(net):
 # состав совместного Q (--two-nets-mode) и общий энкодер (--two-nets-shared)
 
 MODES = [(m, sh) for m in O.TWO_NETS_MODE for sh in (False, True)]
-N_OUT_B = dict(additive=18, joint=27, auto=6)       # выходов у сети параметров
+N_OUT_B = dict(additive=18, joint=27, auto=6, lowrank=36)       # выходов у сети параметров
 
 
 def mk(mode, shared, **kw):
@@ -281,6 +281,9 @@ def seq_np(mode, q_o, *par):
     r = np.arange(len(o))
     if mode == "joint":
         return o * 9 + par[0][r, o].argmax(1)
+    if mode == "lowrank":
+        t = par[0][r, o][:, :, None] + par[1][r, o][:, None, :] + np.einsum("blk,bek->ble", par[2][r, o], par[3][r, o])
+        return o * 9 + t.reshape(len(o), -1).argmax(1)
     l = par[0][r, o].argmax(1)
     return o * 9 + l * 3 + (par[1][r, o, l] if mode == "auto" else par[1][r, o]).argmax(1)
 
@@ -289,7 +292,7 @@ def b_units(net):
     """Обучаемые части сети параметров, каждая из которых обязана получать градиент плотной цели."""
     b = net.model[3]
     return {"additive": lambda: list(b.lr) + list(b.ep), "joint": lambda: list(b.par),
-            "auto": lambda: [b.emb_o, b.emb_l, b.lr, b.ep]}[net.two_mode]()
+            "auto": lambda: [b.emb_o, b.emb_l, b.lr, b.ep], "lowrank": lambda: list(b.lr) + list(b.ep)}[net.two_mode]()
 
 
 def gsum(m):
@@ -339,6 +342,17 @@ def test_modes():
         "при mean совместный argmax не обязан совпадать с последовательным выбором"
     must_fail(lambda: O.compose_two_nets_joint(q_o, a_par, "median"), ValueError, "неизвестное центрирование")
     must_fail(lambda: O.compose_two_nets_auto(q_o, a_lr, a_ep, "median"), ValueError, "неизвестное центрирование")
+    # lowrank: сумма additive плюс <U, V>; при нулевых U, V — ровно additive, при ненулевых взаимодействие есть
+    g = torch.Generator().manual_seed(3)
+    qo2, al2, ae2 = (torch.randn(64, *sh, generator=g) for sh in ((3,), (3, 3), (3, 3)))
+    u0 = torch.zeros(64, 3, 3, O.TWO_NETS_RANK)
+    for c in ("max", "mean"):
+        qa = O.compose_two_nets(qo2, al2, ae2, c)
+        assert torch.allclose(O.compose_two_nets_lowrank(qo2, al2, ae2, u0, u0, c), qa, atol=1e-5), c
+    uu = torch.randn(64, 3, 3, O.TWO_NETS_RANK, generator=g)
+    ql = O.compose_two_nets_lowrank(qo2, al2, ae2, uu, uu.flip(2), "max")
+    assert float(inter(ql).max()) > 1e-3, "lowrank выражает взаимодействие шага и длительности"
+    assert torch.allclose(ql.view(-1, 3, 9).amax(2), qo2, atol=1e-6)
 
     # случайные сети: каждый состав со своим и с общим энкодером
     rng = np.random.default_rng(1)
@@ -348,7 +362,8 @@ def test_modes():
         ("joint", True, dict(two_head="dueling", two_center="mean")), ("auto", False, dict(two_head="dueling")),
         ("auto", True, dict(two_center="mean", encoder="auto")), ("auto", True, dict(encoder="vit")),
         ("joint", False, dict(encoder="resnetpos", variant="cnx_cql"))]
-    shapes = dict(additive=[(3,), (3, 3), (3, 3)], joint=[(3,), (3, 9)], auto=[(3,), (3, 3), (3, 3, 3)])
+    shapes = dict(additive=[(3,), (3, 3), (3, 3)], joint=[(3,), (3, 9)], auto=[(3,), (3, 3), (3, 3, 3)],
+                  lowrank=[(3,), (3, 3), (3, 3), (3, 3, O.TWO_NETS_RANK), (3, 3, O.TWO_NETS_RANK)])
     for mode, shared, kw in cases:
         torch.manual_seed(7)
         net = mk(mode, shared, **kw)
@@ -375,7 +390,7 @@ def test_modes():
         keys = list(net.model.state_dict())
         assert {k.split(".")[0] for k in keys} == ({"0", "1", "3"} if shared else {"0", "1", "2", "3"})
         assert isinstance(net.model[2], torch.nn.Identity) == shared and net._enc_idx == ((0,) if shared else (0, 2))
-        assert any(k.startswith(dict(additive="3.lr.0.", joint="3.par.2.", auto="3.emb_o.")[mode]) for k in keys)
+        assert any(k.startswith(dict(additive="3.lr.0.", joint="3.par.2.", auto="3.emb_o.", lowrank="3.lr.0.")[mode]) for k in keys)
         n_a, n_b = net.n_params_nets()
         assert n_a + n_b == net.n_params() and (n_b < n_a if shared else n_b > n_a), (mode, shared, n_a, n_b)
         assert net.n_outputs_nets() == (3, N_OUT_B[mode])
@@ -454,11 +469,15 @@ def test_fit(steps=250):
             out[mode, shared] = float(F.mse_loss(net.q_online(x), t))
         if mode == "additive":
             assert floor - 1e-5 <= out[mode, shared] < 1.2 * floor, (shared, out[mode, shared], floor)
+        elif mode == "lowrank":
+            # взаимодействие ранга TWO_NETS_RANK: случайную таблицу 3x3 (ранг взаимодействия до 2) целиком
+            # не выразить, но остаток суммы снимается в разы
+            assert out[mode, shared] < 0.1 * floor, (mode, shared, out[mode, shared], floor)
         else:
             assert out[mode, shared] < 0.01 * floor, (mode, shared, out[mode, shared], floor)
     print(f"  цель со взаимодействием, MSE после {steps} шагов (остаток лучшей суммы {floor:.4f}): "
           + "; ".join(f"{m}{'+общий' if sh else ''} {v:.2e}" for (m, sh), v in out.items()))
-    print("плотная цель со взаимодействием шага и длительности: joint и auto выучивают, additive нет: OK")
+    print("плотная цель со взаимодействием шага и длительности: joint и auto выучивают, lowrank почти, additive нет: OK")
 
 
 def test_modes_training(tmp):
@@ -568,7 +587,7 @@ def test_modes_ckpt(tmp):
         assert (v["two_nets_mode"], v["two_nets_shared"], v["two_nets_center"]) == (mode, shared, net.two_center), v
         # та же сеть, записанная в meta другим составом или с другим энкодером, проверку не проходит
         same = dict(in_ch=in_ch, encoder=net.enc_kind, two_head=net.two_head, two_center=net.two_center)
-        for other in (mk(O.TWO_NETS_MODE[(O.TWO_NETS_MODE.index(mode) + 1) % 3], shared, **same), mk(mode, not shared, **same)):
+        for other in (mk(O.TWO_NETS_MODE[(O.TWO_NETS_MODE.index(mode) + 1) % len(O.TWO_NETS_MODE)], shared, **same), mk(mode, not shared, **same)):
             other.set_train(False)
             assert not O.verify_ckpt(path, other)["ok"]
     # чекпоинт до --two-nets-mode (в meta нет состава и общего энкодера) читается как additive со своим энкодером
