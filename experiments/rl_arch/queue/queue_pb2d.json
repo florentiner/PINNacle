@@ -13737,6 +13737,23 @@
    ]
   },
   {
+   "id": "pb2d-w43-cmt2-s42",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 42",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42 --tag t3m_cmt2one_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w43-cmt3-s43",
    "wave": 43,
    "group": "H06",
@@ -13751,6 +13768,23 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 43 --tag t3m_cmt3one_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w43-cmt2-s43",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 43",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 43 --tag t3m_cmt2one_g"
     }
    ]
   },
@@ -13773,6 +13807,23 @@
    ]
   },
   {
+   "id": "pb2d-w43-cmt2-s44",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 44 --tag t3m_cmt2one_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w43-cmt3-s45",
    "wave": 43,
    "group": "H06",
@@ -13787,6 +13838,23 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45 --tag t3m_cmt3one_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w43-cmt2-s45",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 45",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 45 --tag t3m_cmt2one_g"
     }
    ]
   },
@@ -13809,6 +13877,23 @@
    ]
   },
   {
+   "id": "pb2d-w43-cmt2-s46",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 46 --tag t3m_cmt2one_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w43-cmt3-s47",
    "wave": 43,
    "group": "H06",
@@ -13823,6 +13908,23 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47 --tag t3m_cmt3one_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w43-cmt2-s47",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 47",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47 --tag t3m_cmt2one_g"
     }
    ]
   },
@@ -13845,6 +13947,23 @@
    ]
   },
   {
+   "id": "pb2d-w43-cmt2-s48",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 48",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 48 --tag t3m_cmt2one_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w43-cmt3-s49",
    "wave": 43,
    "group": "H06",
@@ -13859,6 +13978,23 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 49 --tag t3m_cmt3one_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w43-cmt2-s49",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 49 --tag t3m_cmt2one_g"
     }
    ]
   },
@@ -13881,6 +14017,23 @@
    ]
   },
   {
+   "id": "pb2d-w43-cmt2-s50",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 50",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 50 --tag t3m_cmt2one_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w43-cmt3-s51",
    "wave": 43,
    "group": "H06",
@@ -13895,6 +14048,23 @@
     {
      "script": "experiments/rl_arch/online_eval_env.py",
      "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 51 --tag t3m_cmt3one_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w43-cmt2-s51",
+   "wave": 43,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt"
+   ],
+   "note": "комитет двух обучений лидера (one, обучения 2 и 3), среднее Q, сид 51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 51 --tag t3m_cmt2one_g"
     }
    ]
   },

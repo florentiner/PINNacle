@@ -1606,6 +1606,13 @@ if W28_K:
                     + t3ev(f"t3m_cmt3{_arch}_g", str(_x), hours=MAP_EH))],
             1.0 if not NS2D else 1.9, needs=_cm3,
             note=f"комитет трёх обучений лидера ({_arch}), среднее Q, сид {_x}")
+        # комитет из двух: второе и третье обучение (без первого, самого удачного на ns2d) — держится ли
+        # выигрыш без лучшего члена и сколько добавляет третий
+        add(f"w43-cmt2-s{_x}", 43, "H06",
+            [(EVAL, f"--policy agent --model-files {','.join(_cm3[1:])} --ensemble mean {GUARD} {KEEPS} "
+                    + t3ev(f"t3m_cmt2{_arch}_g", str(_x), hours=MAP_EH))],
+            1.0 if not NS2D else 1.9, needs=_cm3[1:],
+            note=f"комитет двух обучений лидера ({_arch}, обучения 2 и 3), среднее Q, сид {_x}")
 
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
