@@ -33,6 +33,13 @@
 так учились лидеры трека 1) и --max-chain-steps (предел цикла и нормировка шага в контексте, ctx_kmax
 чекпоинта; конец цепочки по нему бутстрепится, d = 0). Оценка (online_eval_env.py) по-прежнему идёт
 до конца бюджета.
+
+Агент с нуля только на своих онлайновых данных, раундами параллельных кернелов (волна 47, make_queue.py):
+--save-chains ТЕГ — цепочки прогона файлами буфера с картами (формат target_buffer.py) в
+rl_arch/buffers_new/<ТЕГ>/ и метка конца прогона в rl_arch/buffers_new/<ТЕГ>_done/; --preload-online —
+переходы прошлых раундов в общий буфер (равномерная выборка) до первого действия; --pre-updates K — K
+обновлений собственным лоссом до первого действия; --learn-only — без среды: загрузка, K обновлений,
+агент в HF (шаг ученика между раундами). Без этих флагов прогон прежний.
 """
 from __future__ import annotations
 
@@ -1176,6 +1183,27 @@ def main():
                     help="вес дистилляции учителя в онлайновом лоссе (0 = выключено): W * Huber(Q(s,.) - "
                          "Q_учителя(s,.)) по всем 27 действиям на обеих половинах батча; нужны --rlpd, "
                          "--offline-fix, награда delta или dlog и --init-err")
+    # --- агент с нуля только на онлайновых данных, раундами параллельных кернелов (волна 47). По умолчанию
+    # всё выключено: без этих флагов прогон прежний бит-в-бит ---
+    ap.add_argument("--save-chains", default="",
+                    help="ТЕГ: каждая цепочка прогона (законченная и оборванная лимитом времени) — файлом буфера "
+                         "с картами в формате target_buffer.py (как online_eval_env.py --save-buffer): "
+                         "<save-dir>/buffers_new/<ТЕГ>/<папка задачи>/<тег прогона>_c<номер>.pt, в HF "
+                         "rl_arch/buffers_new/<ТЕГ>/<папка задачи>/ одним коммитом каждые --save-every цепочек; в "
+                         "конце — метка rl_arch/buffers_new/<ТЕГ>_done/<тег прогона>.json тем же коммитом (её ждёт "
+                         "wait_hf.py). Читается --preload-online и offline_rl.py --target-buffer")
+    ap.add_argument("--preload-online", default="",
+                    help="онлайновые переходы прошлых раундов в общий буфер до первого действия: спецификация как у "
+                         "--rlpd-target-buffer (префиксы rl_arch/buffers_new/<тег> в HF и/или локальные папки через "
+                         "запятую), загрузчик и перевод в переходы — те же (online_aux.load_target), контекст — "
+                         "offline_rl.chain_ctx. Нормировка — чекпоинта тёплого старта, без него — по этим "
+                         "переходам. Выборка из буфера равномерная (не половина батча, как у RLPD)")
+    ap.add_argument("--pre-updates", type=int, default=0,
+                    help="K обновлений собственным лоссом тренера (agent_update, тот же батч) по буферу после "
+                         "--preload-online / --preload и до первого действия")
+    ap.add_argument("--learn-only", action="store_true",
+                    help="без среды: --preload-online, --pre-updates K, сохранение агента (локально и в HF "
+                         "rl_arch/agents_online/<тег>.pt) и итоговой строки — и выход. Шаг «ученика» между раундами")
     ap.add_argument("--display-every", type=int, default=100)
     ap.add_argument("--save-dir", default="runs_rl_train")
     ap.add_argument("--tag", default=None)
@@ -1342,6 +1370,33 @@ def main():
         bad = [f for f, on in (("--n-step > 1", args.n_step > 1), ("--go-explore", args.go_explore)) if on]
         if bad:
             ap.error("--train-tol / --train-kmax несовместимы с " + ", ".join(bad))
+    if args.save_chains:
+        if not all(c.isalnum() or c in "_-." for c in args.save_chains):
+            ap.error("--save-chains: тег — буквы, цифры, '_', '-', '.' (это имя папки в rl_arch/buffers_new)")
+        if args.state_mode in ("blind", "loss", "tele") or args.go_explore or args.learn_only:
+            ap.error("--save-chains пишет карты каждого шага с начала цепочки: несовместим с --state-mode "
+                     "blind/loss/tele (карты не строятся), --go-explore (цепочка с середины) и --learn-only")
+    if args.pre_updates < 0:
+        ap.error("--pre-updates >= 0")
+    if args.preload_online:
+        if args.state_mode != "full":
+            ap.error("--preload-online: только --state-mode full (в файлах буфера — карты без вмешательств)")
+        bad = [f for f, on in (("--preload", args.preload), ("--n-step > 1", args.n_step > 1),
+                               ("--go-explore", args.go_explore), ("--rlpd-full", args.rlpd_full),
+                               ("--boot-heads", args.boot_heads), ("--self-prior", args.self_prior)) if on]
+        if bad:
+            ap.error("--preload-online несовместим с " + ", ".join(bad) + ": переходы кладутся в общий буфер "
+                     "одношаговыми, в нормировке тренера")
+    if args.pre_updates:
+        if not (args.preload_online or args.preload):
+            ap.error("--pre-updates требует --preload-online (или --preload): до первого действия буфер пуст")
+        bad = [f for f, on in (("--rlpd", args.rlpd or args.qwm), ("--hl-gauss", args.hl_gauss),
+                               ("--risk-tau", args.risk_tau), ("--cvar-alpha", args.cvar_alpha)) if on]
+        if bad:
+            ap.error("--pre-updates — обновления agent_update по общему буферу: несовместим с " + ", ".join(bad))
+    if args.learn_only and not (args.preload_online and args.pre_updates):
+        ap.error("--learn-only требует --preload-online и --pre-updates > 0: учить без среды можно только на "
+                 "загруженных переходах")
     run_meta = dict(ctx_kmax=args.max_chain_steps, ctx_budget=args.budget,
                     ctx_err=("none" if args.ctx_no_err else "err"),
                     mask=[int(i) for i in np.where(~allowed)[0]],
@@ -1714,6 +1769,51 @@ def main():
         if args.scalar_ctx:
             mean, std = pad_norm(mean, std, n_obs + n_ctx)
         print(f"предзагрузка по схеме авторов: {len(buf)} переходов из {args.preload}", flush=True)
+    if args.preload_online:
+        # онлайновые переходы прошлых раундов (файлы --save-chains): загрузчик и перевод в переходы — как у
+        # --rlpd-target-buffer, но в общий буфер с равномерной выборкой
+        sub_ = pde_meta()[args.pde].get("subdir") or args.pde
+        _, od, pre_info = OA.load_target(args.preload_online, sub_, args.online_reward, args.init_err,
+                                         args.episode_budget, err_scale, log=lambda *x: print(*x, flush=True))
+        if stop_on:
+            od, _ = stop_rule_cut(od, args.train_tol, args.train_kmax, gamma=GAMMA,
+                                  log=lambda *x: print(*x, flush=True))
+        oidx = np.arange(len(od["A"]))
+        env_now = OA.env_label(args.keep_opt, args.keep_opt_mode)
+        if set(pre_info["envs"]) != {env_now}:
+            print(f"ВНИМАНИЕ: --preload-online: переходы записаны в среде {sorted(pre_info['envs'])}, прогон идёт "
+                  f"в {env_now}", flush=True)
+            if args.keep_opt:
+                oidx = oidx[keep_consistent(od["A"], od["EP"], od["STEP"], mode=args.keep_opt_mode)]
+                print(f"--keep-opt: взяты согласованные со средой без сбросов переходы: {len(oidx)} из "
+                      f"{len(od['A'])}", flush=True)
+        if mean is None:
+            # агент с нуля: нормировка по загруженным картам (каналам с нулевым разбросом — без нормировки,
+            # как у нормировки по первому состоянию ниже); каналы контекста — 0 и 1
+            mean = od["S"][oidx].mean(axis=(0, 2, 3), keepdims=True).astype(np.float32)
+            std = (od["S"][oidx].std(axis=(0, 2, 3), keepdims=True) + 1e-6).astype(np.float32)
+            flat = std[0, :, 0, 0] < 1e-3
+            mean[0, flat], std[0, flat] = 0.0, 1.0
+            if args.scalar_ctx:
+                mean, std = pad_norm(mean, std, n_obs + n_ctx)
+        if args.scalar_ctx:
+            c, c2 = chain_ctx(od, args.max_chain_steps, args.budget, with_err=not args.ctx_no_err)
+            if desc_vals is not None:
+                dv = np.tile(np.asarray(desc_vals, dtype=np.float32)[None], (len(c), 1))
+                c, c2 = np.concatenate([c, dv], 1), np.concatenate([c2, dv], 1)
+            od["S"], od["S2"] = attach_ctx(od["S"], c), attach_ctx(od["S2"], c2)
+        if od["S"].shape[1] != mean.shape[1]:
+            sys.exit(f"--preload-online: у переходов {od['S'].shape[1]} каналов, у нормировки {mean.shape[1]}")
+        buf.cap = max(buf.cap, len(oidx) + 10000)      # загруженное не вытесняется новыми переходами раунда
+        for i in oidx:
+            buf.push(((od["S"][i][None] - mean) / std)[0], int(od["A"][i]), float(od["R"][i]),
+                     ((od["S2"][i][None] - mean) / std)[0], float(od["D"][i]), ub=float(od["ERR"][i]))
+        run_meta.update(preload_online=args.preload_online,
+                        preload_info=dict(files=pre_info["files"], chains=pre_info["used_chains"],
+                                          transitions=int(len(oidx)), envs=pre_info["envs"]))
+        print(f"--preload-online: в общем буфере {len(buf)} переходов ({pre_info['used_chains']} цепочек) из "
+              f"{args.preload_online}; нормировка — " + ("чекпоинта" if warm_loaded or warm_info is not None
+                                                        else "по загруженным картам"), flush=True)
 
     wm = wm_opt = None
     if args.qwm:
@@ -1781,6 +1881,57 @@ def main():
     chains = []              # завершённые цепочки: (l2re, шагов, эпох)
     last_partial = None      # оборванная цепочка — отдельно, в итог не идёт
     buf_records = []         # сырые онлайновые переходы для --save-buffer
+    sc_files, sc_pending, sc_n = [], [], [0]     # --save-chains: файлы цепочек, ещё не выгруженные, переходов
+    sc_sub = (pde_meta().get(args.pde) or {}).get("subdir") or args.pde if args.save_chains else None
+
+    def flush_chains(final=False):
+        """--save-chains: невыгруженные файлы цепочек одним коммитом; в конце — с меткой прогона."""
+        import target_buffer as TB
+        if args.smoke:
+            return
+        pairs = [(p, f"{TB.BUF_HF}/{args.save_chains}/{sc_sub}/{os.path.basename(p)}") for p in sc_pending]
+        if final:
+            mark = dict(tag=tag, pde=args.pde, seed=args.seed, files=len(sc_files), transitions=sc_n[0],
+                        complete=len(chains), elapsed_h=round((time.time() - t_start) / 3600, 2),
+                        eps=[eps_start, eps_end, eps_decay], warm_start=os.path.basename(str(args.warm_start or "")),
+                        preload_online=args.preload_online)
+            pairs.append((json.dumps(mark, indent=1).encode(), f"{TB.BUF_HF}/{args.save_chains}_done/{tag}.json"))
+        if pairs and TB.upload_files(pairs, f"rl_arch online_train {tag}: цепочки {args.save_chains}"
+                                     + (" (итог)" if final else "")):
+            sc_pending.clear()
+
+    if args.pre_updates:
+        # обновления до первого действия — собственный лосс тренера по общему буферу (загруженные переходы)
+        if len(buf) < 2:
+            sys.exit(f"--pre-updates: в буфере {len(buf)} переходов — учить нечему")
+        if bn_train:
+            net.set_train(True)
+        t_pu, pu_loss, every = time.time(), [], max(1, args.pre_updates // 10)
+        for k_ in range(args.pre_updates):
+            ql = agent_update(net, buf, q_opt, args.batch_size, 1, args.variant, munch=args.munchausen,
+                              m_tau=args.m_tau, m_alpha=args.m_alpha, l2_init=args.l2_init, init_w=init_w,
+                              vbound=vbound)
+            if k_ == 0 or (k_ + 1) % every == 0:
+                pu_loss.append(round(float(ql), 6))
+                print(f"[до действий] обновление {k_ + 1}/{args.pre_updates}: q-loss={ql:.4f}", flush=True)
+        if bn_train:
+            net.set_train(False)
+        run_meta.update(pre_updates=int(args.pre_updates), pre_updates_loss=pu_loss)
+        print(f"--pre-updates: {args.pre_updates} обновлений по {len(buf)} переходам за "
+              f"{time.time() - t_pu:.0f} с до первого действия", flush=True)
+    if args.learn_only:
+        # шаг ученика между раундами: среды нет, только агент и строка (по elapsed_h её читает launch_queue)
+        save_agent(net, mean, std, args.variant, tag, 0, float("nan"), hl_gauss=_hlg_meta(hlg), meta=run_meta)
+        row = dict(variant=args.variant, pde=args.pde, seed=args.seed, mode="learn_only", trajectories=0,
+                   buffer=len(buf), pre_updates=int(args.pre_updates), pre_updates_loss=run_meta["pre_updates_loss"],
+                   preload_online=args.preload_online, preload_info=run_meta["preload_info"],
+                   warm_start=os.path.basename(str(args.warm_start or "")),
+                   elapsed_h=round((time.time() - t_start) / 3600, 3))
+        print(json.dumps(row), flush=True)
+        if not args.smoke:
+            upload(row, tag, final=True)
+        print(f"агент сохранён без среды: agent_{tag}.pt и rl_arch/agents_online/{tag}.pt", flush=True)
+        return
 
     traj = 0
     while time.time() < deadline:
@@ -1809,6 +1960,7 @@ def main():
         start_step, resumed_from = 0, None
         chain_trans = []    # (s_норм, a, r) текущей цепочки — для self-imitation
         live_acts, live_eps, live_errs = [], [], []     # цепочка для плотных целей (online_aux.Aux.live)
+        ch_rec, ch_maps = [], None      # --save-chains: шаги цепочки и истинные карты текущего состояния
 
         if args.boot_heads:
             net.active = int(rng.integers(0, net.K))   # одна голова на всю цепочку
@@ -1977,6 +2129,7 @@ def main():
 
             # следующее состояние — их пайплайном
             t_st = time.time()
+            true_maps = None        # карты без вмешательств --state-mode (для --save-chains)
             if args.state_mode == "blind":
                 # карты агенту не нужны: автокодировщик и поверхность не строятся вовсе
                 raw, pls, ae = None, None, None
@@ -2005,14 +2158,15 @@ def main():
                                       loss_name="loss_total", path_to_plot_model=None,
                                       path_to_trajectories=None, img_dir="")
                 raw = pls.save_equation_loss_surface(log_key=True)
+                true_maps = build_state(raw, prev_raw)
                 if fulltele:
                     # карты как в режиме full плюс телеметрия этого действия и признак её наличия
                     tele_st, l_tot = tele_observe(model, tele_h0, tele_th0, prev_loss_tot)
-                    next_state = TM.fulltele_obs(build_state(raw, prev_raw), tele_st, valid=l_tot is not None)
+                    next_state = TM.fulltele_obs(true_maps, tele_st, valid=l_tot is not None)
                     if l_tot is not None:
                         prev_loss_tot = l_tot
                 else:
-                    next_state = apply_state_mode(build_state(raw, prev_raw), args.state_mode,
+                    next_state = apply_state_mode(true_maps, args.state_mode,
                                                   seed=int(rng.integers(0, 2 ** 31 - 1)), pde=args.pde)
             t_state_total += time.time() - t_st
             if args.scalar_ctx:
@@ -2042,6 +2196,14 @@ def main():
                     std[:, n_obs:] = 1.0
             s_norm = ((state[None] - mean) / std)[0]
             s2_norm = ((next_state[None] - mean) / std)[0]
+            if args.save_chains:
+                # шаг цепочки для файла буфера: истинные карты до и после действия (первые три канала, delta
+                # загрузчик строит сам), ошибка в единицах тренера до деления на err_scale
+                m_after = np.array(true_maps, dtype=np.float32)[:3]
+                ch_rec.append(dict(m0=ch_maps, m1=m_after, a=int(a), err=float(err) * err_scale, done=int(done == 1),
+                                   epochs=int(epochs), spent=int(spent), l2re=float(l2re),
+                                   explore=how.startswith("случайно")))
+                ch_maps = m_after
             if args.save_buffer:
                 buf_records.append(dict(s=state.copy(), s2=next_state.copy(), a=a,
                                         r=float(reward), d=float(done == 1), err=float(err),
@@ -2244,6 +2406,30 @@ def main():
                 buf.push(s0, a0, G, s2_last, 1.0, gam=GAMMA ** len(pending))
                 pending.pop(0)
 
+        if args.save_chains and ch_rec:
+            # цепочка (и оборванная лимитом времени) — файлом буфера в формате target_buffer.py
+            import target_buffer as TB
+            tr_ = []
+            for r_ in ch_rec:
+                m0 = r_["m0"] if r_["m0"] is not None else np.zeros_like(r_["m1"])
+                x_ = r_["a"]
+                tr_.append(dict(state={k: m0[j] for j, k in enumerate(TB.MAP_KEYS)},
+                                next_state={k: r_["m1"][j] for j, k in enumerate(TB.MAP_KEYS)},
+                                action=(x_ // 9, {"lr": (x_ % 9) // 3, "epochs": x_ % 3}), reward=-r_["err"],
+                                done=r_["done"], epochs_real=r_["epochs"], spent=r_["spent"], l2re=TB.num(r_["l2re"]),
+                                explore=r_["explore"]))
+            rec_ = f"{tag}_c{traj:04d}"
+            meta_ = dict(format=TB.FORMAT, pde=args.pde, tag=args.save_chains, record=rec_, seed=args.seed,
+                         env=dict(keep_opt=bool(args.keep_opt), mode=(args.keep_opt_mode if args.keep_opt else None),
+                                  budget=int(args.episode_budget or args.budget)),
+                         truncated=bool(truncated), source="online_train", policy="dqn", eps=round(float(eps), 4),
+                         warm_start=os.path.basename(str(args.warm_start or "")), state_mode=args.state_mode)
+            p_ = TB.save_chain(os.path.join(args.save_dir, "buffers_new", args.save_chains, sc_sub), f"{rec_}.pt",
+                               tr_, f"{args.save_chains}#{rec_}", None, meta_)
+            sc_files.append(p_)
+            sc_pending.append(p_)
+            sc_n[0] += len(tr_)
+
         if chain and not truncated:
             if args.sil and sil_buf is not None and np.isfinite(l2re):
                 sil_buf.add_chain(l2re, chain_trans)
@@ -2292,6 +2478,8 @@ def main():
                            meta=run_meta)
             if args.save_buffer and (len(chains) % args.save_every == 0) and not args.smoke:
                 save_buffer(buf_records, mean, std, tag, run_meta)
+            if args.save_chains and (len(chains) % args.save_every == 0):
+                flush_chains()
 
     if last_row is not None and not args.smoke:
         # итоговая строка: по ней launch_queue.py решает, что обучение закончено (elapsed_h)
@@ -2303,6 +2491,10 @@ def main():
         save_buffer(buf_records, mean, std, tag, run_meta)
         print(f"буфер сохранён: buffer_{tag}.pt, переходов {len(buf_records)}", flush=True)
         print(f"агент сохранён: agent_{tag}.pt и rl_arch/agents_online/{tag}.pt", flush=True)
+    if args.save_chains:
+        flush_chains(final=True)
+        print(f"цепочки сохранены: файлов {len(sc_files)}, переходов {sc_n[0]} "
+              f"({os.path.join(args.save_dir, 'buffers_new', args.save_chains)})", flush=True)
 
     print(f"\nИТОГ: завершённых цепочек {len(chains)}, "
           f"l2re последней завершённой = {chains[-1]['l2re']:.4e}" if chains else "\nИТОГ: ни одной завершённой цепочки",

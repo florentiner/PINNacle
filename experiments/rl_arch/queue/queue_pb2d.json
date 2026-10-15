@@ -14288,6 +14288,631 @@
    ]
   },
   {
+   "id": "pb2d-w46-pre-n130",
+   "wave": 46,
+   "group": "H06",
+   "hours": 0.6,
+   "needs": [],
+   "note": "MAE только на картах poisson_boltzmann_2d: 130 переходов, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w46n130pb2d --subdirs poisson_boltzmann_2d --max-per-pde 130 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-n130-m1",
+   "wave": 46,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n130pb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE только на картах цели (n130), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n130pb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w46n130one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w46n130one_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w46n130one_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-n130-m2",
+   "wave": 46,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n130pb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE только на картах цели (n130), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n130pb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w46n130one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w46n130one_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w46n130one_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-pre-n1k",
+   "wave": 46,
+   "group": "H06",
+   "hours": 0.6,
+   "needs": [],
+   "note": "MAE только на картах poisson_boltzmann_2d: 1000 переходов, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w46n1kpb2d --subdirs poisson_boltzmann_2d --max-per-pde 1000 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-n1k-m1",
+   "wave": 46,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n1kpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE только на картах цели (n1k), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n1kpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w46n1kone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w46n1kone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w46n1kone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-n1k-m2",
+   "wave": 46,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n1kpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE только на картах цели (n1k), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n1kpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w46n1kone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w46n1kone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w46n1kone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-pre-all",
+   "wave": 46,
+   "group": "H06",
+   "hours": 0.6,
+   "needs": [],
+   "note": "MAE только на картах poisson_boltzmann_2d: весь исходный буфер, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w46allpb2d --subdirs poisson_boltzmann_2d --max-per-pde 0 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-all-m1",
+   "wave": 46,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46allpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE только на картах цели (all), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46allpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w46allone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w46allone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w46allone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w46-all-m2",
+   "wave": 46,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46allpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE только на картах цели (all), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46allpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w46allone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w46allone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w46allone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w0",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 0: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 100 --tag qpb2d_scr_r0_w0"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w1",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 1: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 101 --tag qpb2d_scr_r0_w1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w2",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 2: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 102 --tag qpb2d_scr_r0_w2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w3",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 3: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 103 --tag qpb2d_scr_r0_w3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w4",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 4: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 104 --tag qpb2d_scr_r0_w4"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w5",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 5: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 105 --tag qpb2d_scr_r0_w5"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w6",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 6: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 106 --tag qpb2d_scr_r0_w6"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-w7",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 7: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 75 --seed 107 --tag qpb2d_scr_r0_w7"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r0-learn",
+   "wave": 47,
+   "group": "H06",
+   "hours": 4.6,
+   "needs": [
+    "rl_arch/buffers_new/online_scratch_pb2d_r0_done/qpb2d_scr_r0_w0.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r0_done/qpb2d_scr_r0_w1.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r0_done/qpb2d_scr_r0_w2.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r0_done/qpb2d_scr_r0_w3.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r0_done/qpb2d_scr_r0_w4.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r0_done/qpb2d_scr_r0_w5.json"
+   ],
+   "note": "с нуля онлайн, ученик раунда 0: 6000 обновлений по раундам 0..0, агент в HF, оценка на сидах 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/online_scratch_pb2d_r0_done --n 8 --min 6 --hours 0.5"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 0 --learn-only --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --pre-updates 6000 --seed 1 --tag qpb2d_scratch_r0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_scratch_r0.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_scratch_r0_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w0",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 0: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 200 --tag qpb2d_scr_r1_w0"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w1",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 1: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 201 --tag qpb2d_scr_r1_w1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w2",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 2: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 202 --tag qpb2d_scr_r1_w2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w3",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 3: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 203 --tag qpb2d_scr_r1_w3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w4",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 4: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 204 --tag qpb2d_scr_r1_w4"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w5",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 5: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 205 --tag qpb2d_scr_r1_w5"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w6",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 6: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 206 --tag qpb2d_scr_r1_w6"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-w7",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 7: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r1 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 50 --seed 207 --tag qpb2d_scr_r1_w7"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r1-learn",
+   "wave": 47,
+   "group": "H06",
+   "hours": 4.6,
+   "needs": [
+    "rl_arch/buffers_new/online_scratch_pb2d_r1_done/qpb2d_scr_r1_w0.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r1_done/qpb2d_scr_r1_w1.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r1_done/qpb2d_scr_r1_w2.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r1_done/qpb2d_scr_r1_w3.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r1_done/qpb2d_scr_r1_w4.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r1_done/qpb2d_scr_r1_w5.json",
+    "rl_arch/agents_online/qpb2d_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, ученик раунда 1: 6000 обновлений по раундам 0..1, агент в HF, оценка на сидах 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/online_scratch_pb2d_r1_done --n 8 --min 6 --hours 0.5"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 0 --learn-only --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --pre-updates 6000 --warm-start rl_arch/agents_online/qpb2d_scratch_r0.pt --warm-strict --bn-mode train --seed 1 --tag qpb2d_scratch_r1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_scratch_r1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_scratch_r1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w0",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 0: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 300 --tag qpb2d_scr_r2_w0"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w1",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 1: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 301 --tag qpb2d_scr_r2_w1"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w2",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 2: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 302 --tag qpb2d_scr_r2_w2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w3",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 3: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 303 --tag qpb2d_scr_r2_w3"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w4",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 4: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 304 --tag qpb2d_scr_r2_w4"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w5",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 5: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 305 --tag qpb2d_scr_r2_w5"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w6",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 6: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 306 --tag qpb2d_scr_r2_w6"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-w7",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 7: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_pb2d_r2 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 50 --seed 307 --tag qpb2d_scr_r2_w7"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w47-r2-learn",
+   "wave": 47,
+   "group": "H06",
+   "hours": 4.6,
+   "needs": [
+    "rl_arch/buffers_new/online_scratch_pb2d_r2_done/qpb2d_scr_r2_w0.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r2_done/qpb2d_scr_r2_w1.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r2_done/qpb2d_scr_r2_w2.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r2_done/qpb2d_scr_r2_w3.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r2_done/qpb2d_scr_r2_w4.json",
+    "rl_arch/buffers_new/online_scratch_pb2d_r2_done/qpb2d_scr_r2_w5.json",
+    "rl_arch/agents_online/qpb2d_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, ученик раунда 2: 6000 обновлений по раундам 0..2, агент в HF, оценка на сидах 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/online_scratch_pb2d_r2_done --n 8 --min 6 --hours 0.5"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde poissonboltzmann2d --scalar-ctx --ctx-no-err --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 0 --learn-only --preload-online rl_arch/buffers_new/online_scratch_pb2d_r0,rl_arch/buffers_new/online_scratch_pb2d_r1,rl_arch/buffers_new/online_scratch_pb2d_r2 --pre-updates 6000 --warm-start rl_arch/agents_online/qpb2d_scratch_r1.pt --warm-strict --bn-mode train --seed 1 --tag qpb2d_scratch_r2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/qpb2d_scratch_r2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_scratch_r2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

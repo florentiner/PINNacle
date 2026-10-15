@@ -1688,6 +1688,121 @@ if W28_K:
         1.2, needs=[b for _, b in _main + _extra] + [ENC_MAE],
         note=f"отбор агентов без оценки в среде: суррогат и FQE, основных {len(_main)}, дополнительных {len(_extra)}")
 
+# ---------------------------------------------------------------- волна 46
+# Предобучение MAE только на картах самой задачи-цели (вопрос рецензента: нужны ли карты 22 задач). Энкодер
+# предобучается зондом CV (cv_probe.py --pretrain-only: без level, фолдов и lopo) на картах исходного (случайного)
+# буфера цели трёх объёмов: 130 переходов (как направленно собранный буфер рецепта), 1000 и все (pb2d ~5 841,
+# ns2d ~12 214); --max-per-pde берёт случайные цепочки целиком. Число шагов предобучения у всех трёх одно
+# (--ssl-steps 1400 — как у ENC_MAE: 4 эпохи по ~350 пачек из 512 на ~180 тыс. карт), меняется только объём
+# карт. Отдельный кернел на (задачу, объём) выгружает энкодер в HF rl_arch/encoders/; затем лидер (pb2d — одна
+# сеть, ns2d — две) учится с ним дважды (сиды обучения 1 и 2, тот же учитель и собранный буфер, что в волне 41) и
+# оценивается на сидах 42-46 (страж, без сбросов, бюджет 7000). Контроль — лидер с ENC_MAE (22 задачи): волны 41/43
+# (t3m_ete_tbquart_g, t3m_w41one_m2/m3_g на pb2d; t3m_ete_two_g, t3m_w41two_m2/m3_g на ns2d) и без карт цели —
+# t3m_w41ho<арх>_g. На ns2d оценка делится на два кернела (сиды 42-44 вместе с обучением, 45-46 по модели из HF):
+# сид ns2d ~1.4 GPU-ч, кернел не больше 9 часов.
+W46_SIZES = (("n130", 130), ("n1k", 1000), ("all", 0))
+W46_SSL_STEPS = 1400
+W46_SEED_H = 1.4 if NS2D else 0.7
+W46_PRE_H = 0.8 if NS2D else 0.6
+if W28_K:
+    _arch = W41_LEAD
+    for _sz, _n in W46_SIZES:
+        _cvtag = f"w46{_sz}{W28_SHORT}"
+        _enc = f"rl_arch/encoders/cvprobe_{_cvtag}_enc_mae_resnet.pt"
+        add(f"w46-pre-{_sz}", 46, "H06",
+            [(CVPROBE, f"--tag {_cvtag} --subdirs {SUBDIR} --max-per-pde {_n} --configs ssl-mae-resnet --pretrain-only "
+                       f"--ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}")],
+            W46_PRE_H, note=f"MAE только на картах {SUBDIR}: " + (f"{_n} переходов" if _n else "весь исходный буфер")
+                             + f", {W46_SSL_STEPS} шагов, энкодер в HF")
+        _mt = f"w46{_sz}{_arch}"
+        for _m in (1, 2):
+            _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+            _eh = lambda sd: (0.4 if NS2D else 0.3) + W46_SEED_H * len(sd.split(","))   # noqa: E731
+            add(f"w46-{_sz}-m{_m}", 46, "H06",
+                [w41_train(_arch, _m, _mt, init=_enc),
+                 free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=[_enc, W41_TEACH[_arch]],
+                note=f"лидер ({_arch}) с MAE только на картах цели ({_sz}), сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w46-{_sz}-m{_m}-b", 46, "H06",
+                    [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"лидер ({_arch}) с MAE только на картах цели ({_sz}), сид обучения {_m}, сиды {_blocks[1]}")
+
+# ---------------------------------------------------------------- волна 47
+# Агент с нуля только на своих онлайновых данных: без офлайнового буфера, без предобучения MAE, без учителя и
+# суррогата. DQN на картах (тот же ResNet, что у рецепта, случайная инициализация), скалярный контекст, все 27
+# действий без маски, среда без сбросов (safe), бюджет 7000, награда-разность с границами ценности. Один кернел
+# за 10 часов собирает ~14 (pb2d) / ~7 (ns2d) цепочек, поэтому раунды из W = 8 параллельных работников:
+#   работник раунда r (online_train_env.py, 10 ч): r = 0 — сеть с нуля (у каждого свой сид среды и сети: при
+#     eps >= 0.5 и выброшенной после раунда сети инициализация работника на результат не влияет); r >= 1 —
+#     строгий тёплый старт от агента ученика прошлого раунда, в общем буфере все переходы раундов 0..r-1
+#     (--preload-online), затем обычный онлайновый DQN тренера (5 обновлений по 32 на шаг среды) с eps по
+#     расписанию раунда. Цепочки — файлами буфера с картами (--save-chains) в rl_arch/buffers_new/<буфер раунда>/,
+#     в конце — метка прогона в <буфер раунда>_done/;
+#   ученик раунда r (кернел после 6 из 8 меток раунда; ждёт остальные до 0.5 ч): тёплый старт от ученика r-1
+#     (r = 0 — с нуля, сид 1), все переходы раундов 0..r в общем буфере, K обновлений собственным лоссом тренера
+#     (K = 5 обновлений на собранный переход раунда: та же доля, что у работника), агент в HF
+#     rl_arch/agents_online/<Q>_scratch_r<r>.pt (--learn-only), затем оценка этого агента на сидах 42-46 (страж,
+#     без сбросов) — тег t3m_scratch_r<r>_g. На ns2d сиды 45-46 — отдельным кернелом.
+# Кривая обучения: ошибка t3m_scratch_r<r>_g против GPU-часов сбора (8 x 10.5 на раунд). Нормировка карт — по
+# переходам раунда 0 у ученика r = 0, дальше наследуется чекпоинтом. eps: раунд 0 — 1.0 -> 0.5, раунд 1 —
+# 0.5 -> 0.05, раунд 2 — 0.1 -> 0.05 (постоянная затухания — доля шагов работника за раунд: ~150 на pb2d, ~75 на ns2d).
+W47_W = 8
+W47_ROUNDS = 3
+W47_STEPS = 75 if NS2D else 150                   # шагов среды у работника за 10 часов (~11 действий на цепочку)
+W47_EPS = {0: (1.0, 0.5, W47_STEPS // 2), 1: (0.5, 0.05, W47_STEPS // 3), 2: (0.1, 0.05, W47_STEPS // 3)}
+W47_K = 5 * W47_W * W47_STEPS                     # обновлений ученика за раунд: 6000 на pb2d, 3000 на ns2d
+W47_BASE = (f"--variant convnext_dqn --encoder resnet --pde {PDE}{PLAIN} --scalar-ctx --ctx-no-err "
+            f"--init-err {INIT_ERR} --value-bound --gamma 0.99 --episode-budget {BUDGET} --tolerance 0 "
+            f"--max-chain-steps 70 {KEEPS}")
+W47_SEED_H = 1.4 if NS2D else 0.7
+
+
+def w47_buf(r):
+    return f"rl_arch/buffers_new/online_scratch_{W28_SHORT}_r{r}"
+
+
+def w47_agent(r):
+    return f"rl_arch/agents_online/{Q}_scratch_r{r}.pt"
+
+
+if W28_K:
+    for _r in range(W47_ROUNDS):
+        _e0, _e1, _ed = W47_EPS[_r]
+        _prev = ",".join(w47_buf(k) for k in range(_r))
+        _warm = f"--warm-start {w47_agent(_r - 1)} --warm-strict --bn-mode train" if _r else ""
+        _wtags = [f"{Q}_scr_r{_r}_w{_i}" for _i in range(W47_W)]
+        for _i, _wt in enumerate(_wtags):
+            add(f"w47-r{_r}-w{_i}", 47, "H06",
+                [(TRAIN, f"{W47_BASE} --hours 10 --save-agent --save-every 5 "
+                         f"--save-chains {w47_buf(_r).split('/')[-1]} {_warm} "
+                         + (f"--preload-online {_prev} " if _prev else "")
+                         + f"--eps-start {_e0} --eps-end {_e1} --eps-decay {_ed} --seed {100 * (_r + 1) + _i} "
+                           f"--tag {_wt}")],
+                10.5, needs=[w47_agent(_r - 1)] if _r else [],
+                note=f"с нуля онлайн, раунд {_r}, работник {_i}: "
+                     + (f"старт от ученика раунда {_r - 1}, в буфере раунды 0..{_r - 1}" if _r else "сеть с нуля")
+                     + f", eps {_e0} -> {_e1}")
+        _done = f"{w47_buf(_r)}_done"
+        _src = ",".join(w47_buf(k) for k in range(_r + 1))
+        _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+        _eh = lambda sd: (0.4 if NS2D else 0.3) + W47_SEED_H * len(sd.split(","))   # noqa: E731
+        add(f"w47-r{_r}-learn", 47, "H06",
+            [("experiments/rl_arch/wait_hf.py", f"--path {_done} --n {W47_W} --min {W47_W - 2} --hours 0.5"),
+             (TRAIN, f"{W47_BASE} --hours 0 --learn-only --preload-online {_src} --pre-updates {W47_K} "
+                     f"{_warm} --seed 1 "
+                     f"--tag {Q}_scratch_r{_r}"),
+             free_eval(w47_agent(_r), f"t3m_scratch_r{_r}", _blocks[0])],
+            round(0.5 + 0.3 + _eh(_blocks[0]), 2),
+            needs=[f"{_done}/{t}.json" for t in _wtags[:W47_W - 2]] + ([w47_agent(_r - 1)] if _r else []),
+            note=f"с нуля онлайн, ученик раунда {_r}: {W47_K} обновлений по раундам 0..{_r}, агент в HF, "
+                 f"оценка на сидах {_blocks[0]}")
+        if len(_blocks) > 1:
+            add(f"w47-r{_r}-ev-b", 47, "H06", [free_eval(w47_agent(_r), f"t3m_scratch_r{_r}", _blocks[1])],
+                round(_eh(_blocks[1]), 2), needs=[w47_agent(_r)],
+                note=f"с нуля онлайн, агент ученика раунда {_r}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

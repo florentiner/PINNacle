@@ -36,6 +36,10 @@
                 в HF rl_arch/encoders/) для offline_rl.py --encoder-init
     lopo:level, lopo:best   «исключить УрЧП»: level и лучший конфиг с картами на --lopo задачах
 
+--pretrain-only — только предобучение и сохранение энкодеров (без level, фолдов и lopo; волна 46: MAE
+на картах одной задачи, --subdirs <папка> --max-per-pde N); --ssl-steps — число шагов предобучения
+вместо числа эпох, чтобы наборы разного размера получали одинаковое число шагов.
+
 Энкодеры: conv (энкодер статьи RL/rl_utils/DQN_classes.ConvEncoder; между свёртками нет
 нелинейностей, до MLP это линейное отображение со средним по карте), convnext (энкодер агентов,
 offline_rl.make_encoder), resnet (малый ResNet под 26x26), vit (патч 2, 4 слоя), cnn (первый
@@ -555,14 +559,19 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
     params = list(enc.parameters()) + list(aux.parameters())
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=args.wd)
     bs = min(args.batch, len(rows))
-    steps = args.ssl_epochs * max(1, len(rows) // bs)
+    per = max(1, len(rows) // bs)
+    # --ssl-steps: число шагов задано, эпохи подбираются под объём карт (малые наборы — больше эпох);
+    # без флага — прежние --ssl-epochs
+    n_ep = (max(1, math.ceil(args.ssl_steps / per)) if getattr(args, "ssl_steps", 0) else args.ssl_epochs)
+    steps = n_ep * per
     sched = _schedule(opt, steps)
     amp = _amp(dev, args)
     scaler = _scaler(amp)
     gen = _gen(dev, args.seed + 23)
     rows_t = torch.as_tensor(rows, device=dev)
     first = last = None
-    for ep in range(args.ssl_epochs):
+    log_every = 1 if n_ep <= 20 else n_ep // 10
+    for ep in range(n_ep):
         perm = rows_t[torch.randperm(len(rows_t), device=dev)]
         tot, k = 0.0, 0
         for i in range(0, len(perm) - bs + 1, bs):
@@ -585,10 +594,12 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
                 tot, k = tot + loss.item(), k + 1
         last = tot / max(1, k)
         first = last if first is None else first
-        log(f"    {kind}/{enc_name} эпоха {ep + 1}/{args.ssl_epochs}: лосс {last:.4f}")
+        if (ep + 1) % log_every == 0 or ep + 1 == n_ep:
+            log(f"    {kind}/{enc_name} эпоха {ep + 1}/{n_ep}: лосс {last:.4f}")
     enc.eval()
     state = {k: v.detach().cpu().clone() for k, v in enc.state_dict().items()}
-    return dict(state=state, stats=stats, seconds=time.time() - t0, loss_first=first, loss_last=last)
+    return dict(state=state, stats=stats, seconds=time.time() - t0, loss_first=first, loss_last=last,
+                epochs=int(n_ep), steps=int(steps), n_maps=int(len(rows)))
 
 
 def save_encoder(pre, kind, enc_name, D, args, log=print):
@@ -600,7 +611,8 @@ def save_encoder(pre, kind, enc_name, D, args, log=print):
     mean, std = (t.detach().float().cpu().numpy() for t in pre["stats"])
     torch.save(dict(kind="ssl_encoder", encoder=enc_name, ssl=kind, in_ch=D.C, size=D.H,
                     state_dict=pre["state"], mean=mean, std=std, tag=args.tag,
-                    ssl_epochs=int(args.ssl_epochs), loss_first=pre["loss_first"], loss_last=pre["loss_last"],
+                    ssl_epochs=int(pre.get("epochs", args.ssl_epochs)), ssl_steps=pre.get("steps"),
+                    n_maps=pre.get("n_maps"), loss_first=pre["loss_first"], loss_last=pre["loss_last"],
                     pdes=list(D.names), fingerprint=D.fingerprint), path)
     up = False
     if not args.no_upload:
@@ -1217,6 +1229,10 @@ def build_parser():
     g.add_argument("--lr", type=float, default=1e-3)
     g.add_argument("--wd", type=float, default=0.01)
     g.add_argument("--ssl-epochs", type=int, default=4)
+    g.add_argument("--ssl-steps", type=int, default=0,
+                   help="предобучение: столько шагов оптимизатора вместо --ssl-epochs эпох (эпохи подбираются под "
+                        "объём карт). Для сравнения предобучения на наборах разного размера при равном числе шагов; "
+                        "0 — по --ssl-epochs, как раньше")
     g.add_argument("--mae-ratio", type=float, default=0.6)
     g.add_argument("--con-temp", type=float, default=0.2)
     g.add_argument("--shift", type=int, default=2, help="наибольший сдвиг aug-shift и видов ssl-con, пикселей")
@@ -1237,6 +1253,10 @@ def build_parser():
                    help="сохранять и заливать в HF веса энкодера после предобучения (ssl-mae, ssl-con, "
                         "frozen): файл для offline_rl.py --encoder-init. Пишется, когда предобучение "
                         "идёт в этом запуске (при --resume уже посчитанные конфиги его не повторяют)")
+    g.add_argument("--pretrain-only", action="store_true",
+                   help="только предобучение энкодеров конфигов с самообучением (ssl-mae-<энкодер>, ssl-con-..., "
+                        "frozen...) и их сохранение (подразумевает --save-encoder): без level, без фолдов и lopo. "
+                        "Отчёт — cvprobe_<tag>.json с полем encoders (файлы, лосс, шаги, данные)")
     g.add_argument("--smoke", action="store_true")
     return ap
 
@@ -1252,6 +1272,8 @@ def run(args, log=None):
                 setattr(args, flag[2:].replace("-", "_"), v)
         args.no_upload = True
     names = expand_configs(args.configs)
+    if getattr(args, "pretrain_only", False):
+        return run_pretrain_only(args, names, log, t0)
     if args.folds < 2:
         raise SystemExit("--folds >= 2")
     if any(not n.startswith("lopo:") and n not in ("scalars", "level") for n in names) and "level" not in names:
@@ -1354,6 +1376,51 @@ def run(args, log=None):
     print_summary(report["summary"], log)
     log(f"отчёт: {path} ({report['elapsed_s']} с)")
     report["_paths"] = dict(report=path, chains=paths(args)[1])
+    return report
+
+
+def run_pretrain_only(args, names, log, t0):
+    """--pretrain-only: загрузка карт (--subdirs, --max-per-pde), предобучение и сохранение энкодера каждого
+    конфига с самообучением; ни level, ни фолдов, ни lopo. Энкодер файла — суффикс конфига, иначе --encoder
+    (auto — энкодер по умолчанию: выбирать по фолду здесь не из чего)."""
+    specs = []
+    for n in names:
+        if n.startswith("lopo:"):
+            raise SystemExit(f"--pretrain-only: конфиг {n!r} — оценка «исключить УрЧП», а не предобучение")
+        _, enc = parse_config(n)
+        sp = spec_of(n, enc or (args.encoder if args.encoder != "auto" else FALLBACK_ENCODER))
+        if not sp.get("ssl"):
+            raise SystemExit(f"--pretrain-only: у конфига {n!r} нет предобучения (нужны ssl-mae, ssl-con, frozen...)")
+        specs.append((n, sp))
+    args.save_encoder = True
+    dev = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    log(f"cv_probe {args.tag}: только предобучение, устройство {dev}, конфиги: {', '.join(names)}")
+    tab, maps = load_data(args, log)
+    D = Data(tab, maps, dev, args.data_device)
+    del maps
+    if D.H != D.W or D.H % 2:
+        raise SystemExit(f"карты {D.H}x{D.W}: энкодеры рассчитаны на квадратные карты чётного размера")
+    log(f"данные: переходов {D.n}, цепочек {D.n_ch}, задач {len(D.names)} ({', '.join(D.names)}), "
+        f"карты {D.C}x{D.H}x{D.W}, загрузка {time.time() - t0:.0f} с")
+    report = dict(kind="cv_probe_pretrain", tag=args.tag, smoke=bool(args.smoke), finished=False,
+                  settings={k: v for k, v in vars(args).items() if not k.startswith("_")},
+                  data=dict(n=D.n, chains=D.n_ch, pdes=D.names, subdirs=D.subdirs, fingerprint=D.fingerprint),
+                  device=str(dev), encoders={})
+    cache = dict(pre={}, z={})
+    for n, sp in specs:
+        pre = get_pre(sp, D, args, dev, cache, log)
+        report["encoders"][n] = dict(ssl=sp["ssl"], encoder=sp["encoder"],
+                                     file=f"{ENC_DIR}/{os.path.basename(pre['file'])}",
+                                     seconds=round(pre["seconds"], 1), loss_first=pre["loss_first"],
+                                     loss_last=pre["loss_last"], epochs=pre["epochs"], steps=pre["steps"],
+                                     n_maps=pre["n_maps"])
+        log(f"{n}: {pre['steps']} шагов ({pre['epochs']} эпох по {pre['n_maps']} картам), лосс "
+            f"{pre['loss_first']:.4f} -> {pre['loss_last']:.4f}, {pre['seconds']:.0f} с")
+    report["finished"] = True
+    path = save_report(report, args, t0, do_upload=False)
+    upload(path, args, tries=6)
+    log(f"отчёт: {path} ({report['elapsed_s']} с)")
+    report["_paths"] = dict(report=path)
     return report
 
 

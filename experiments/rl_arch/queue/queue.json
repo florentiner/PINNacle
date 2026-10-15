@@ -15422,6 +15422,775 @@
    ]
   },
   {
+   "id": "w46-pre-n130",
+   "wave": 46,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [],
+   "note": "MAE только на картах ns2d_liddriven: 130 переходов, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w46n130ns2d --subdirs ns2d_liddriven --max-per-pde 130 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w46-n130-m1",
+   "wave": 46,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n130ns2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n130), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n130ns2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w46n130two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w46n130two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w46n130two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-n130-m1-b",
+   "wave": 46,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n130two_seed1.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n130), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n130two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w46n130two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-n130-m2",
+   "wave": 46,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n130ns2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n130), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n130ns2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w46n130two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w46n130two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w46n130two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-n130-m2-b",
+   "wave": 46,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n130two_seed2.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n130), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n130two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w46n130two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-pre-n1k",
+   "wave": 46,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [],
+   "note": "MAE только на картах ns2d_liddriven: 1000 переходов, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w46n1kns2d --subdirs ns2d_liddriven --max-per-pde 1000 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w46-n1k-m1",
+   "wave": 46,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n1kns2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n1k), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n1kns2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w46n1ktwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w46n1ktwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w46n1ktwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-n1k-m1-b",
+   "wave": 46,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n1ktwo_seed1.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n1k), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n1ktwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w46n1ktwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-n1k-m2",
+   "wave": 46,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46n1kns2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n1k), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46n1kns2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w46n1ktwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w46n1ktwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w46n1ktwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-n1k-m2-b",
+   "wave": 46,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n1ktwo_seed2.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (n1k), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46n1ktwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w46n1ktwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-pre-all",
+   "wave": 46,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [],
+   "note": "MAE только на картах ns2d_liddriven: весь исходный буфер, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w46allns2d --subdirs ns2d_liddriven --max-per-pde 0 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w46-all-m1",
+   "wave": 46,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46allns2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (all), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46allns2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w46alltwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w46alltwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w46alltwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-all-m1-b",
+   "wave": 46,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46alltwo_seed1.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (all), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46alltwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w46alltwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-all-m2",
+   "wave": 46,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w46allns2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (all), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w46allns2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w46alltwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w46alltwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w46alltwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w46-all-m2-b",
+   "wave": 46,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46alltwo_seed2.pt"
+   ],
+   "note": "лидер (two) с MAE только на картах цели (all), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w46alltwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w46alltwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w0",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 0: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 100 --tag q_scr_r0_w0"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w1",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 1: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 101 --tag q_scr_r0_w1"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w2",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 2: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 102 --tag q_scr_r0_w2"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w3",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 3: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 103 --tag q_scr_r0_w3"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w4",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 4: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 104 --tag q_scr_r0_w4"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w5",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 5: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 105 --tag q_scr_r0_w5"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w6",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 6: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 106 --tag q_scr_r0_w6"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-w7",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [],
+   "note": "с нуля онлайн, раунд 0, работник 7: сеть с нуля, eps 1.0 -> 0.5",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r0 --eps-start 1.0 --eps-end 0.5 --eps-decay 37 --seed 107 --tag q_scr_r0_w7"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-learn",
+   "wave": 47,
+   "group": "H06",
+   "hours": 5.4,
+   "needs": [
+    "rl_arch/buffers_new/online_scratch_ns2d_r0_done/q_scr_r0_w0.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r0_done/q_scr_r0_w1.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r0_done/q_scr_r0_w2.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r0_done/q_scr_r0_w3.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r0_done/q_scr_r0_w4.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r0_done/q_scr_r0_w5.json"
+   ],
+   "note": "с нуля онлайн, ученик раунда 0: 3000 обновлений по раундам 0..0, агент в HF, оценка на сидах 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/online_scratch_ns2d_r0_done --n 8 --min 6 --hours 0.5"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 0 --learn-only --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --pre-updates 3000 --seed 1 --tag q_scratch_r0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_scratch_r0.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_scratch_r0_g"
+    }
+   ]
+  },
+  {
+   "id": "w47-r0-ev-b",
+   "wave": 47,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, агент ученика раунда 0, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_scratch_r0.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_scratch_r0_g"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w0",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 0: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 200 --tag q_scr_r1_w0"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w1",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 1: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 201 --tag q_scr_r1_w1"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w2",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 2: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 202 --tag q_scr_r1_w2"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w3",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 3: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 203 --tag q_scr_r1_w3"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w4",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 4: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 204 --tag q_scr_r1_w4"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w5",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 5: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 205 --tag q_scr_r1_w5"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w6",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 6: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 206 --tag q_scr_r1_w6"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-w7",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, раунд 1, работник 7: старт от ученика раунда 0, в буфере раунды 0..0, eps 0.5 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r1 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0 --eps-start 0.5 --eps-end 0.05 --eps-decay 25 --seed 207 --tag q_scr_r1_w7"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-learn",
+   "wave": 47,
+   "group": "H06",
+   "hours": 5.4,
+   "needs": [
+    "rl_arch/buffers_new/online_scratch_ns2d_r1_done/q_scr_r1_w0.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r1_done/q_scr_r1_w1.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r1_done/q_scr_r1_w2.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r1_done/q_scr_r1_w3.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r1_done/q_scr_r1_w4.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r1_done/q_scr_r1_w5.json",
+    "rl_arch/agents_online/q_scratch_r0.pt"
+   ],
+   "note": "с нуля онлайн, ученик раунда 1: 3000 обновлений по раундам 0..1, агент в HF, оценка на сидах 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/online_scratch_ns2d_r1_done --n 8 --min 6 --hours 0.5"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 0 --learn-only --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --pre-updates 3000 --warm-start rl_arch/agents_online/q_scratch_r0.pt --warm-strict --bn-mode train --seed 1 --tag q_scratch_r1"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_scratch_r1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_scratch_r1_g"
+    }
+   ]
+  },
+  {
+   "id": "w47-r1-ev-b",
+   "wave": 47,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, агент ученика раунда 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_scratch_r1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_scratch_r1_g"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w0",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 0: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 300 --tag q_scr_r2_w0"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w1",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 1: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 301 --tag q_scr_r2_w1"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w2",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 2: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 302 --tag q_scr_r2_w2"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w3",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 3: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 303 --tag q_scr_r2_w3"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w4",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 4: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 304 --tag q_scr_r2_w4"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w5",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 5: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 305 --tag q_scr_r2_w5"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w6",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 6: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 306 --tag q_scr_r2_w6"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-w7",
+   "wave": 47,
+   "group": "H06",
+   "hours": 10.5,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, раунд 2, работник 7: старт от ученика раунда 1, в буфере раунды 0..1, eps 0.1 -> 0.05",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 10 --save-agent --save-every 5 --save-chains online_scratch_ns2d_r2 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1 --eps-start 0.1 --eps-end 0.05 --eps-decay 25 --seed 307 --tag q_scr_r2_w7"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-learn",
+   "wave": 47,
+   "group": "H06",
+   "hours": 5.4,
+   "needs": [
+    "rl_arch/buffers_new/online_scratch_ns2d_r2_done/q_scr_r2_w0.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r2_done/q_scr_r2_w1.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r2_done/q_scr_r2_w2.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r2_done/q_scr_r2_w3.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r2_done/q_scr_r2_w4.json",
+    "rl_arch/buffers_new/online_scratch_ns2d_r2_done/q_scr_r2_w5.json",
+    "rl_arch/agents_online/q_scratch_r1.pt"
+   ],
+   "note": "с нуля онлайн, ученик раунда 2: 3000 обновлений по раундам 0..2, агент в HF, оценка на сидах 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/wait_hf.py",
+     "args": "--path rl_arch/buffers_new/online_scratch_ns2d_r2_done --n 8 --min 6 --hours 0.5"
+    },
+    {
+     "script": "experiments/rl_arch/online_train_env.py",
+     "args": "--variant convnext_dqn --encoder resnet --pde ns2d_liddriven --scalar-ctx --ctx-no-err --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --tolerance 0 --max-chain-steps 70 --keep-opt --keep-opt-mode safe --hours 0 --learn-only --preload-online rl_arch/buffers_new/online_scratch_ns2d_r0,rl_arch/buffers_new/online_scratch_ns2d_r1,rl_arch/buffers_new/online_scratch_ns2d_r2 --pre-updates 3000 --warm-start rl_arch/agents_online/q_scratch_r1.pt --warm-strict --bn-mode train --seed 1 --tag q_scratch_r2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_scratch_r2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_scratch_r2_g"
+    }
+   ]
+  },
+  {
+   "id": "w47-r2-ev-b",
+   "wave": 47,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/agents_online/q_scratch_r2.pt"
+   ],
+   "note": "с нуля онлайн, агент ученика раунда 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/q_scratch_r2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_scratch_r2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",
