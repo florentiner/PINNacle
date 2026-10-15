@@ -16935,6 +16935,110 @@
    ]
   },
   {
+   "id": "w51-lead-a",
+   "wave": 51,
+   "group": "H06",
+   "hours": 4.9,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "страж застоя: готовый лидер (две сети), сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w51lead_sg"
+    }
+   ]
+  },
+  {
+   "id": "w51-lead-b",
+   "wave": 51,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "страж застоя: готовый лидер (две сети), сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w51lead_sg"
+    }
+   ]
+  },
+  {
+   "id": "w51-cnxtwo-m1",
+   "wave": 51,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "рецепт (two) с ConvNeXt без предобучения, сид обучения 1, страж застоя, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w51cnxtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w51cnxtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w51cnxtwo_m1_sg"
+    }
+   ]
+  },
+  {
+   "id": "w51-cnxtwo-m1-b",
+   "wave": 51,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w51cnxtwo_seed1.pt"
+   ],
+   "note": "рецепт (two) с ConvNeXt без предобучения, сид обучения 1, страж застоя, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w51cnxtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w51cnxtwo_m1_sg"
+    }
+   ]
+  },
+  {
+   "id": "w51-cnxtwo-m2",
+   "wave": 51,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "рецепт (two) с ConvNeXt без предобучения, сид обучения 2, страж застоя, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w51cnxtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w51cnxtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w51cnxtwo_m2_sg"
+    }
+   ]
+  },
+  {
+   "id": "w51-cnxtwo-m2-b",
+   "wave": 51,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w51cnxtwo_seed2.pt"
+   ],
+   "note": "рецепт (two) с ConvNeXt без предобучения, сид обучения 2, страж застоя, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w51cnxtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w51cnxtwo_m2_sg"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

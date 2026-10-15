@@ -32,6 +32,12 @@ the env's delta/reward logic is replicated locally.
 строкой), --explore-eps / --explore-stall / --stall-ratio добавляют разведку. Формат файла, учёт
 откатов стража и эпох — в докстринге target_buffer.py; тренеры читают старые и новые данные через
 --target-buffer старый,rl_arch/buffers_new/<тег>. Без этих флагов прогон, строка и чекпоинт прежние.
+
+Страж застоя (--stall-guard, --stall-window W, --stall-min X): действие агента длиннее W эпох проверяется
+каждые W эпох (StallCheck); если обучающий лосс за окно упал меньше чем на долю X, действие останавливается, и
+остаток его эпох исполняет --guard-fallback (кусками своей длины). Эпохи шага те же, состояние строится после
+всего шага, прошлое действие в контексте — запасное (как после отката стража). Срезы — stall_log и stall_spent
+в строке результата. Без флага прогон, строка и чекпоинт прежние.
 """
 from __future__ import annotations
 
@@ -481,6 +487,49 @@ def build_state(raw, prev_raw):
     return torch.stack([tot, op, bn, delta]).numpy().astype(np.float32)
 
 
+def fresh_train_loss(model):
+    """Обучающий лосс в текущей точке тем же прямым проходом, каким deepxde считает
+    train_state.loss_train в _test (с весами лоссов); веса, оптимизатор и поток случайных чисел
+    не меняются, история лосса не пополняется."""
+    ts = model.train_state
+    lv = model._outputs_losses(True, ts.X_train, ts.y_train, ts.train_aux_vars)[1]
+    return float(np.sum(np.asarray(lv, dtype=float)))
+
+
+class StallCheck(dde.callbacks.Callback):
+    """Страж застоя (--stall-guard) внутри одного model.train: на каждой границе окна (window,
+    2*window, ... эпох от начала действия, кроме конца действия) обучающий лосс сравнивается с лоссом
+    на начале окна. Если он упал меньше чем на долю min_drop (loss_now > (1 - min_drop) * loss_окна)
+    или не конечен — обучение останавливается (model.stop_training), в cut пишется (эпох до среза,
+    отношение лоссов). Это те же куски по window эпох, но одним вызовом train: сохранение траектории
+    для карт и тестер действия, которое не срезано, остаются прежними."""
+
+    def __init__(self, window, min_drop, epochs):
+        super().__init__()
+        self.window, self.min_drop, self.epochs = int(window), float(min_drop), int(epochs)
+        self.ref, self.step0, self.cut = None, 0, None
+
+    def on_train_begin(self):
+        # deepxde считает лоссы (_test) перед on_train_begin: это лосс на начале действия
+        self.step0 = int(self.model.train_state.step)
+        self.ref = float(np.sum(np.asarray(self.model.train_state.loss_train, dtype=float)))
+
+    def on_epoch_end(self):
+        done = int(self.model.train_state.step) - self.step0
+        if self.cut is not None or done % self.window or done >= self.epochs:
+            return
+        now = fresh_train_loss(self.model)
+        if not np.isfinite(self.ref):
+            self.ref = now           # начало окна не конечно — сравнивать не с чем
+            return
+        ratio = now / self.ref if self.ref > 0 else float("nan")
+        if not np.isfinite(now) or now > (1.0 - self.min_drop) * self.ref:
+            self.cut = (done, float(ratio) if np.isfinite(ratio) else None)
+            self.model.stop_training = True
+        else:
+            self.ref = now
+
+
 def run_seed(seed, args, progress_cb=None):
     from experiments.chain_eval.pde_registry import build_get_model
     from src.utils.callbacks import TesterCallback, ModelSaverCallback
@@ -581,8 +630,12 @@ def run_seed(seed, args, progress_cb=None):
         sys.exit("--state-mode rebuild имеет смысл только с --state-compare: агент действует по первой "
                  "сборке карт, а записывается, что он выбрал бы по второй")
     build_maps = (not args.no_state) and (not mapless or args.state_compare or not needs_agent)
-    guard_fb = parse_action_spec(args.guard_fallback) if args.guard_rollback else None
+    # страж застоя (--stall-guard): длинное действие агента, у которого обучающий лосс за окно почти не
+    # упал, срезается, остаток его эпох уходит запасному действию стража (--guard-fallback)
+    stall_on = bool(getattr(args, "stall_guard", False))
+    guard_fb = parse_action_spec(args.guard_fallback) if (args.guard_rollback or stall_on) else None
     guard_log, guard_spent = [], 0
+    stall_log, stall_spent = [], 0
     # щит (--shield): ансамбль суррогата среды запрещает агенту действия, у которых пессимистичный
     # прогноз изменения log10 ошибки не отрицателен; агент выбирает по своим Q среди оставшихся
     shield, shield_log = None, []
@@ -704,6 +757,7 @@ def run_seed(seed, args, progress_cb=None):
         prev_loss_tot = t3.get("prev_loss_tot")
         tele_log = t3.get("tele_log", [])
         guard_log, guard_spent = t3.get("guard_log", []), t3.get("guard_spent", 0)
+        stall_log, stall_spent = t3.get("stall_log", []), t3.get("stall_spent", 0)
         shield_log = t3.get("shield_log", [])
         prev_raw2, stale_maps = t3.get("prev_raw2"), t3.get("stale_maps")
         agree, hist = t3.get("agree", []), t3.get("hist", [])
@@ -735,6 +789,7 @@ def run_seed(seed, args, progress_cb=None):
                   tele_log=tele_log,
                   guard_log=guard_log, guard_spent=guard_spent, stale_maps=stale_maps,
                   shield_log=shield_log,
+                  **(dict(stall_log=stall_log, stall_spent=stall_spent) if stall_on else {}),
                   prev_raw2=({k: v.detach().cpu() for k, v in prev_raw2.items()}
                              if prev_raw2 is not None else None),
                   times=(t_ae_tot, t_srf_tot, t_opt_tot), bd=bd,
@@ -907,6 +962,13 @@ def run_seed(seed, args, progress_cb=None):
             model.compile(optimizer, loss_weights=loss_weights)
             tester = TesterCallback(log_every=args.display_every)
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
+            cbs, stall_cb, stall_cut = [tester, saver], None, False
+            if (stall_on and (use_agent or args.policy == "random") and a != guard_fb
+                    and epochs > args.stall_window):
+                # страж застоя: только действия агента (или случайной политики) длиннее окна; запасное
+                # действие (в том числе после отката) не срезается
+                stall_cb = StallCheck(args.stall_window, args.stall_min, epochs)
+                cbs.append(stall_cb)
             if want_tele:
                 # начало кривой этого действия и веса до него (откат стража берёт новые)
                 tele_h0, tele_th0 = len(model.losshistory.steps), flat_params(model.net)
@@ -914,9 +976,49 @@ def run_seed(seed, args, progress_cb=None):
             model.train(iterations=epochs,
                         display_every=(tele_display_every(epochs, args.display_every) if want_tele
                                        else args.display_every),
-                        callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
+                        callbacks=cbs, model_save_path=save_dir, save_model=False)
             t_opt_tot += time.time() - t_op
-            spent += epochs
+            if stall_cb is not None and stall_cb.cut is not None:
+                # застой: действие агента остановлено после done эпох, остаток его эпох исполняет
+                # запасное действие кусками своей длины (последний — по остатку). Число эпох шага и
+                # счёт бюджета прежние. Оптимизатор сбрасывается, как при откате стража: запасное
+                # начинает с чистого состояния, дальше его куски идут через reuse_optimizer (с --keep-opt
+                # история L-BFGS переходит между кусками, как между подряд идущими действиями). Карты,
+                # телеметрия и метрики следующего состояния — по последнему куску запасного, прошлое
+                # действие в контексте — запасное (как после отката)
+                done, ratio = stall_cb.cut
+                rem = epochs - done
+                spent += done
+                stall_log.append([len(chain) + 1, int(a), int(done),
+                                  None if ratio is None else round(ratio, 6), int(rem)])
+                stall_spent += rem
+                print(f"[seed {seed}] страж застоя: {opt_name} lr={lr} ep={epochs} — за {args.stall_window} "
+                      f"эпох лосс x{'nan' if ratio is None else '%.4f' % ratio} после {done} эпох, остаток "
+                      f"{rem} эпох — запасному действию", flush=True)
+                opt_cache.clear()
+                fb_name, fb_lr, fb_ep = ALL_ACTIONS[guard_fb]
+                left = rem
+                while left > 0:
+                    ep_c = min(fb_ep, left)
+                    model.compile(reuse_optimizer(opt_cache, fb_name, fb_lr, model.net, keep_opt, keep_mode),
+                                  loss_weights=loss_weights)
+                    # тестер считает метрики раз в log_every эпох: кусок должен делиться на log_every,
+                    # иначе метрики шага отстают от конца куска (а кусок короче log_every дал бы inf)
+                    tester = TesterCallback(log_every=math.gcd(ep_c, args.display_every))
+                    saver = ModelSaverCallback(total_iterations=ep_c, n_save_models=args.n_save_models)
+                    if want_tele:
+                        tele_h0, tele_th0 = len(model.losshistory.steps), flat_params(model.net)
+                    t_op = time.time()
+                    model.train(iterations=ep_c,
+                                display_every=(tele_display_every(ep_c, args.display_every) if want_tele
+                                               else args.display_every),
+                                callbacks=[tester, saver], model_save_path=save_dir, save_model=False)
+                    t_opt_tot += time.time() - t_op
+                    spent += ep_c
+                    left -= ep_c
+                stall_cut = True
+            else:
+                spent += epochs
             cur_loss = train_loss_now()
             worse = (not np.isfinite(cur_loss)) or (loss_before is not None
                                                      and cur_loss > args.guard_rollback * loss_before)
@@ -940,6 +1042,11 @@ def run_seed(seed, args, progress_cb=None):
             tele_obs = tele_observe(model, tele_h0, tele_th0, prev_loss_tot)
             tele_log.append([len(chain), int(spent)] + [round(float(v), 4) for v in tele_obs[0][:, 0, 0]])
         last_a = a if a < 27 else -1      # действие вне пространства агента в контексте неизвестно
+        if stall_cut:
+            # срезанное стражем застоя действие: в цепочке — выбор агента с полным числом эпох шага (срез и
+            # эпохи запасного — в stall_log), в контексте прошлое действие — запасное, как после отката:
+            # сеть последней обучало оно, и карты построены по его траектории
+            last_a = guard_fb
         if args.policy == "bandit":
             if loss_before is not None and np.isfinite(cur_loss) and cur_loss > 0 and loss_before > 0:
                 r_b = float(np.clip((math.log10(loss_before) - math.log10(cur_loss))
@@ -966,7 +1073,9 @@ def run_seed(seed, args, progress_cb=None):
             ro["steps"].append(dict(a=int(a), err=float(rmse + brmse), explore=bool(explored and not rolled),
                                     rolled=rolled, stall=ro["stall"]))
         print(f"[seed {seed}] step {len(chain)}: {opt_name} lr={lr} ep={epochs} "
-              f"spent={spent}/{args.budget} l2re={math.hypot(l2re_op, l2re_bnd):.4e}", flush=True)
+              + (f"(срез застоя после {stall_log[-1][2]}, остаток — {ALL_ACTIONS[guard_fb][0]}:"
+                 f"{ALL_ACTIONS[guard_fb][1]:g}) " if stall_cut else "")
+              + f"spent={spent}/{args.budget} l2re={math.hypot(l2re_op, l2re_bnd):.4e}", flush=True)
         # история по шагам: нужна для выбора «лучшего из k» по обучающему лоссу и для
         # имитации гонок между инициализациями без новых запусков
         hist.append([int(spent), float(cur_loss) if np.isfinite(cur_loss) else None,
@@ -1194,6 +1303,13 @@ def run_seed(seed, args, progress_cb=None):
                       explore_log=ro["explore"], n_explore=len(ro["explore"]),
                       explore_steps=[int(e[0]) for e in ro["explore"]],
                       stall_steps=[i + 1 for i, s_ in enumerate(ro["steps"]) if s_ and s_["stall"]])
+    sg_row = {}
+    if stall_on:
+        # stall_log: [шаг, действие агента, эпох до среза, отношение лосса за последнее окно, эпох запасному];
+        # stall_spent — все эпохи, отданные запасному действию после срезов (в счёт spent входят)
+        sg_row = dict(stall_guard=True, stall_window=int(args.stall_window), stall_min=float(args.stall_min),
+                      stall_fallback=args.guard_fallback, stall_log=stall_log, stall_spent=int(stall_spent),
+                      n_stall=len(stall_log))
     if save_buf:
         args._rollout = ro           # main пишет файл буфера; в строку результата карты не идут
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
@@ -1215,7 +1331,7 @@ def run_seed(seed, args, progress_cb=None):
                 guide_follow=int(guide_stat[0]), guide_deviate=int(guide_stat[1]),
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
                 keep_opt_mode=(keep_mode if keep_opt else None),
-                elapsed_s=round(time.time() - t0, 1), **sh_row, **ex_row)
+                elapsed_s=round(time.time() - t0, 1), **sh_row, **ex_row, **sg_row)
 
 
 def result_done(name):
@@ -1274,7 +1390,22 @@ def build_parser():
                          "столько раз (например 1.0 — любой рост), веса откатываются и исполняется "
                          "--guard-fallback. Потраченные эпохи остаются в счёте бюджета. 0 = выключено")
     ap.add_argument("--guard-fallback", default="LBFGS:1:500",
-                    help="запасное действие стража")
+                    help="запасное действие стража (и стража застоя --stall-guard)")
+    ap.add_argument("--stall-guard", action="store_true",
+                    help="Страж застоя: действие агента (или случайной политики) длиннее --stall-window эпох "
+                         "проверяется на каждой границе окна; если обучающий лосс за окно упал меньше чем на долю "
+                         "--stall-min (лосс > (1 - min) * лосс на начале окна) или не конечен, действие "
+                         "останавливается, а ОСТАТОК его эпох исполняет --guard-fallback кусками своей длины "
+                         "(последний — по остатку). Эпохи шага и счёт бюджета прежние, все 27 действий агенту "
+                         "доступны. Только обучающий лосс (эталона на развёртывании нет). Оптимизатор при "
+                         "переходе к запасному сбрасывается, как при откате; прошлое действие в контексте — "
+                         "запасное, в цепочке — выбор агента с полным числом эпох, срезы — в stall_log. "
+                         "Запасное действие и действия не длиннее окна не срезаются. Совместим с "
+                         "--guard-rollback (откат судит шаг целиком) и --keep-opt. Без флага прогон прежний")
+    ap.add_argument("--stall-window", type=int, default=250,
+                    help="страж застоя: окно проверки, эпох")
+    ap.add_argument("--stall-min", type=float, default=0.01,
+                    help="страж застоя: минимальное относительное падение обучающего лосса за окно (0.01 = 1%%)")
     ap.add_argument("--shield", default="",
                     help="Щит: суррогат среды запрещает агенту действия без предсказанного улучшения ДО "
                          "их исполнения (страж откатывает после и тратит эпохи). Значение — файл ансамбля "
@@ -1478,6 +1609,18 @@ def main():
         sys.exit("--guide: проводник сравнивается по Q агента, поэтому состоит только из 27 действий агента")
     if args.guard_rollback and not uses_agent and args.policy != "random":
         sys.exit("--guard-rollback действует только на действия агента и случайной политики")
+    if args.stall_guard:
+        if not uses_agent and args.policy != "random":
+            sys.exit("--stall-guard действует только на действия агента и случайной политики")
+        if args.stall_window < 1 or not 0.0 < args.stall_min < 1.0:
+            sys.exit("--stall-window >= 1, --stall-min из (0, 1)")
+        if args.save_buffer:
+            sys.exit("--stall-guard несовместим с --save-buffer: срезанный шаг — смесь двух действий, "
+                     "а не переход буфера")
+        try:
+            parse_action_spec(args.guard_fallback)
+        except ValueError as e:
+            sys.exit(f"--guard-fallback: {e}")
     if args.policy in ("bandit", "scout") and not args.tag:
         sys.exit("--policy bandit/scout требует --tag")
     if args.shield and not uses_agent:

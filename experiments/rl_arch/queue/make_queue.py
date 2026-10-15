@@ -1932,6 +1932,62 @@ if W28_K:
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"лидер ({_arch}) с энкодером {_nm} вместо MAE, сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 51
+# Страж застоя (online_eval_env.py --stall-guard). На pb2d у ConvNeXt без MAE (t3m_ete_cnx_g) сиды 43 и 44
+# тратят конец бюджета на долгий Adam 1e-4 (2500 и 1000 эпох), ошибка почти стоит (0.122 -> 0.116), а страж с
+# откатом молчит: лосс чуть падает. Страж застоя проверяет действие длиннее окна (250 эпох) на каждой границе
+# окна и, если обучающий лосс за окно упал меньше чем на 1%, отдаёт остаток эпох действия запасному L-BFGS 1.0
+# x 500 (кусками). Эпохи шага и бюджет прежние, агенту доступны все 27 действий, только обучающий лосс. Все оценки
+# — со стражем с откатом и без сбросов (safe), как у лидеров, плюс страж застоя (тег _sg); сиды 42-46.
+#   pb2d: готовый ConvNeXt без MAE (пара к t3m_ete_cnx_g) и готовый лидер (пара к t3m_ete_tbquart_g);
+#         два новых обучения ConvNeXt без предобучения (сиды обучения 2 и 3, одна сеть, учитель лидера).
+#   ns2d: готовый лидер (две сети, пара к t3m_ete_two_g); два обучения лидера с ConvNeXt без предобучения
+#         (две сети, сиды обучения 1 и 2) — сиды 42-44 вместе с обучением, 45-46 по модели из HF.
+# Сид pb2d ~0.75 GPU-ч, ns2d ~1.5 GPU-ч; кернел не больше 9 часов.
+STALLG = "--stall-guard --stall-window 250 --stall-min 0.01"
+W51_SEED_H = 1.5 if NS2D else 0.75
+
+
+def sg_eval(model, tag, sd):
+    """Оценка со стражем с откатом, без сбросов (safe) и со стражем застоя; тег с суффиксом _sg."""
+    return (EVAL, f"--policy agent --model-file {model} {GUARD} {STALLG} {KEEPS} "
+                  + t3ev(tag + "_sg", sd, hours=MAP_EH))
+
+
+def w51_train(arch, m, mt):
+    """Рецепт лидера (w41_train) с ConvNeXt без предобучения: --encoder convnext без --encoder-init."""
+    scr, a = w41_train(arch, m, mt)
+    old = f"--encoder resnet --encoder-init {ENC_MAE}"
+    assert a.count(old) == 1, a
+    return scr, a.replace(old, "--encoder convnext")
+
+
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + W51_SEED_H * len(sd.split(","))   # noqa: E731
+    _ready = ((("lead", f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_two_seed1.pt", "лидер (две сети)"),)
+              if NS2D else
+              (("cnx", "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt", "ConvNeXt без MAE (ete_cnx)"),
+               ("lead", "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt", "лидер (ete_tbquart)")))
+    for _nm, _ck, _what in _ready:
+        for _i, _sd in enumerate(_blocks):
+            _sfx = "" if len(_blocks) == 1 else "-" + "ab"[_i]
+            add(f"w51-{_nm}{_sfx}", 51, "H06", [sg_eval(_ck, f"t3m_w51{_nm}", _sd)], round(_eh(_sd), 2),
+                needs=[_ck], note=f"страж застоя: готовый {_what}, сиды {_sd}")
+    _arch = "two" if NS2D else "one"
+    _mt = f"w51cnx{_arch}"
+    for _m in ((1, 2) if NS2D else (2, 3)):
+        add(f"w51-cnx{_arch}-m{_m}", 51, "H06",
+            [w51_train(_arch, _m, _mt),
+             sg_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+            round(1.0 + _eh(_blocks[0]), 2), needs=[W41_TEACH[_arch]],
+            note=f"рецепт ({_arch}) с ConvNeXt без предобучения, сид обучения {_m}, страж застоя, сиды {_blocks[0]}")
+        if len(_blocks) > 1:
+            add(f"w51-cnx{_arch}-m{_m}-b", 51, "H06",
+                [sg_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                note=f"рецепт ({_arch}) с ConvNeXt без предобучения, сид обучения {_m}, страж застоя, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
