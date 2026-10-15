@@ -1417,8 +1417,11 @@ TWO_NETS_HEAD = ("linear", "dueling")
 # как сеть параметров раскладывает преимущества шага и длительности (--two-nets-mode):
 # additive — сумма двух независимых голов (прежнее), joint — одна голова на все пары (шаг,
 # длительность) оптимизатора, auto — авторегрессия: шаг по [признаки, оптимизатор], длительность
-# по [признаки, оптимизатор, шаг]
-TWO_NETS_MODE = ("additive", "joint", "auto")
+# по [признаки, оптимизатор, шаг], lowrank — сумма additive плюс взаимодействие шага и длительности
+# ранга TWO_NETS_RANK (у каждого значения шага и длительности вектор, взаимодействие — их скалярное
+# произведение): выходов у сети B растёт как сумма числа значений параметров, а не как произведение
+TWO_NETS_MODE = ("additive", "joint", "auto", "lowrank")
+TWO_NETS_RANK = 1               # ранг взаимодействия шага и длительности у lowrank
 # --two-nets-shared: идёт ли градиент сети параметров в общий энкодер (--two-nets-shared-grad)
 TWO_NETS_SHARED_GRAD = ("both", "stop")
 TWO_NETS_AUTO_EMB = 16          # размер вложений оптимизатора и шага у auto
@@ -1460,6 +1463,20 @@ def compose_two_nets_joint(q_opt, a_par, center="max"):
     Q_opt[o] — среднее по парам; пару по-прежнему выбирает сеть B, оптимизатор — сумма сетей."""
     q = q_opt[:, :, None] + _two_centered(a_par, center)
     return q.reshape(q.shape[0], N_ACTIONS)
+
+
+def compose_two_nets_lowrank(q_opt, a_lr, a_ep, u_lr, v_ep, center="max"):
+    """Совместное Q при --two-nets-mode lowrank: a_lr, a_ep — (B, 3, 3) как у additive, u_lr и v_ep —
+    (B, 3, 3, k) векторы значений шага и длительности у каждого оптимизатора:
+        T[o, l, e] = A_lr[o, l] + A_ep[o, e] + <U[o, l], V[o, e]>,
+        Q27[o, l, e] = Q_opt[o] + (T[o, l, e] - c_{l,e} T[o, ., .]).
+    Взаимодействие ранга k позволяет, например, «большой шаг хорош только при короткой длительности»,
+    чего сумма additive выразить не может. center='max': Q_opt[o] = max_{l,e} Q27[o, ., .], жадное
+    совместное действие = оптимизатор по сети A, затем лучшая пара (шаг, длительность) по таблице T."""
+    t = a_lr[:, :, :, None] + a_ep[:, :, None, :] + torch.einsum("bolk,boek->bole", u_lr, v_ep)
+    b, n_o = t.shape[:2]
+    t = _two_centered(t.reshape(b, n_o, -1), center)
+    return (q_opt[:, :, None] + t).reshape(b, N_ACTIONS)
 
 
 def compose_two_nets_auto(q_opt, a_lr, a_ep, center="max"):
@@ -1543,8 +1560,36 @@ class AutoParamHeads(nn.Module):
         return self.lr(zo), self.ep(zol)
 
 
+class LowRankParamHeads(nn.Module):
+    """Головы сети параметров при --two-nets-mode lowrank: у каждого оптимизатора голова шага и голова
+    длительности, как у ParamHeads, но каждая отдаёт на значение параметра 1 + k чисел: преимущество и
+    вектор ранга k для взаимодействия (compose_two_nets_lowrank). forward -> (A_lr, A_ep, U, V):
+    (B, 3, 3), (B, 3, 3), (B, 3, 3, k), (B, 3, 3, k). Выходов (1 + k) * (n_lr + n_ep) на оптимизатор —
+    сумма по параметрам, не произведение. kind — как у ParamHeads."""
+
+    def __init__(self, in_dim, kind="linear", n_opt=3, n_lr=3, n_ep=3, rank=TWO_NETS_RANK):
+        super().__init__()
+        self.rank, self.n_lr, self.n_ep = int(rank), n_lr, n_ep
+
+        def mk(n):
+            out = n * (1 + self.rank)
+            if kind == "dueling":
+                return nn.Sequential(nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, out))
+            return nn.Linear(in_dim, out)
+        self.lr = nn.ModuleList([mk(n_lr) for _ in range(n_opt)])
+        self.ep = nn.ModuleList([mk(n_ep) for _ in range(n_opt)])
+
+    def forward(self, z):
+        k = self.rank
+        lr = torch.stack([h(z) for h in self.lr], 1).view(z.shape[0], -1, self.n_lr, 1 + k)
+        ep = torch.stack([h(z) for h in self.ep], 1).view(z.shape[0], -1, self.n_ep, 1 + k)
+        return lr[..., 0], ep[..., 0], lr[..., 1:], ep[..., 1:]
+
+
 def make_param_heads(mode, in_dim, kind="linear"):
     """Головы сети параметров по --two-nets-mode."""
+    if mode == "lowrank":
+        return LowRankParamHeads(in_dim, kind)
     if mode == "joint":
         return JointParamHeads(in_dim, kind)
     if mode == "auto":
@@ -1706,7 +1751,7 @@ class QNet:
         last = lambda m: [l for l in m.modules() if isinstance(l, nn.Linear)][-1].out_features  # noqa: E731
         b = self.model[3]
         heads = {"additive": lambda: list(b.lr) + list(b.ep), "joint": lambda: list(b.par),
-                 "auto": lambda: [b.lr, b.ep]}[self.two_mode]()
+                 "auto": lambda: [b.lr, b.ep], "lowrank": lambda: list(b.lr) + list(b.ep)}[self.two_mode]()
         return 3, sum(last(h) for h in heads)
 
     def _two_parts(self, model, x):
@@ -1735,6 +1780,10 @@ class QNet:
         rows = torch.arange(len(o), device=o.device)
         if self.two_mode == "joint":
             return o * 9 + par[0][rows, o].argmax(1)
+        if self.two_mode == "lowrank":
+            t = (par[0][rows, o][:, :, None] + par[1][rows, o][:, None, :]
+                 + torch.einsum("blk,bek->ble", par[2][rows, o], par[3][rows, o]))
+            return o * 9 + t.reshape(len(o), -1).argmax(1)
         l = par[0][rows, o].argmax(1)
         if self.two_mode == "auto":
             return o * 9 + l * 3 + par[1][rows, o, l].argmax(1)
@@ -1742,7 +1791,7 @@ class QNet:
 
     def _joint(self, model, x):
         compose = {"additive": compose_two_nets, "joint": compose_two_nets_joint,
-                   "auto": compose_two_nets_auto}[self.two_mode]
+                   "auto": compose_two_nets_auto, "lowrank": compose_two_nets_lowrank}[self.two_mode]
         return compose(*self._two_parts(model, x), center=self.two_center)
 
     def _heads(self, model, x):
@@ -3133,7 +3182,11 @@ def main():
                          "длительности по [признаки, emb(o), emb(l)]: Q27[o,l,e] = Q_opt[o] + (A_lr[o,l] - c) "
                          "+ (A_ep[o,l,e] - c A_ep[o,l,.]); выходов 3 + 3 при любом числе оптимизаторов, рост "
                          "по числу параметров линейный, при --two-nets-center max жадное действие — "
-                         "последовательный выбор оптимизатор -> шаг -> длительность. В meta: two_nets_mode")
+                         "последовательный выбор оптимизатор -> шаг -> длительность. lowrank — как additive "
+                         "плюс взаимодействие шага и длительности ранга TWO_NETS_RANK: у значения параметра "
+                         "вектор, T[o,l,e] = A_lr[o,l] + A_ep[o,e] + <U[o,l], V[o,e]>; (1 + k) * (3 + 3) "
+                         "выходов на оптимизатор, рост по числу значений параметров — сумма, не произведение. "
+                         "В meta: two_nets_mode")
     ap.add_argument("--two-nets-shared", action="store_true",
                     help="--two-nets: у сети B нет своего энкодера, её головы берут признаки энкодера сети A "
                          "(как в коде статьи: сети параметров подаются свёрточные признаки сети оптимизатора). "
