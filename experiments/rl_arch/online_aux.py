@@ -31,6 +31,11 @@ tol и kmax передаются в precompute и teacher_targets, поэтом�
 смотрят (просмотр вперёд кончается на допуске и на K-й стадии; цель учителя — продолжение его политики
 в суррогате до остановки, для неё суррогат строится и при --mb-aux 0). Офлайновая половина обрезается
 тем же правилом до расчёта целей (offline_rl.stop_rule_cut в online_train_env.py).
+
+Несколько горизонтов модельной цели (online_train_env.py --mb-hs, как offline_rl.py --mb-hs) передаются
+в тот же precompute у обеих половин. Доверие к модельным целям (offline_rl.py --mb-trust) здесь не
+поддержано: у онлайнового перехода в момент записи нет суррогата, который его не видел, а вес строк
+офлайновой половины без веса онлайновых сделал бы половины несравнимыми — online_train_env.py отказывает.
 """
 from __future__ import annotations
 
@@ -138,13 +143,18 @@ class Aux:
 
     def __init__(self, pde, w_mb=0.0, w_te=0.0, reward_form="delta", err_scale=1.0, init_err=None, gamma=0.99,
                  budget=0, smdp_scale=0.0, mb_h=3, mb_lam=0.5, mb_subdirs="all", mb_table="", mb_members=5,
-                 mb_work="agent_combo_work", quick=False, teacher_from="", device=None, log=print, tol=0.0, kmax=0):
+                 mb_work="agent_combo_work", quick=False, teacher_from="", device=None, log=print, tol=0.0, kmax=0,
+                 mb_hs=None):
         self.pde, self.w_mb, self.w_te = pde, float(w_mb or 0.0), float(w_te or 0.0)
         self.form, self.gamma = reward_form, float(gamma)
         self.scale = np.array([float(err_scale)])
         self.init = None if init_err is None else np.array([float(init_err)])
         self.budget, self.smdp_scale = int(budget or 0), float(smdp_scale or 0.0)
         self.h, self.lam = int(mb_h), float(mb_lam)
+        # несколько горизонтов (--mb-hs): глубина — наибольший; None — один горизонт mb_h (прежние цели)
+        self.hs = sorted(set(int(x) for x in mb_hs)) if mb_hs else None
+        if self.hs:
+            self.h = self.hs[-1]
         self.subdirs, self.table, self.members, self.work = mb_subdirs, mb_table, int(mb_members), mb_work
         self.quick, self.device, self.log = bool(quick), device, log
         self.teacher = teacher_from
@@ -189,7 +199,8 @@ class Aux:
         import mb_targets as MB
         return MB.precompute(data, mask, names=[self.pde], reward_form=self.form, err_scale=self.scale,
                              init_err=self.init, gamma=self.gamma, h=self.h, lam=self.lam, budget=self.budget,
-                             smdp_scale=self.smdp_scale, model=self.model, log=log, **self.stop_kw)
+                             smdp_scale=self.smdp_scale, model=self.model, log=log, **self.stop_kw,
+                             **({"hs": self.hs} if self.hs else {}))
 
     def _te(self, data, log):
         import offline_rl as O
@@ -275,6 +286,8 @@ class Aux:
                  teacher_from=os.path.basename(self.teacher or ""))
         if self.stop_kw:
             m.update(aux_stop_tol=self.tol, aux_stop_kmax=self.kmax)
+        if self.hs:
+            m.update(mb_hs=",".join(str(x) for x in self.hs))
         if self.w_mb:
             m["mb"] = dict(self.mb_info)                # mb.surr_file читает щит оценки (--shield auto)
         if self.w_te:
@@ -285,6 +298,8 @@ class Aux:
         out = dict(mb_aux=self.w_mb, mb_h=self.h, mb_lam=self.lam, teacher_w=self.w_te,
                    teacher_from=os.path.basename(self.teacher or ""),
                    aux_online=dict(self.live_n), **{"aux_" + k + "_loss": v for k, v in self.last.items()})
+        if self.hs:
+            out.update(mb_hs=",".join(str(x) for x in self.hs))
         out.update({"mb_" + k: v for k, v in self.mb_info.items()})
         out.update({"teacher_" + k: v for k, v in self.te_info.items()})
         return out
