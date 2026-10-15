@@ -280,7 +280,18 @@ def lint_wait(argv):
     raise Reached()
 
 
-LINTERS = {"wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+def lint_select(argv):
+    """Отбор агентов без оценки в среде: разбор аргументов и проверки до загрузки агентов и буфера."""
+    import select_agents as SA
+    saved = SA.run
+    SA.run = _stop
+    try:
+        SA.main(list(argv) + ["--no-upload"])
+    finally:
+        SA.run = saved
+
+
+LINTERS = {"select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}

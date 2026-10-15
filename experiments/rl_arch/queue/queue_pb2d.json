@@ -14069,6 +14069,51 @@
    ]
   },
   {
+   "id": "pb2d-w45-select",
+   "wave": 45,
+   "group": "H06",
+   "hours": 1.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2one_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2one_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed3.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_sr_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41hoone_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_two_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_twod_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnxhrm_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnxm_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnxwm_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_resnp_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_it1_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2addsh_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2addsh_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2jntsh_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2jntsh_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2autsh_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2autsh_seed2.pt",
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "отбор агентов без оценки в среде: суррогат и FQE, основных 9, дополнительных 20",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/select_agents.py",
+     "args": "--pde poissonboltzmann2d --models t3m_ete_tbquart_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbquart_seed1.pt,t3m_w41one_m2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed2.pt,t3m_w41one_m3_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41one_seed3.pt,t3m_n2one_m1_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2one_seed1.pt,t3m_n2one_m2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2one_seed2.pt,t3m_w41two_m2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed2.pt,t3m_w41two_m3_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed3.pt,t3m_ete_sr_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_sr_seed1.pt,t3m_w41hoone_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41hoone_seed1.pt --extra-models t3m_ete_two_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_two_seed1.pt,t3m_ete_twod_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_twod_seed1.pt,t3m_ete_tbq0_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq0_seed1.pt,t3m_ete_tbq1_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq1_seed1.pt,t3m_ete_tbq2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_tbq2_seed1.pt,t3m_ete_cnx_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt,t3m_ete_cnxhrm_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnxhrm_seed1.pt,t3m_ete_cnxm_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnxm_seed1.pt,t3m_ete_cnxwm_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnxwm_seed1.pt,t3m_ete_noctx_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_noctx_seed1.pt,t3m_ete_resnp_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_resnp_seed1.pt,t3m_ete_blind_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_blind_seed1.pt,t3m_ete_it1_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_it1_seed1.pt,t3m_ete_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_seed1.pt,t3m_n2addsh_m1_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2addsh_seed1.pt,t3m_n2addsh_m2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2addsh_seed2.pt,t3m_n2jntsh_m1_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2jntsh_seed1.pt,t3m_n2jntsh_m2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2jntsh_seed2.pt,t3m_n2autsh_m1_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2autsh_seed1.pt,t3m_n2autsh_m2_g=rl_arch/models/convnext_dqn_cfix_rdelta_vb_n2autsh_seed2.pt --method both --tag w45"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

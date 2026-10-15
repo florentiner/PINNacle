@@ -1614,6 +1614,47 @@ if W28_K:
             1.0 if not NS2D else 1.9, needs=_cm3[1:],
             note=f"комитет двух обучений лидера ({_arch}, обучения 2 и 3), среднее Q, сид {_x}")
 
+# ---------------------------------------------------------------- волна 45
+# Отбор членов комитета без оценки в среде (experiments/rl_arch/select_agents.py): разброс между обучениями
+# одного рецепта велик (волна 43), а оценка на 10 сидах стоит 8.5 (pb2d) и 16 (ns2d) GPU-часов на агента.
+# Один кернел на уравнение ранжирует уже обученных и измеренных агентов двумя способами по собранному буферу
+# цели (все сборщики): B1 — жадное действие агента в настоящих состояниях буфера, последствия — суррогат
+# (ансамбль модельных целей, продолжение жадно по каждому члену, среднее по членам); B2 — FQE жадной политики
+# на замороженном кодировщике MAE. Метки агентов — теги их оценок: select_report.py сверяет ранжирование с
+# измеренными медианами (Spearman, Kendall, сожаление выбора). Основные — агенты с 10 (pb2d: и 3-6) сидами,
+# дополнительные — варианты волн 33, 36, 37, 40 с 2-5 сидами (больше точек для корреляции, дёшево: оценка
+# агента — секунды суррогата и минута FQE). Обучения и среды нет; оценка времени — сборка таблицы суррогата
+# (буферы 22 задач) и ансамбль, как в обучении рецепта, плюс прогоны суррогата и FQE.
+SELECT = "experiments/rl_arch/select_agents.py"
+if W28_K:
+    def _w45(mt, m=1):
+        return f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_{mt}_seed{m}.pt"
+
+    if NS2D:
+        _main = (("t3m_ete_two_g", _w45("ete_two")), ("t3m_w41two_m2_g", _w45("w41two", 2)),
+                 ("t3m_w41two_m3_g", _w45("w41two", 3)), ("t3m_ete_tbquart_g", _w45("ete_tbquart")),
+                 ("t3m_w41hotwo_g", _w45("w41hotwo")))
+        _extra = tuple((f"t3m_ete_{nm}_g", _w45(f"ete_{nm}"))
+                       for nm in ("tbq0", "tbq1", "twod", "noctx", "resnp", "blind", "set2", "set3", "cnxwm",
+                                  "cnxhrm", "twosr")) \
+            + (("t3m_ete_g", _w45("ete")), ("t3m_w41one_m2_g", _w45("w41one", 2)), ("t3m_w41one_m3_g", _w45("w41one", 3)))
+    else:
+        _main = (("t3m_ete_tbquart_g", _w45("ete_tbquart")), ("t3m_w41one_m2_g", _w45("w41one", 2)),
+                 ("t3m_w41one_m3_g", _w45("w41one", 3)), ("t3m_n2one_m1_g", _w45("n2one", 1)),
+                 ("t3m_n2one_m2_g", _w45("n2one", 2)), ("t3m_w41two_m2_g", _w45("w41two", 2)),
+                 ("t3m_w41two_m3_g", _w45("w41two", 3)), ("t3m_ete_sr_g", _w45("ete_sr")),
+                 ("t3m_w41hoone_g", _w45("w41hoone")))
+        _extra = tuple((f"t3m_ete_{nm}_g", _w45(f"ete_{nm}"))
+                       for nm in ("two", "twod", "tbq0", "tbq1", "tbq2", "cnx", "cnxhrm", "cnxm", "cnxwm", "noctx",
+                                  "resnp", "blind", "it1")) \
+            + (("t3m_ete_g", _w45("ete")),) \
+            + tuple((f"t3m_n2{nm}_m{m}_g", _w45(f"n2{nm}", m)) for nm in ("addsh", "jntsh", "autsh") for m in (1, 2))
+    add("w45-select", 45, "H06",
+        [(SELECT, f"--pde {PDE} --models {','.join(f'{a}={b}' for a, b in _main)} "
+                  f"--extra-models {','.join(f'{a}={b}' for a, b in _extra)} --method both --tag w45")],
+        1.2, needs=[b for _, b in _main + _extra] + [ENC_MAE],
+        note=f"отбор агентов без оценки в среде: суррогат и FQE, основных {len(_main)}, дополнительных {len(_extra)}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
