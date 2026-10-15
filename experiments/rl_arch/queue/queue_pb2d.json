@@ -15798,6 +15798,174 @@
    ]
   },
   {
+   "id": "pb2d-w54-pre-p3n100",
+   "wave": 54,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [],
+   "note": "MAE на 3 уравнениях без целевых, по 100 переходов, 1400 шагов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w54p3n100 --subdirs burgers1d,heat2d_complexgeometry,poisson2d_classic --max-per-pde 100 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-p3n100-m1",
+   "wave": 54,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE на 3 уравнениях x 100 переходов, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w54p3n100one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w54p3n100one_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w54p3n100one_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-p3n100-m2",
+   "wave": 54,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE на 3 уравнениях x 100 переходов, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w54p3n100one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w54p3n100one_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w54p3n100one_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-pre-p6n50",
+   "wave": 54,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [],
+   "note": "MAE на 6 уравнениях без целевых, по 50 переходов, 1400 шагов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w54p6n50 --subdirs burgers1d,heat2d_complexgeometry,poisson2d_classic,wave1d,grayscott,ns2d_backstep --max-per-pde 50 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-p6n50-m1",
+   "wave": 54,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE на 6 уравнениях x 50 переходов, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w54p6n50one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w54p6n50one_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w54p6n50one_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-p6n50-m2",
+   "wave": 54,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE на 6 уравнениях x 50 переходов, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w54p6n50one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w54p6n50one_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w54p6n50one_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-pre-p6n150",
+   "wave": 54,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [],
+   "note": "MAE на 6 уравнениях без целевых, по 150 переходов, 1400 шагов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w54p6n150 --subdirs burgers1d,heat2d_complexgeometry,poisson2d_classic,wave1d,grayscott,ns2d_backstep --max-per-pde 150 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-p6n150-m1",
+   "wave": 54,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE на 6 уравнениях x 150 переходов, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w54p6n150one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w54p6n150one_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w54p6n150one_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w54-p6n150-m2",
+   "wave": 54,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с MAE на 6 уравнениях x 150 переходов, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w54p6n150one"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w54p6n150one_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w54p6n150one_m2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

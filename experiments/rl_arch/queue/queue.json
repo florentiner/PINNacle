@@ -17261,6 +17261,228 @@
    ]
   },
   {
+   "id": "w54-p3n100-m1",
+   "wave": 54,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE на 3 уравнениях x 100 переходов, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w54p3n100two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w54p3n100two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w54p3n100two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p3n100-m1-b",
+   "wave": 54,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p3n100two_seed1.pt"
+   ],
+   "note": "лидер (two) с MAE на 3 уравнениях x 100 переходов, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p3n100two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w54p3n100two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p3n100-m2",
+   "wave": 54,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE на 3 уравнениях x 100 переходов, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w54p3n100two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w54p3n100two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w54p3n100two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p3n100-m2-b",
+   "wave": 54,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p3n100two_seed2.pt"
+   ],
+   "note": "лидер (two) с MAE на 3 уравнениях x 100 переходов, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p3n100two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w54p3n100two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n50-m1",
+   "wave": 54,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 50 переходов, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w54p6n50two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n50two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w54p6n50two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n50-m1-b",
+   "wave": 54,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n50two_seed1.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 50 переходов, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n50two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w54p6n50two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n50-m2",
+   "wave": 54,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 50 переходов, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n50_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w54p6n50two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n50two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w54p6n50two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n50-m2-b",
+   "wave": 54,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n50two_seed2.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 50 переходов, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n50two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w54p6n50two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n150-m1",
+   "wave": 54,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 150 переходов, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w54p6n150two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n150two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w54p6n150two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n150-m1-b",
+   "wave": 54,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n150two_seed1.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 150 переходов, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n150two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w54p6n150two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n150-m2",
+   "wave": 54,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 150 переходов, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p6n150_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w54p6n150two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n150two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w54p6n150two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w54-p6n150-m2-b",
+   "wave": 54,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n150two_seed2.pt"
+   ],
+   "note": "лидер (two) с MAE на 6 уравнениях x 150 переходов, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w54p6n150two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w54p6n150two_m2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",
