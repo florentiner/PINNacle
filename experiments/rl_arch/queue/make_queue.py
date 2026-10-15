@@ -1988,6 +1988,39 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                 round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                 note=f"рецепт ({_arch}) с ConvNeXt без предобучения, сид обучения {_m}, страж застоя, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 53
+# Сколько карт других уравнений нужно MAE. ENC_MAE учился на ~180 тыс. карт 22 уравнений (сбор таких буферов —
+# тысячи GPU-часов). Здесь MAE учится на тех же 22 уравнениях, но на малом числе карт каждого: 30, 100 и 300
+# переходов на уравнение (--max-per-pde, цепочки целиком; около 660, 2 200 и 6 600 карт всего). Число шагов
+# предобучения то же, что у ENC_MAE и волны 46 (1400). Предобучение не зависит от целевого уравнения, поэтому
+# кернел предобучения один на объём (в очереди pb2d), а обучения обоих уравнений ждут энкодер в HF. Дальше как в
+# волне 46: лидер дважды (сиды обучения 1, 2), оценка на сидах 42-46. Контроль — лидер с ENC_MAE.
+W53_SIZES = ((30, "n30"), (100, "n100"), (300, "n300"))
+if W28_K:
+    _arch = W41_LEAD
+    for _n, _sz in W53_SIZES:
+        _cvtag = f"w53{_sz}"
+        _enc = f"rl_arch/encoders/cvprobe_{_cvtag}_enc_mae_resnet.pt"
+        if PREFIX == "pb2d":
+            add(f"w53-pre-{_sz}", 53, "H06",
+                [(CVPROBE, f"--tag {_cvtag} --subdirs all --max-per-pde {_n} --configs ssl-mae-resnet --pretrain-only "
+                           f"--ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}")],
+                1.0, note=f"MAE на 22 уравнениях, по {_n} переходов на уравнение, {W46_SSL_STEPS} шагов, энкодер в HF")
+        _mt = f"w53{_sz}{_arch}"
+        for _m in (1, 2):
+            _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+            _eh = lambda sd: (0.4 if NS2D else 0.3) + W46_SEED_H * len(sd.split(","))   # noqa: E731
+            add(f"w53-{_sz}-m{_m}", 53, "H06",
+                [w41_train(_arch, _m, _mt, init=_enc),
+                 free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=[_enc, W41_TEACH[_arch]],
+                note=f"лидер ({_arch}) с MAE на {_n} переходах каждого из 22 уравнений, сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w53-{_sz}-m{_m}-b", 53, "H06",
+                    [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"лидер ({_arch}) с MAE на {_n} переходах каждого из 22 уравнений, сид обучения {_m}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
