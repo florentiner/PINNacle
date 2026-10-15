@@ -30,6 +30,9 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
     --freeze-encoder                учить только головы
     --ens N --ens-min M             REDQ: N голов на общем энкодере, цель — минимум по M целевым головам
     --mb-aux W --mb-h H --mb-lam L  модельные цели по всем 27 действиям из суррогата (mb_targets.py)
+    --mb-hs 1,2,3,5                 модельная цель — среднее по нескольким горизонтам (вместо --mb-h)
+    --mb-trust state|gate|both      вес модельной цели строки по ошибке суррогата на её записанном исходе
+                                    (суррогат без её кластера цепочек) и ворота по доле верных знаков
     --teacher-from F --teacher-w W  добавка к TD: Q учителя на скалярах (agent_combo.py) по всем 27 действиям
     --pani-w W --pani-sigma S       шум на нормированных картах, штраф за изменение вектора Q
     --distill-top P --distill-w W   отступ DQfD только на переходах лучших P% цепочек
@@ -2302,6 +2305,9 @@ def train_variant(variant, data, train_mask, args, seed):
         assert data["QMB"].shape == (len(data["A"]), N_ACTIONS), data["QMB"].shape
         QMB = to_t(data["QMB"]).float()
         MBW = to_t(data["MBW"].astype(np.float32))
+    # --mb-trust: множитель слагаемого строки (вес доверия w(s) и ворота, mb_targets.trust_weights); без
+    # флага столбца нет и лосс прежний бит в бит
+    MBT = to_t(np.asarray(data["MBT"], dtype=np.float32)) if (w_mb and "MBT" in data) else None
     # Q учителя на скалярах в единицах награды тренера (teacher_targets): добавка к TD, не замена
     w_te = float(getattr(args, "teacher_w", 0.0) or 0.0) if QT is None else 0.0
     QTE = TEW = None
@@ -2508,7 +2514,12 @@ def train_variant(variant, data, train_mask, args, seed):
                     wb = MBW[b]
                     if wb.sum() > 0:
                         hub = dense(QMB[b])
-                        l_mb = (hub * wb).sum() / wb.sum()
+                        if MBT is None:
+                            l_mb = (hub * wb).sum() / wb.sum()
+                        else:
+                            # доверие: вес строки умножается на её множитель, нормировка — по числу
+                            # строк с целью, поэтому малое доверие уменьшает добавку, а не перераспределяет её
+                            l_mb = (hub * wb * MBT[b]).sum() / wb.sum()
                         loss = loss + w_mb * l_mb
                         aux_acc.setdefault("mb_loss", []).append(l_mb.item())
                 if w_te:
@@ -3010,6 +3021,26 @@ def main():
                          "поиск глубины --mb-h и ширины --mb-beam по пессимистичной СУММЕ наград до конца "
                          "бюджета или глубины; остановиться можно после любого действия. Без флага — прежний "
                          "жадный просмотр (лучшая немедленная награда, обрыв на неположительной)")
+    ap.add_argument("--mb-hs", default="",
+                    help="Модельные цели по нескольким горизонтам через запятую (например 1,2,3,5; SHARP, ICLR 2027 "
+                         "su2U0XecdI): цель — среднее Q_h по горизонтам (mb_targets._mix_horizons). Путь просмотра "
+                         "от горизонта не зависит, поэтому все горизонты считаются за один проход глубины max — "
+                         "вдвое дороже H=3 при max=5 (жадный просмотр). Вместо --mb-h; пусто — один горизонт --mb-h")
+    ap.add_argument("--mb-trust", default="none", choices=("none", "state", "gate", "both"),
+                    help="Доверие к модельным целям по ошибке суррогата на записанных переходах задачи-цели "
+                         "(mb_targets.trust_weights; RG-TAIL, ICLR 2027 gspGh6aGPl). state — вес строки "
+                         "w(s) = exp(-|log10 E предсказанная - log10 E записанная| / --mb-trust-tau); gate — вся "
+                         "добавка умножается на ворота по доле верных знаков изменения ошибки (--mb-trust-gate-min); "
+                         "both — оба. Предсказание — суррогатом, не видевшим кластер цепочек строки (перекрёстная "
+                         "подгонка, --mb-trust-folds). none — прежний лосс. Только один УрЧП")
+    ap.add_argument("--mb-trust-tau", type=float, default=0.3,
+                    help="--mb-trust state/both: масштаб ошибки в порядках (w = exp(-ошибка / tau))")
+    ap.add_argument("--mb-trust-gate-min", type=float, default=0.7,
+                    help="--mb-trust gate/both: доля верных знаков, с которой добавка берётся целиком; ниже — "
+                         "линейно до нуля при 0.5 (знак не лучше монеты)")
+    ap.add_argument("--mb-trust-folds", type=int, default=5,
+                    help="--mb-trust: фолдов перекрёстной подгонки по кластерам цепочек цели (столько же "
+                         "дополнительных обучений суррогата); 0 — по кластеру на фолд (исключение своей цепочки)")
     ap.add_argument("--mb-beam", type=int, default=3,
                     help="--mb-full: ширина луча на пару (состояние, первое действие). Предсказаний ансамбля "
                          "на состояние: 27 * (1 + 27 + (H - 2) * 27 * луч) при H >= 2")
@@ -3170,6 +3201,27 @@ def main():
         ap.error("--mb-beam >= 1, --mb-max-rows >= 0")
     if (args.mb_full or args.mb_max_rows) and not args.mb_aux > 0:
         ap.error("--mb-full и --mb-max-rows задаются вместе с --mb-aux > 0")
+    args._mb_hs = None
+    if args.mb_hs:
+        try:
+            args._mb_hs = sorted(set(int(x) for x in args.mb_hs.split(",") if x.strip()))
+        except ValueError:
+            ap.error(f"--mb-hs: целые горизонты через запятую, не {args.mb_hs!r}")
+        if not args._mb_hs or args._mb_hs[0] < 1:
+            ap.error("--mb-hs: горизонты >= 1")
+        if not args.mb_aux > 0:
+            ap.error("--mb-hs задаётся вместе с --mb-aux > 0")
+        if any(a == "--mb-h" or a.startswith("--mb-h=") for a in sys.argv[1:]) and args.mb_h != args._mb_hs[-1]:
+            ap.error("--mb-h и --mb-hs вместе: глубина --mb-h должна равняться наибольшему горизонту "
+                     "(лучше задать только --mb-hs)")
+        args.mb_h = args._mb_hs[-1]
+    if args.mb_trust != "none":
+        if not args.mb_aux > 0:
+            ap.error("--mb-trust задаётся вместе с --mb-aux > 0")
+        if args.subdirs:
+            ap.error("--mb-trust: только один УрЧП (--subdir), доверие считается на записанных переходах задачи-цели")
+        if not args.mb_trust_tau > 0 or not 0.5 < args.mb_trust_gate_min <= 1.0 or args.mb_trust_folds < 0:
+            ap.error("--mb-trust-tau > 0, 0.5 < --mb-trust-gate-min <= 1, --mb-trust-folds >= 0")
     if args.variant == "cnx_smdp" and (new_arch or new_loss):
         ap.error("cnx_smdp — отдельный тренер (advanced_agents.SmdpAgent): --encoder, --encoder-init, "
                  "--freeze-encoder, --ens, --mb-aux, --pani-w, --distill-top, --mask-schedule, --teacher-w "
@@ -3413,6 +3465,12 @@ def main():
         arm.update(mb_full=True, mb_beam=int(args.mb_beam))
     if args.mb_max_rows:
         arm.update(mb_max_rows=int(args.mb_max_rows))
+    if args._mb_hs:
+        # несколько горизонтов: mb_h в строке — наибольший из них
+        arm.update(mb_hs=",".join(str(x) for x in args._mb_hs))
+    if args.mb_trust != "none":
+        arm.update(mb_trust=args.mb_trust, mb_trust_tau=float(args.mb_trust_tau),
+                   mb_trust_gate_min=float(args.mb_trust_gate_min), mb_trust_folds=int(args.mb_trust_folds))
     if stop_on:
         # правило остановки обучения: в строке результата и в meta чекпоинта, только когда включено
         arm.update(train_tol=float(args.train_tol), train_kmax=int(args.train_kmax),
@@ -3471,7 +3529,17 @@ def main():
             subdirs=mb_subdirs, table=args.mb_table, members=args.mb_members,
             work=args.mb_work, quick=bool(args.smoke), tab=tc_tab,
             full=bool(args.mb_full), beam=int(args.mb_beam), max_rows=int(args.mb_max_rows),
-            rows_seed=int(args.data_seed), **stop_kw, **({"keep": surr} if stop_on else {}))
+            rows_seed=int(args.data_seed), **stop_kw,
+            **({"keep": surr} if (stop_on or args.mb_trust != "none") else {}),
+            **({"hs": args._mb_hs} if args._mb_hs else {}))
+        if args.mb_trust != "none":
+            # множитель слагаемого модельной цели каждой строки (вес доверия, ворота): суррогаты фолдов
+            # учатся на той же таблице без кластеров цепочек цели своего фолда (mb_targets.trust_weights)
+            data["MBT"], tr_info = MB.trust_weights(
+                data, data["MBW"], names, mb_scale, int(args.episode_budget), surr["model"], mode=args.mb_trust,
+                tau=float(args.mb_trust_tau), gate_min=float(args.mb_trust_gate_min), folds=int(args.mb_trust_folds),
+                seed=int(args.data_seed), members=int(args.mb_members), work=args.mb_work, quick=bool(args.smoke))
+            mb_info.update(tr_info)
         run_meta["mb"] = dict(mb_info)
     args._teacher_soft_mask = []
     if args.teacher_w > 0:

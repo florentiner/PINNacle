@@ -14069,6 +14069,180 @@
    ]
   },
   {
+   "id": "pb2d-w44-trust-tr-m1",
+   "wave": 44,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "доверие к модельным целям (state и ворота): обучение лидера (one), сид обучения 1, модель в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w44trustone --mb-trust both"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-trust-tr-m2",
+   "wave": 44,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "доверие к модельным целям (state и ворота): обучение лидера (one), сид обучения 2, модель в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w44trustone --mb-trust both"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-trust-tr-m3",
+   "wave": 44,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "доверие к модельным целям (state и ворота): обучение лидера (one), сид обучения 3, модель в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 3 --model-tag w44trustone --mb-trust both"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-trust-ev42-46",
+   "wave": 44,
+   "group": "H06",
+   "hours": 4.55,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed3.pt"
+   ],
+   "note": "доверие к модельным целям (state и ворота): комитет трёх обучений (one), среднее Q, страж, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmt3one_trust_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-trust-ev47-51",
+   "wave": 44,
+   "group": "H06",
+   "hours": 4.55,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed3.pt"
+   ],
+   "note": "доверие к модельным целям (state и ворота): комитет трёх обучений (one), среднее Q, страж, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44trustone_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_cmt3one_trust_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-hs-tr-m1",
+   "wave": 44,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "модельные цели по горизонтам 1,2,3,5: обучение лидера (one), сид обучения 1, модель в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-hs 1,2,3,5 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w44hsone"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-hs-tr-m2",
+   "wave": 44,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "модельные цели по горизонтам 1,2,3,5: обучение лидера (one), сид обучения 2, модель в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-hs 1,2,3,5 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w44hsone"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-hs-tr-m3",
+   "wave": 44,
+   "group": "H06",
+   "hours": 0.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "модельные цели по горизонтам 1,2,3,5: обучение лидера (one), сид обучения 3, модель в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-hs 1,2,3,5 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 3 --model-tag w44hsone"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-hs-ev42-46",
+   "wave": 44,
+   "group": "H06",
+   "hours": 4.55,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed3.pt"
+   ],
+   "note": "модельные цели по горизонтам 1,2,3,5: комитет трёх обучений (one), среднее Q, страж, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_cmt3one_hs_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w44-hs-ev47-51",
+   "wave": 44,
+   "group": "H06",
+   "hours": 4.55,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed1.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed2.pt",
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed3.pt"
+   ],
+   "note": "модельные цели по горизонтам 1,2,3,5: комитет трёх обучений (one), среднее Q, страж, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-files rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed1.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed2.pt,rl_arch/models/convnext_dqn_cfix_rdelta_vb_w44hsone_seed3.pt --ensemble mean --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_cmt3one_hs_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w45-select",
    "wave": 45,
    "group": "H06",

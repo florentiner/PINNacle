@@ -1155,6 +1155,12 @@ def main():
                     help="модельные цели: глубина жадного просмотра вперёд в суррогате")
     ap.add_argument("--mb-lam", type=float, default=0.5,
                     help="модельные цели: награда = среднее по членам ансамбля - L * разброс (MOPO)")
+    ap.add_argument("--mb-hs", default="",
+                    help="модельные цели по нескольким горизонтам через запятую (как offline_rl.py --mb-hs): "
+                         "среднее Q_h, глубина — наибольший; вместо --mb-h. Пусто — один горизонт --mb-h")
+    ap.add_argument("--mb-trust", default="none", choices=("none", "state", "gate", "both"),
+                    help="доверие к модельным целям (offline_rl.py --mb-trust) в онлайновом дообучении НЕ "
+                         "поддержано: любое значение, кроме none, — отказ разбора")
     ap.add_argument("--mb-subdirs", default="all",
                     help="модельные цели: буферы, на которых учится суррогат (all | solvable | список); с "
                          "--rlpd-target-buffer строки цели в таблице — только собранные")
@@ -1285,6 +1291,21 @@ def main():
     if (args.teacher_w > 0) != bool(args.teacher_from) or args.teacher_w < 0 or args.mb_aux < 0:
         ap.error("--teacher-from и --teacher-w > 0 задаются вместе; веса --mb-aux и --teacher-w не отрицательны")
     aux_on = args.mb_aux > 0 or args.teacher_w > 0
+    if args.mb_trust != "none":
+        ap.error("--mb-trust в онлайновом дообучении не поддержан: у онлайнового перехода в момент записи нет "
+                 "суррогата, который его не видел (перекрёстная подгонка offline_rl.py --mb-trust), а вес только "
+                 "офлайновой половины сделал бы половины батча несравнимыми. Доверие — только в offline_rl.py")
+    args._mb_hs = None
+    if args.mb_hs:
+        try:
+            args._mb_hs = sorted(set(int(x) for x in args.mb_hs.split(",") if x.strip()))
+        except ValueError:
+            ap.error(f"--mb-hs: целые горизонты через запятую, не {args.mb_hs!r}")
+        if not args._mb_hs or args._mb_hs[0] < 1 or not args.mb_aux > 0:
+            ap.error("--mb-hs: горизонты >= 1, задаётся вместе с --mb-aux > 0")
+        if any(a == "--mb-h" or a.startswith("--mb-h=") for a in sys.argv[1:]) and args.mb_h != args._mb_hs[-1]:
+            ap.error("--mb-h и --mb-hs вместе: глубина --mb-h должна равняться наибольшему горизонту")
+        args.mb_h = args._mb_hs[-1]
     if aux_on:
         from offline_rl import QUANTILE_VARIANTS
         if not (args.rlpd and args.offline_fix) or args.self_prior:
@@ -1586,7 +1607,7 @@ def main():
                          mb_h=args.mb_h, mb_lam=args.mb_lam, mb_subdirs=args.mb_subdirs, mb_table=args.mb_table,
                          mb_members=args.mb_members, mb_work=args.mb_work, quick=bool(args.smoke),
                          teacher_from=args.teacher_from, device=dev, log=lambda *x: print(*x, flush=True),
-                         tol=float(args.train_tol), kmax=int(args.train_kmax))
+                         tol=float(args.train_tol), kmax=int(args.train_kmax), mb_hs=args._mb_hs)
             off_aux = aux.offline(od, otr, episodes=tb_eps)
             run_meta.update(aux.meta())
         env_now = OA.env_label(args.keep_opt, args.keep_opt_mode)

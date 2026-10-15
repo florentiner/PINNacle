@@ -24,6 +24,16 @@ W * Huber(Q(s, .) - Q_mb(s, .)).
 тем же правилом — продолжение его политики в суррогате до остановки (policy_rollout). По умолчанию
 правило выключено, цели прежние.
 
+Несколько горизонтов (offline_rl.py --mb-hs 1,2,3,5; SHARP, ICLR 2027 su2U0XecdI): цель — среднее
+Q_h по горизонтам. Жадный путь от горизонта не зависит, поэтому Q_h — префиксные суммы одного прохода
+глубины max(hs): предсказаний на состояние 27 * (1 + (max - 1) * 27), при max = 5 это 2943 против
+1485 у H = 3 (вдвое дороже, а не 27^(H-1): полное дерево не строится). У лучевого просмотра
+(--mb-full) так же: луч от глубины не зависит. По умолчанию (без hs) — прежние цели бит в бит.
+
+Доверие к модельным целям (offline_rl.py --mb-trust; RG-TAIL, ICLR 2027 gspGh6aGPl; trust_weights):
+вес слагаемого строки по ошибке суррогата на её записанном исходе и ворота по доле верных знаков;
+суррогат для оценки строки не видел кластер её цепочек (перекрёстная подгонка по фолдам).
+
 Единицы награды — те же, что у тренера (offline_rl.episodes_to_arrays_chains):
     delta   (E_до - E_после) / err_scale;
     dlog    log10 E_до - log10 E_после, обрезка [-3, 3] (от масштаба ошибки не зависит);
@@ -194,15 +204,20 @@ def tol_log(tab, pidx, err_scale, tol):
 
 
 def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budget=0, smdp_scale=0.0,
-              chunk=1500, log=None, kmax=0, tl=None):
+              chunk=1500, log=None, kmax=0, tl=None, hs=None, parts=None):
     """Q_mb (n, 27) для состояний st (см. докстринг модуля). l_rew — log10 ошибки «до» для награды
     первого действия (у первого шага цепочки это init_err тренера, а не E0 таблицы), zero_first —
     строки, где награда первого действия по правилу тренера равна нулю. Возвращает (Q, средний
     разброс log10 ошибки по членам на первом действии). kmax, tl — правило остановки эпизода обучения
-    (_done): продолжения за остановкой нет."""
+    (_done): продолжения за остановкой нет.
+    hs — несколько горизонтов (--mb-hs, _horizons): Q — среднее Q_h по ним; h тогда должен быть
+    max(hs). Жадный путь от горизонта не зависит (выбор на глубине d — лучшая немедленная награда),
+    поэтому Q_h — префиксная сумма того же пути и все горизонты считаются за один проход глубины
+    max(hs). parts — словарь: в parts[h] кладётся Q_h (n, 27) каждого горизонта (сводка)."""
     import agent_combo as AC
     if form not in FORMS:
         raise ValueError(f"модельные цели: награда {form!r} не поддержана, нужна одна из {FORMS}")
+    want = _horizons(hs, h)
     n = len(st["l"])
     na = len(S.ACTIONS)
     acts = np.arange(na)
@@ -225,7 +240,10 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
         cur = AC.next_state(rep, a, ep, P.mean(0))
         idx = np.where(~_done(cur, budget, kmax, tl))[0]
         cur, sc = AC.take(cur, idx), scale[rows][rep_i]
-        for _ in range(1, h):
+        snap = {1: q.copy()} if want and 1 in want else {}       # Q_h по горизонтам (--mb-hs)
+        for depth in range(1, h):
+            if want and depth > 1 and depth in want:
+                snap[depth] = q.copy()
             k = len(idx)
             if not k:
                 break
@@ -243,14 +261,44 @@ def lookahead(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, budge
             nxt = AC.next_state(AC.take(rep2, flat), best, ep2[flat], P2.mean(0)[flat])
             keep = np.where(go & ~_done(nxt, budget, kmax, tl))[0]
             cur, idx = AC.take(nxt, keep), idx[keep]
+        if want:
+            # горизонты, до которых продолжение не дошло (все пути кончились раньше), равны итогу
+            q = _mix_horizons({x: snap.get(x, q) for x in want}, rows, m, na, parts, n)
         Q[rows] = q.reshape(m, na)
         if log is not None and c0 == 0 and n > chunk:
             log(f"модельные цели: первые {m} строк за {time.time() - t0:.1f} с, всего строк {n}")
     return Q, float(np.mean(unc)) if unc else 0.0
 
 
+def _horizons(hs, h):
+    """Горизонты --mb-hs по возрастанию без повторов; None — один горизонт h (прежний расчёт, без
+    копий и усреднения). Наибольший горизонт обязан быть h: глубина прохода одна на все."""
+    if hs is None:
+        return None
+    want = sorted(set(int(x) for x in hs))
+    if not want or want[0] < 1 or want[-1] != int(h):
+        raise ValueError(f"модельные цели: горизонты {hs} — целые >= 1, наибольший равен глубине h={h}")
+    return want
+
+
+def _mix_horizons(qh, rows, m, na, parts, n):
+    """Сведение Q_h (по строкам пачки, плоско m * 27) нескольких горизонтов в одну цель: простое
+    среднее. Это равновесная смесь h-шаговых модельных оценок (как λ-возврат с равными весами по
+    горизонтам; SHARP, ICLR 2027 su2U0XecdI — мягкое сведение горизонтов): короткий горизонт
+    меньше копит ошибку модели, длинный видит разгон перед L-BFGS. Вес по согласию горизонтов не
+    берётся: у жадного пути Q_h не убывает с h (продолжение добавляет только положительные награды),
+    и «согласие» мерило бы длину пути, а не надёжность. Один горизонт — ровно его Q (без деления)."""
+    keys = sorted(qh)
+    if parts is not None:
+        for x in keys:
+            parts.setdefault(x, np.zeros((n, na)))[rows] = qh[x].reshape(m, na)
+    if len(keys) == 1:
+        return qh[keys[0]]
+    return np.mean(np.stack([qh[x] for x in keys]), 0)
+
+
 def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, beam=3, budget=0,
-                   smdp_scale=0.0, chunk=250, log=None, kmax=0, tl=None):
+                   smdp_scale=0.0, chunk=250, log=None, kmax=0, tl=None, hs=None, parts=None):
     """Немиопический вариант lookahead (--mb-full): Q_mb(s, a) = r~(s, a) + g(a) * V~(s1), где V~ —
     лучшая пессимистичная СУММА наград продолжения, найденная лучевым поиском в суррогате:
 
@@ -276,10 +324,13 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
     H=4, beam=3: 5130 (в 3.5 раза). Время = mb_sec жадного расчёта той же задачи (он в строке
     результата) на это отношение; замер на ноутбуке: около 0.05 млн строк в секунду на член и поток.
     Память: chunk * 27 * beam * 27 строк признаков за раз (chunk=250, beam=3: 547 тыс. строк, ~120 МБ).
-    Сигнатура и возврат — как у lookahead (kmax, tl — правило остановки эпизода обучения)."""
+    Сигнатура и возврат — как у lookahead (kmax, tl — правило остановки эпизода обучения; hs, parts —
+    несколько горизонтов: луч от глубины не зависит, V~ горизонта h — максимум по префиксам длины
+    не больше h - 1 того же поиска, поэтому все горизонты — один проход глубины max(hs))."""
     import agent_combo as AC
     if form not in FORMS:
         raise ValueError(f"модельные цели: награда {form!r} не поддержана, нужна одна из {FORMS}")
+    want = _horizons(hs, h)
     beam = max(1, int(beam))
     n = len(st["l"])
     na = len(S.ACTIONS)
@@ -306,7 +357,10 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
         acc = np.zeros(len(root))                                 # сумма наград продолжения до узла
         disc = np.ones(len(root))                                 # произведение дисконтов до узла
         best = np.zeros(m * na)                                   # V~ корня: остановка даёт 0
+        snap = {1: best.copy()} if want and 1 in want else {}    # V~ по горизонтам (--mb-hs)
         for depth in range(1, h):
+            if want and depth > 1 and depth in want:
+                snap[depth] = best.copy()
             k = len(root)
             if not k:
                 break
@@ -338,7 +392,11 @@ def lookahead_full(ens, tab, st, l_rew, zero_first, scale, form, gamma, h, lam, 
             keep = order[rank < beam]
             node, root, acc = AC.take(nxt, keep), croot[keep], val[keep]
             disc = disc[par[keep]] * g_act[a2[keep]]
-        Q[rows] = (q + g_act[a] * best).reshape(m, na)
+        if want:
+            Q[rows] = _mix_horizons({x: q + g_act[a] * snap.get(x, best) for x in want}, rows, m, na,
+                                    parts, n).reshape(m, na)
+        else:
+            Q[rows] = (q + g_act[a] * best).reshape(m, na)
         if log is not None and c0 == 0 and n > chunk:
             log(f"модельные цели (полный просмотр, луч {beam}): первые {m} строк за {time.time() - t0:.1f} с, "
                 f"всего строк {n}")
@@ -398,7 +456,7 @@ def policy_rollout(ens, tab, st, l_rew, zero_first, scale, form, gamma, lam, act
 def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma, h=3, lam=0.5,
                budget=0, smdp_scale=0.0, subdirs="all", table="", members=5, work="agent_combo_work",
                quick=False, model=None, log=None, tab=None, full=False, beam=3, max_rows=0, rows_seed=0,
-               tol=0.0, kmax=0, keep=None):
+               tol=0.0, kmax=0, keep=None, hs=None):
     """Цели Q_mb для обучающих строк набора тренера. names — задачи набора (в порядке data['PDE']),
     err_scale и init_err — по задачам, в единицах тренера (init_err=None: награда первого шага 0).
     model=(tab, ens) — готовые таблица и ансамбль (тесты), иначе они строятся build_model. tab —
@@ -408,7 +466,9 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
     вперёд кончается, когда средняя по членам ошибка после действия не больше tol (единицы тренера) или
     исполнено kmax стадий цепочки; награда последнего действия засчитывается, дальше — ноль. По
     умолчанию выключено (прежние цели бит в бит). keep — словарь: в keep["model"] кладутся таблица и
-    ансамбль (их же берут цели учителя под правилом остановки).
+    ансамбль (их же берут цели учителя под правилом остановки, доверие trust_weights).
+    hs — несколько горизонтов (offline_rl.py --mb-hs): цель — среднее Q_h по ним (_mix_horizons), h
+    тогда не используется (глубина — max(hs)); None — один горизонт h, прежние цели бит в бит.
     Возвращает (QMB float32 (N, 27), MBW bool (N,) — у каких строк цель есть, сводка)."""
     log = log or (lambda *a: print(*a, flush=True))
     t0 = time.time()
@@ -449,16 +509,22 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
     QMB = np.zeros((n, len(S.ACTIONS)), dtype=np.float32)
     MBW = np.zeros(n, dtype=bool)
     unc = 0.0
+    want = None
+    if hs is not None:
+        want = _horizons(hs, max(int(x) for x in hs))
+        h = want[-1]
+    parts = {} if want else None
     if len(rows):
         sub = {k: v[rows] for k, v in st.items()}
+        hkw = dict(hs=want, parts=parts) if want else {}
         if full:
             q, unc = lookahead_full(ens, tab, sub, l_rew[rows], zero_first[rows], err_scale[pl][rows],
                                     reward_form, gamma, int(h), float(lam), int(beam), int(budget),
-                                    float(smdp_scale), log=log, kmax=kmax, tl=tl)
+                                    float(smdp_scale), log=log, kmax=kmax, tl=tl, **hkw)
         else:
             q, unc = lookahead(ens, tab, sub, l_rew[rows], zero_first[rows],
                                err_scale[pl][rows], reward_form, gamma, int(h), float(lam), int(budget),
-                               float(smdp_scale), log=log, kmax=kmax, tl=tl)
+                               float(smdp_scale), log=log, kmax=kmax, tl=tl, **hkw)
         assert q.shape == (len(rows), QMB.shape[1]), q.shape
         if not np.isfinite(q).all():
             raise ValueError("модельные цели: нечисловые значения Q_mb")
@@ -477,12 +543,234 @@ def precompute(data, train_mask, names, reward_form, err_scale, init_err, gamma,
         info.update(rows_cap=int(max_rows), capped=capped)
     if tl is not None or kmax:
         info.update(stop_tol=float(tol or 0.0), stop_kmax=kmax)
+    if want:
+        # сводка горизонтов: средний Q лучшего действия у каждого и доля строк, где лучшее действие
+        # горизонта совпало с лучшим действием смешанной цели
+        best_mix = QMB[rows].argmax(1) if len(rows) else np.zeros(0, np.int64)
+        info.update(horizons=",".join(str(x) for x in want),
+                    hs_q_best={str(x): (round(float(parts[x][:len(rows)].max(1).mean()), 5) if len(rows) else 0.0)
+                               for x in want},
+                    hs_argmax_agree={str(x): (round(float((parts[x][:len(rows)].argmax(1) == best_mix).mean()), 4)
+                                              if len(rows) else 0.0) for x in want})
     log(f"модельные цели: строк {info['rows']} (пропущено {info['skipped']}"
         + (f", из них сверх --mb-max-rows {capped}" if capped else "") + f"), награда {reward_form}, "
         + (f"полный просмотр (луч {beam}), " if full else "")
-        + f"H={h}, lam={lam}, бюджет {budget or 'нет'}: средний Q_mb {info['q_mean']:.4f}, лучшего действия "
-        f"{info['q_best_mean']:.4f}, разброс ансамбля {info['unc_log10']} порядка, {info['sec']} с")
+        + (f"горизонты {info['horizons']} (среднее), " if want else f"H={h}, ")
+        + f"lam={lam}, бюджет {budget or 'нет'}: средний Q_mb {info['q_mean']:.4f}, лучшего действия "
+        f"{info['q_best_mean']:.4f}, разброс ансамбля {info['unc_log10']} порядка, {info['sec']} с"
+        + (f"; лучшего действия по горизонтам {info['hs_q_best']}, совпадение лучшего действия со смесью "
+           f"{info['hs_argmax_agree']}" if want else ""))
     return QMB, MBW, info
+
+
+# --------------------------------------------------------------------------------------------
+# доверие к модельным целям (offline_rl.py --mb-trust; RG-TAIL, ICLR 2027 gspGh6aGPl)
+# --------------------------------------------------------------------------------------------
+
+TRUST_MODES = ("none", "state", "gate", "both")
+SIGN_EPS = 0.01         # мёртвая зона знака изменения log10 ошибки (порядка): |d| < 0.01 — «без изменения»
+
+
+TRUST_TOL = 1e-4        # допуск совпадения log10 ошибок перехода у строк тренера и таблицы (порядка, 0.02%)
+
+
+def _trust_index(step, spent, pa, a):
+    """Целая часть ключа перехода: шаг, расход, прошлое действие, действие."""
+    return list(zip(*(np.asarray(c, np.int64).tolist() for c in (step, spent, pa, a))))
+
+
+def trust_clusters(tab, pi, query=None, tol=TRUST_TOL):
+    """Кластеры цепочек задачи pi в таблице и сопоставление с ними строк тренера.
+
+    Переходы совпадают, если у них одинаковы шаг, расход, прошлое действие и действие, а log10 ошибки до
+    и после отличаются не больше tol (оба пути считают их одним S._log из одних float32 дампа,
+    tests/test_shield_teacher.py сверяет вход ансамбля бит в бит; допуск — от расхождения в последних
+    знаках, округление ключа ломалось бы на границе разряда). Кластер — группы GRP (общий префикс
+    собранных цепочек — одна группа), склеенные, если у двух групп есть совпадающие переходы (повтор
+    записи, общий префикс без поля group), и если одна строка тренера совпала со строками нескольких групп.
+    query = (целые части ключей _trust_index, l, ln) строк тренера.
+    Возвращает (кластер каждой строки таблицы, -1 у чужих задач; кластер каждой строки запроса, -1 —
+    совпадений нет; номера совпавших строк таблицы у каждой строки запроса). Единица разбиения на фолды —
+    кластер: всё, что совпадает с оцениваемым переходом, лежит в его кластере и выпадает вместе с ним."""
+    n = len(tab["A"])
+    rows = np.where(np.asarray(tab["PDE"]) == pi)[0]
+    clu = np.full(n, -1, dtype=np.int64)
+    nq = len(query[0]) if query is not None else 0
+    if not len(rows):
+        return clu, np.full(nq, -1, dtype=np.int64), [[] for _ in range(nq)]
+    grp = np.asarray(tab["GRP"] if "GRP" in tab else tab["CH"], dtype=np.int64)[rows]
+    L, LN = np.asarray(tab["L"], np.float64), np.asarray(tab["LN"], np.float64)
+    bucket = {}
+    for r, k in zip(rows.tolist(), _trust_index(tab["STEP"][rows], tab["SPENT"][rows], tab["PA"][rows],
+                                                tab["A"][rows])):
+        bucket.setdefault(k, []).append(r)
+    bucket = {k: np.array(v, dtype=np.int64) for k, v in bucket.items()}
+    ug, gi = np.unique(grp, return_inverse=True)
+    g_of = np.full(n, -1, dtype=np.int64)
+    g_of[rows] = gi
+    parent = list(range(len(ug)))
+
+    def root(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def link(gs):
+        gs = [root(int(g)) for g in gs]
+        r0 = min(gs)
+        for g in gs:
+            parent[g] = r0
+    for b in bucket.values():
+        if len(b) > 1:
+            near = (np.abs(L[b][:, None] - L[b][None]) <= tol) & (np.abs(LN[b][:, None] - LN[b][None]) <= tol)
+            for i in range(len(b)):
+                link(g_of[b[near[i]]])
+    matches = []
+    if query is not None:
+        for k, l, ln in zip(query[0], np.asarray(query[1], np.float64), np.asarray(query[2], np.float64)):
+            b = bucket.get(k)
+            hit = b[(np.abs(L[b] - l) <= tol) & (np.abs(LN[b] - ln) <= tol)] if b is not None else b
+            matches.append(hit.tolist() if hit is not None else [])
+            if matches[-1]:
+                link(g_of[hit])
+    rid = np.array([root(i) for i in range(len(ug))], dtype=np.int64)
+    clu[rows] = rid[gi]
+    qc = np.array([int(clu[m[0]]) if m else -1 for m in matches], dtype=np.int64)
+    return clu, qc, matches
+
+
+def trust_folds(clusters, folds, seed=0):
+    """Фолд каждого кластера: случайная перестановка кластеров (сид seed), номер по кругу. folds <= 0 или
+    не меньше числа кластеров — по кластеру на фолд (исключение своей цепочки). Возвращает (словарь
+    кластер -> фолд, число фолдов)."""
+    cl = np.unique(np.asarray(clusters, dtype=np.int64))
+    if not len(cl):
+        return {}, 0
+    k = len(cl) if int(folds) <= 0 else min(int(folds), len(cl))
+    perm = np.random.default_rng(int(seed)).permutation(len(cl))
+    return {int(c): int(r % k) for r, c in enumerate(cl[perm])}, k
+
+
+def _sgn(d):
+    return np.where(np.abs(d) < SIGN_EPS, 0, np.sign(d)).astype(np.int64)
+
+
+def trust_gate(acc, gate_min):
+    """Множитель всей добавки по доле верных знаков acc: 1 при acc >= gate_min, линейно до 0 при
+    acc = 0.5 (знак не лучше монеты), ниже — 0."""
+    g = float(gate_min)
+    if acc >= g:
+        return 1.0
+    return float(np.clip((acc - 0.5) / max(g - 0.5, 1e-9), 0.0, 1.0))
+
+
+def trust_weights(data, rows, names, err_scale, budget, model, mode="both", tau=0.3, gate_min=0.7, folds=5,
+                  seed=0, members=5, work="agent_combo_work", quick=False, fit=None, log=None, trace=None):
+    """Доверие к модельным целям по ошибке суррогата на ЗАПИСАННЫХ переходах задачи-цели (--mb-trust).
+
+    Суррогат (model = (tab, ens) из precompute) учится в основном на других задачах и на задаче-цели
+    может быть смещён; штраф разброса MOPO (--mb-lam) смещения не видит — члены ансамбля ошибаются
+    одинаково. У каждой обучающей строки (s, a, s') тренера исход действия a известен, поэтому
+        e(s) = |среднее по членам log10 E_после предсказанное - log10 E_после записанное|   (порядки),
+        w(s) = exp(-e(s) / tau)  в [0, 1]  — вес слагаемого модельной цели этой строки в лоссе;
+    предсказание — тем же входом, что первый шаг просмотра вперёд (step_features с бюджетом).
+    Глобальные ворота: доля строк acc, где знак предсказанного изменения log10 ошибки совпал со знаком
+    записанного (мёртвая зона SIGN_EPS: оба «без изменения» — совпадение), и множитель trust_gate.
+    mode: state — только w(s); gate — только множитель (одинаковый у всех строк); both — w(s) * множитель.
+
+    Без утечки (перекрёстная подгонка): переход нельзя оценивать суррогатом, который его видел. Строки
+    задачи-цели в таблице делятся на кластеры (trust_clusters: группа префикса GRP, склеенная по
+    совпадающим переходам), кластеры — на folds фолдов (trust_folds, сид seed). Строка тренера
+    сопоставляется со строками таблицы того же перехода (шаг, расход, действия, ошибки до и после в
+    пределах TRUST_TOL) и получает их кластер; её
+    предсказывает суррогат фолда — тот же ансамбль (agent_combo.Models, те же члены и гиперпараметры),
+    обученный на таблице БЕЗ всех строк задачи-цели этого фолда (остальные задачи и другие фолды цели —
+    как есть). Проверка: в таблице фолда нет ни одной строки, совпавшей с оцениваемой (иначе
+    AssertionError). Строку тренера, которой нет в таблице, предсказывает полный ансамбль: он её не
+    видел. Ансамбли фолдов кэшируются в <work>/trust_cv (отдельно от полного: щит с папкой кэша ищет в
+    ней ровно один ансамбль). fit(tab) -> ens — подмена обучения (тесты); trace — словарь, в который
+    кладутся фолд и кластер каждой оцениваемой строки и суррогат каждого фолда (тесты).
+
+    rows — маска строк с модельной целью (MBW). Только один УрЧП (names из одной задачи).
+    Возвращает (T float32 (N,): множитель слагаемого строки, 1 вне rows; сводка для строки результата)."""
+    import agent_combo as AC
+    log = log or (lambda *a: print(*a, flush=True))
+    if mode not in TRUST_MODES or mode == "none":
+        raise ValueError(f"--mb-trust: режим {mode!r}, нужен один из {TRUST_MODES[1:]}")
+    if len(names) != 1 or "PDE" in data:
+        raise ValueError("--mb-trust: только один УрЧП (доверие считается на записанных переходах задачи-цели)")
+    if not (tau > 0) or not (0.5 < gate_min <= 1.0):
+        raise ValueError("--mb-trust: tau > 0, 0.5 < gate_min <= 1")
+    t0 = time.time()
+    tab, ens = model
+    pi = tab["NAMES"].index(names[0])
+    scale = np.asarray(err_scale, dtype=np.float64)
+    n = len(data["A"])
+    st, _, _ = chain_states(data, tab, np.array([pi]), scale, budget)
+    sel = np.where(np.asarray(rows, dtype=bool))[0]
+    T = np.ones(n, dtype=np.float32)
+    info = dict(trust_mode=mode, trust_rows=int(len(sel)))
+    if not len(sel):
+        log("доверие к модельным целям: строк с целью нет — множитель 1")
+        return T, info
+    A = np.asarray(data["A"], dtype=np.int64)
+    sub = {k: v[sel] for k, v in st.items()}
+    ln_log = S._log(np.asarray(data["ERR"], dtype=np.float64)[sel] * scale[0])
+    keys = _trust_index(sub["step"], sub["spent"], sub["pa"], A[sel])
+    clu_row, my, matches = trust_clusters(tab, pi, (keys, sub["l"], ln_log))
+    if (my < 0).any():
+        log(f"ВНИМАНИЕ: доверие к модельным целям: {int((my < 0).sum())} из {len(sel)} строк нет в таблице суррогата "
+            "(совпадающего перехода нет) — их оценивает полный ансамбль, он этих переходов не видел")
+    fold_of, K = trust_folds(clu_row[clu_row >= 0], folds, seed)
+    fr = np.array([fold_of[int(c)] if c >= 0 else -1 for c in my], dtype=np.int64)
+    if fit is None:
+        cv_work = os.path.join(work, "trust_cv")
+
+        def fit(t):
+            return AC.Models(t, cv_work, members=members, quick=quick, seed=0, log=log).get("full")
+    X, _ = step_features(tab, sub, A[sel], budget)
+    pred = np.zeros(len(sel))
+    fits = 0
+    for f in sorted(set(fr.tolist())):
+        i = np.where(fr == f)[0]
+        if f < 0:
+            m = ens                                         # переходов нет в таблице: полный их не видел
+        else:
+            out_cl = np.array([c for c, ff in fold_of.items() if ff == f], dtype=np.int64)
+            drop = np.isin(clu_row, out_cl)
+            # каждая совпавшая с оцениваемой строкой строка таблицы выпадает из таблицы фолда
+            leak = sum(int((~drop[matches[j]]).sum()) for j in i)
+            assert leak == 0, f"--mb-trust: в таблице фолда {f} есть {leak} оцениваемых переходов (утечка)"
+            m = fit(AC.subset(tab, ~drop))
+            fits += 1
+        if trace is not None:
+            trace.setdefault("models", {})[f] = m
+        pred[i] = m.predict_ln(X[i], sub["l"][i]).mean(0)
+    if trace is not None:
+        trace.update(rows=sel, fold=fr, cluster=my, matches=matches)
+    err = np.abs(pred - ln_log)
+    w = np.exp(-err / float(tau))
+    agree = _sgn(pred - sub["l"]) == _sgn(ln_log - sub["l"])
+    acc = float(agree.mean())
+    better = float((_sgn(ln_log - sub["l"]) < 0).mean())  # доля записанных улучшений
+    gate = trust_gate(acc, gate_min)
+    mult = (w if mode in ("state", "both") else np.ones_like(w)) * (gate if mode in ("gate", "both") else 1.0)
+    T[sel] = mult.astype(np.float32)
+    info.update(trust_unmatched=int((my < 0).sum()), trust_clusters=int(len(fold_of)), trust_k=int(K),
+                trust_fits=int(fits), trust_err_med=round(float(np.median(err)), 5),
+                trust_err_mean=round(float(err.mean()), 5), trust_bias=round(float((pred - ln_log).mean()), 5),
+                trust_w_mean=round(float(w.mean()), 5), trust_w_min=round(float(w.min()), 5),
+                trust_w_q10=round(float(np.quantile(w, 0.1)), 5), trust_sign_acc=round(acc, 4),
+                trust_improve_share=round(better, 4), trust_gate=round(gate, 4),
+                trust_mult_mean=round(float(mult.mean()), 5), trust_sec=round(time.time() - t0, 1))
+    log(f"доверие к модельным целям ({mode}): строк {len(sel)} (нет в таблице {info['trust_unmatched']}), кластеров "
+        f"цели {info['trust_clusters']} в {K} фолдах, суррогатов фолдов {fits}; ошибка предсказания записанного "
+        f"исхода: медиана {info['trust_err_med']} порядка, смещение {info['trust_bias']}; вес w(s) средний "
+        f"{info['trust_w_mean']} (мин {info['trust_w_min']}, 10% {info['trust_w_q10']}); знак верен у {acc:.3f} "
+        f"(улучшений среди записанных {better:.3f}), ворота {gate:.3f}; множитель средний "
+        f"{info['trust_mult_mean']}, {info['trust_sec']} с")
+    return T, info
 
 
 # --------------------------------------------------------------------------------------------
