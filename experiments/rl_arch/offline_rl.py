@@ -44,6 +44,16 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
     --train-tol T --train-kmax K    правило остановки эпизода обучения из статьи (формула (11)): цепочка кончается
                                     терминальным переходом на ошибке <= T или на K-й стадии (stop_rule_cut);
                                     модельные цели и цели учителя за остановку не смотрят
+Составляющие метода (волна 50; всё выключено по умолчанию):
+    --wa ema|swa --wa-start F       развёртывается усреднение весов по итерациям обучения начиная с доли F эпох
+    --wa-decay D                    (EMA с распадом D или равное среднее SWA); статистики BatchNorm пересчитываются
+                                    на обучающих состояниях (Izmailov et al., UAI 2018; Morales-Brotons et al., TMLR 2024)
+    --train-all                     учиться на всех переходах цели: отложенные 20% цепочек остаются только для
+                                    диагностик (они теперь внутри обучения)
+    --mc-lb W [--mc-lb-mode M]      нижняя граница Q по записанному исходу: дисконтированная сумма наград до конца
+                                    цепочки (loss — штраф W * relu(G - Q(s,a))^2 / 2, как SIL / optimality
+                                    tightening; target — цель TD max(цель, G), как MCAC)
+    --teacher-from F1,F2,...        ансамбль учителей: цель учителя — среднее их Q по 27 действиям
 Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
@@ -1136,6 +1146,35 @@ def teacher_targets(path, data, names, reward_form, err_scale, init_err, gamma, 
     return out, valid, dict(info, mask=[int(i) for i in meta.get("mask", [])])
 
 
+def teacher_ensemble_targets(paths, data, names, reward_form, err_scale, init_err, gamma, device, budget=0,
+                             log=None):
+    """Ансамбль учителей (--teacher-from F1,F2,...): цель каждого — teacher_targets в единицах награды
+    ученика, итог — их среднее по 27 действиям (дистилляция ансамбля: Hinton et al. 2015; Allen-Zhu, Li,
+    ICLR 2023). Цель есть у строки, только если она есть у всех учителей. Маска учителя для диагностики
+    совпадения — объединение масок. В сводке — согласие жадных действий каждой пары учителей на строках
+    с целью (насколько учителя расходятся)."""
+    log = log or (lambda *a: print(*a, flush=True))
+    qs, vs, infos = [], [], []
+    for p in paths:
+        q, v, inf = teacher_targets(p, data, names=names, reward_form=reward_form, err_scale=err_scale,
+                                    init_err=init_err, gamma=gamma, device=device, budget=budget, log=log)
+        qs.append(q.astype(np.float64)); vs.append(v); infos.append(inf)
+    valid = np.logical_and.reduce(vs)
+    if not valid.any():
+        raise ValueError("ансамбль учителей: ни у одной строки нет цели всех учителей")
+    out = np.where(valid[:, None], np.mean(qs, axis=0), 0.0).astype(np.float32)
+    greedy = [q[valid].argmax(1) for q in qs]
+    agree = [float((greedy[i] == greedy[j]).mean()) for i in range(len(qs)) for j in range(i + 1, len(qs))]
+    mask = sorted(set(int(i) for inf in infos for i in inf.get("mask", [])))
+    info = dict(infos[0], rows=int(valid.sum()), skipped=int(len(valid) - valid.sum()), n_teachers=len(paths),
+                teachers=",".join(os.path.basename(p) for p in paths),
+                pair_agree_mean=round(float(np.mean(agree)), 4), pair_agree_min=round(float(np.min(agree)), 4),
+                q_mean=float(out[valid].mean()), q_best_mean=float(out[valid].max(1).mean()), mask=mask)
+    log(f"ансамбль из {len(paths)} учителей: цель у {info['rows']} строк, согласие жадных действий пар "
+        f"{info['pair_agree_mean']:.3f} (мин. {info['pair_agree_min']:.3f}), средний Q {info['q_mean']:.4f}")
+    return out, valid, info
+
+
 def split_by_episode(data, test_frac=0.2, split_seed=0):
     rng = np.random.default_rng(split_seed)
     eps = np.unique(data["EP"])
@@ -1426,6 +1465,70 @@ TWO_NETS_RANK = 1               # ранг взаимодействия шага
 TWO_NETS_SHARED_GRAD = ("both", "stop")
 TWO_NETS_AUTO_EMB = 16          # размер вложений оптимизатора и шага у auto
 TWO_NETS_AUTO_HIDDEN = 64       # скрытый слой голов auto при головах linear (dueling — ширина признаков)
+# составляющие метода (волна 50): усреднение весов (--wa) и нижняя граница Q по исходу (--mc-lb)
+WA_MODES = ("none", "ema", "swa")
+MC_LB_MODES = ("loss", "target")
+# --mc-lb-mode target меняет цель TD только у обычной головы DQN (не ансамбль, не бины, не квантили)
+MC_LB_TARGET_VARIANTS = ("cnn_dqn", "convnext_dqn", "cnn_cql", "cnx_cql", "cnx_dueling", "cnx_factored",
+                         "their_dqn", "their_cql", "cnx_bcq")
+
+
+def mc_returns(data, gamma):
+    """--mc-lb: G_i = r_i + gamma * r_{i+1} + ... до конца цепочки строки i (по data['EP'], строки цепочки
+    идут подряд в порядке шагов, как у build_targets). Оборванная цепочка (последний переход не терминален)
+    продолжается нулём: при неотрицательной ценности продолжения (--value-bound: можно остановиться) это
+    нижняя граница Q*(s_i, a_i) записанного действия в детерминированной среде. float32 (N,)."""
+    R = np.asarray(data["R"], dtype=np.float64)
+    EP = np.asarray(data["EP"])
+    G = np.zeros(len(R), dtype=np.float64)
+    for ei in np.unique(EP):
+        idx = np.where(EP == ei)[0]
+        run = 0.0
+        for i in idx[::-1]:
+            run = R[i] + float(gamma) * run
+            G[i] = run
+    return G.astype(np.float32)
+
+
+def wa_update(avg, model, n, mode, decay):
+    """Одно обновление среднего весов --wa по state_dict модели (параметры и буферы BatchNorm).
+    avg=None — первый вход: копия. Целые буферы (num_batches_tracked) копируются как есть.
+    swa — равное среднее n входов, ema — avg <- decay * avg + (1 - decay) * текущее."""
+    import torch
+    with torch.no_grad():
+        cur = model.state_dict()
+        if avg is None:
+            return {k: v.detach().clone() for k, v in cur.items()}
+        for k, v in cur.items():
+            if not v.is_floating_point():
+                avg[k].copy_(v)
+            elif mode == "swa":
+                avg[k].add_((v - avg[k]) / float(n))
+            else:
+                avg[k].mul_(float(decay)).add_(v, alpha=1.0 - float(decay))
+    return avg
+
+
+def recompute_bn(model, forward, X, bs=256):
+    """Статистики BatchNorm для усреднённых весов (как torch.optim.swa_utils.update_bn): счётчики сброшены,
+    накопительное среднее (momentum=None) по проходам forward на X в режиме train. Возвращает число слоёв BN."""
+    import torch
+    bns = [m for m in model.modules() if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)]
+    if not bns:
+        return 0
+    moms = [m.momentum for m in bns]
+    was = model.training
+    for m in bns:
+        m.reset_running_stats()
+        m.momentum = None
+    model.train(True)
+    with torch.no_grad():
+        for k in range(0, len(X), bs):
+            forward(X[k:k + bs])
+    for m, mo in zip(bns, moms):
+        m.momentum = mo
+    model.train(was)
+    return len(bns)
 
 
 def compose_two_nets(q_opt, a_lr, a_ep, center="max"):
@@ -2404,6 +2507,16 @@ def train_variant(variant, data, train_mask, args, seed):
     aux_acc = {}
     ckpt_every = int(getattr(args, "ckpt_every", 0) or 0)
     ckpts = []
+    # --mc-lb: нижняя граница Q записанного действия — дисконтированная сумма наград до конца цепочки
+    w_lb = float(getattr(args, "mc_lb", 0.0) or 0.0) if QT is None else 0.0
+    lb_mode = getattr(args, "mc_lb_mode", "loss") or "loss"
+    GLB = to_t(mc_returns(data, GAMMA)).float() if w_lb else None
+    if w_lb:
+        aux_info.update(mc_lb_rows_pos=int((mc_returns(data, GAMMA)[idx] > 0).sum()))
+    # --wa: среднее весов по итерациям с эпохи wa_from (по умолчанию выключено)
+    wa_mode = getattr(args, "wa", "none") or "none"
+    wa_avg, wa_n = None, 0
+    wa_from = int(round(float(getattr(args, "wa_start", 0.5)) * args.epochs)) if wa_mode != "none" else 0
 
     bs = args.batch_size
     n_epochs = args.epochs
@@ -2517,6 +2630,9 @@ def train_variant(variant, data, train_mask, args, seed):
                     if vbound:
                         q2 = torch.minimum(q2.clamp_min(0.0), UB[b])
                     tgt = r + gm * (1 - d) * q2
+                    if w_lb and lb_mode == "target":
+                        # MCAC: цель не ниже записанного исхода цепочки
+                        tgt = torch.maximum(tgt, GLB[b])
                 loss = F.mse_loss(q, tgt)
                 if variant == "cnx_bcq":      # discrete BCQ: маска поддержки
                     # модель поведения обучена на неаугментированных состояниях,
@@ -2604,6 +2720,20 @@ def train_variant(variant, data, train_mask, args, seed):
                         loss = loss + w_demo * l_demo
                         aux_acc.setdefault("distill_top_loss", []).append(l_demo.item())
 
+            if w_lb and lb_mode == "loss":
+                # SIL / optimality tightening: W * relu(G - Q(s, a))^2 / 2 на каждой голове, только снизу
+                qh = net.q_heads(s)
+                if variant in QUANTILE_VARIANTS:
+                    qh = qh.mean(-1)
+                elif hlg is not None:
+                    qh = hlg.to_scalar(qh)
+                q_taken = qh.gather(2, a[None, :, None].expand(len(qh), -1, 1)).squeeze(2)    # (K,B)
+                gap = (GLB[b][None] - q_taken).clamp_min(0.0)
+                l_lb = 0.5 * (gap ** 2).mean()
+                loss = loss + w_lb * l_lb
+                aux_acc.setdefault("mc_lb_loss", []).append(l_lb.item())
+                aux_acc.setdefault("mc_lb_active", []).append(float((gap > 0).float().mean()))
+
             if w_nx:
                 # W * Huber(прогноз - [уровень следующих карт (6), награда]) в нормированных единицах;
                 # у терминальных переходов следующей карты нет — там только награда (вес NXW)
@@ -2616,6 +2746,9 @@ def train_variant(variant, data, train_mask, args, seed):
 
             opt.zero_grad(); loss.backward(); opt.step()
             net.soft_update(float(getattr(args, "tau", 0.005)))
+            if wa_mode != "none" and epoch >= wa_from:
+                wa_n += 1
+                wa_avg = wa_update(wa_avg, net.model, wa_n, wa_mode, float(getattr(args, "wa_decay", 0.99)))
             if variant == "cnx_bbf" and (epoch * 1000 + k) % 4000 == 3999:
                 # BBF: shrink-and-perturb — ствол сохраняет 50%, головы заново
                 import copy as _copy
@@ -2653,6 +2786,27 @@ def train_variant(variant, data, train_mask, args, seed):
     train_time = time.time() - t0
     net.set_train(False)
     aux_info.update({k: float(np.mean(v)) for k, v in aux_acc.items()})   # средние последней эпохи
+    if wa_avg is not None:
+        # --wa: в сеть кладутся усреднённые веса; BatchNorm (кроме замороженного энкодера) пересчитывается
+        # на обучающих состояниях. Доля обучающих строк, где жадное действие среднего совпало с последней
+        # итерацией, — мера дрожания политики в конце обучения
+        def greedy_rows():
+            with torch.no_grad():
+                return torch.cat([net.q_scalar(S[to_t(idx[k:k + 512]).long()]).argmax(1)
+                                  for k in range(0, len(idx), 512)])
+        g_last = greedy_rows()
+        net.model.load_state_dict(wa_avg)
+        n_bn = 0
+        if not net.frozen:
+            n_bn = recompute_bn(net.model, net.q_online, S[to_t(idx).long()], bs=bs)
+        net.set_train(False)
+        g_avg = greedy_rows()
+        # сам режим и распад пишет main() в поля прогона (wa, wa_start, wa_decay); здесь — только итог
+        aux_info.update(wa_n=int(wa_n), wa_from_epoch=int(wa_from), wa_bn_layers=int(n_bn),
+                        wa_agree_last=round(float((g_last == g_avg).float().mean()), 4))
+        print(f"  [{variant} s{seed}] веса усреднены ({wa_mode}, {wa_n} итераций с эпохи {wa_from}, BatchNorm "
+              f"пересчитан в {n_bn} слоях): жадное действие совпадает с последней итерацией на "
+              f"{aux_info['wa_agree_last']:.3f} обучающих строк", flush=True)
     net.extra = {}
     if w_te:
         # совпадение жадных действий ученика и учителя на отложенных строках с целью учителя
@@ -3198,6 +3352,28 @@ def main():
                          "отрезаны от графа, энкодер учит только сеть A, головы сети B учатся на готовых признаках")
     ap.add_argument("--no-verify", action="store_true",
                     help="Не проверять сохранённый чекпоинт через online_eval_env.load_agent")
+    # --- составляющие метода, волна 50 (по умолчанию выключено: прежнее поведение бит в бит) ---
+    ap.add_argument("--wa", default="none", choices=list(WA_MODES),
+                    help="Усреднение весов по итерациям одного обучения; в чекпоинт и диагностики идут "
+                         "усреднённые веса: ema — экспоненциальное среднее с распадом --wa-decay, swa — равное "
+                         "среднее (Izmailov et al., UAI 2018). Статистики BatchNorm пересчитываются по обучающим "
+                         "состояниям. Цель — меньше дрожания жадной политики в конце обучения (policy churn)")
+    ap.add_argument("--wa-start", type=float, default=0.5,
+                    help="--wa: доля эпох, после которой итерации входят в среднее (0 — с первой)")
+    ap.add_argument("--wa-decay", type=float, default=0.99,
+                    help="--wa ema: распад среднего за шаг обучения (0.99 — окно около 100 шагов)")
+    ap.add_argument("--train-all", action="store_true",
+                    help="Учиться на всех переходах (без отложенных 20%% цепочек). Диагностики evaluate/FQE "
+                         "считаются на тех же цепочках, что и раньше, но они теперь внутри обучения "
+                         "(в строке diag_in_sample=true). Несовместим с --fqe-select и --plateau-patience")
+    ap.add_argument("--mc-lb", type=float, default=0.0,
+                    help="Нижняя граница Q по записанному исходу (0 = выключено): G — дисконтированная сумма "
+                         "наград от перехода до конца его цепочки; при неотрицательной ценности продолжения "
+                         "(--value-bound) Q*(s, a_записанное) >= G. Вид — --mc-lb-mode")
+    ap.add_argument("--mc-lb-mode", default="loss", choices=list(MC_LB_MODES),
+                    help="--mc-lb: loss — штраф W * relu(G - Q(s,a))^2 / 2 на всех головах (SIL, Oh et al. "
+                         "2018; optimality tightening, He et al. 2017); target — цель TD max(цель, G) (MCAC, "
+                         "Wilcox et al. 2022), только у обычной головы DQN; W > 0 лишь включает её")
     args = ap.parse_args()
     if args.fqe_select and not args.ckpt_every:
         ap.error("--fqe-select требует --ckpt-every N")
@@ -3275,6 +3451,27 @@ def main():
             ap.error("--mb-trust: только один УрЧП (--subdir), доверие считается на записанных переходах задачи-цели")
         if not args.mb_trust_tau > 0 or not 0.5 < args.mb_trust_gate_min <= 1.0 or args.mb_trust_folds < 0:
             ap.error("--mb-trust-tau > 0, 0.5 < --mb-trust-gate-min <= 1, --mb-trust-folds >= 0")
+    # составляющие метода (волна 50)
+    if args.wa != "none":
+        if not 0.0 <= args.wa_start < 1.0 or not 0.0 < args.wa_decay < 1.0:
+            ap.error("--wa-start в [0, 1), --wa-decay в (0, 1)")
+        if args.fqe_select or args.variant in ("cnx_smdp", "cnx_bbf") or args.distill_from:
+            ap.error("--wa несовместим с --fqe-select (свой выбор снимка), cnx_smdp, cnx_bbf (сеть пересоздаётся) "
+                     "и --distill-from")
+    if args.train_all and (args.fqe_select or args.plateau_patience):
+        ap.error("--train-all несовместим с --fqe-select и --plateau-patience: отложенных цепочек больше нет")
+    if args.mc_lb < 0:
+        ap.error("--mc-lb >= 0")
+    if args.mc_lb > 0:
+        if not args.chain_fix or args.distill_from or args.variant in ("cnx_smdp", "cnn_iql", "cnn_vqc"):
+            ap.error("--mc-lb требует --chain-fix (границы цепочек) и обычный тренер Q (не cnx_smdp, cnn_iql, "
+                     "cnn_vqc, --distill-from)")
+        if args.mc_lb_mode == "target" and (args.variant not in MC_LB_TARGET_VARIANTS or args.ens > 1 or args.hlg):
+            ap.error("--mc-lb-mode target меняет цель TD только у обычной головы DQN (без --ens > 1 и --hlg); "
+                     "иначе --mc-lb-mode loss")
+    teacher_paths = [x.strip() for x in args.teacher_from.split(",") if x.strip()]
+    if len(teacher_paths) > 1 and (args.train_tol > 0 or args.train_kmax > 0):
+        ap.error("ансамбль учителей (--teacher-from через запятую) несовместим с правилом остановки обучения")
     if args.variant == "cnx_smdp" and (new_arch or new_loss):
         ap.error("cnx_smdp — отдельный тренер (advanced_agents.SmdpAgent): --encoder, --encoder-init, "
                  "--freeze-encoder, --ens, --mb-aux, --pani-w, --distill-top, --mask-schedule, --teacher-w "
@@ -3499,6 +3696,12 @@ def main():
     train_mask, test_mask = split_by_episode(data)
     print(f"episodes={len(episodes)} transitions={len(data['A'])} "
           f"train={int(train_mask.sum())} test={int(test_mask.sum())}", flush=True)
+    if args.train_all:
+        # --train-all: учатся все переходы; прежние отложенные цепочки остаются только для диагностик
+        # (evaluate, FQE), теперь они внутри обучения
+        train_mask = np.ones_like(train_mask)
+        print(f"--train-all: учатся все {int(train_mask.sum())} переходов; диагностики на {int(test_mask.sum())} "
+              "переходах прежних отложенных цепочек (внутри обучения)", flush=True)
     # новые флаги — в meta чекпоинта и в строку результата
     arm = dict(encoder_init=os.path.basename(args.encoder_init), freeze_encoder=bool(args.freeze_encoder),
                ens_min=int(args.ens_min), mb_aux=float(args.mb_aux), mb_h=int(args.mb_h),
@@ -3507,7 +3710,7 @@ def main():
                pani_sigma=float(args.pani_sigma), distill_top=float(args.distill_top),
                distill_w=float(args.distill_w), mask_schedule=bool(args.mask_schedule),
                mask_coarse_lr=int(args.mask_coarse_lr), teacher_w=float(args.teacher_w),
-               teacher_from=os.path.basename(args.teacher_from),
+               teacher_from=",".join(os.path.basename(x) for x in args.teacher_from.split(",")),
                target_chains=int(args.target_chains), data_seed=int(args.data_seed))
     # новые приёмы пишутся, только когда включены: строки и meta прежних рецептов не меняются
     if args.hlg:
@@ -3521,6 +3724,14 @@ def main():
     if args._mb_hs:
         # несколько горизонтов: mb_h в строке — наибольший из них
         arm.update(mb_hs=",".join(str(x) for x in args._mb_hs))
+    if args.wa != "none":
+        arm.update(wa=args.wa, wa_start=float(args.wa_start), wa_decay=float(args.wa_decay))
+    if args.train_all:
+        arm.update(train_all=True, diag_in_sample=True)
+    if args.mc_lb > 0:
+        arm.update(mc_lb=float(args.mc_lb), mc_lb_mode=args.mc_lb_mode)
+    if len(teacher_paths) > 1:
+        arm.update(n_teachers=len(teacher_paths))
     if args.mb_trust != "none":
         arm.update(mb_trust=args.mb_trust, mb_trust_tau=float(args.mb_trust_tau),
                    mb_trust_gate_min=float(args.mb_trust_gate_min), mb_trust_folds=int(args.mb_trust_folds))
@@ -3610,10 +3821,15 @@ def main():
                 surr["model"] = (tab_s, ens_s)
             te_kw = dict(stop_kw, model=surr["model"], lam=float(args.mb_lam),
                          smdp_scale=(float(args.smdp_scale) if args.smdp else 0.0))
-        data["QTE"], data["TEV"], te_info = teacher_targets(
-            args.teacher_from, data, names=names, reward_form=args.reward_form, err_scale=mb_scale,
-            init_err=mb_init, gamma=float(GAMMA), budget=int(args.episode_budget),
-            device=_t.device("cuda" if _t.cuda.is_available() and not args.cpu else "cpu"), **te_kw)
+        _te_dev = _t.device("cuda" if _t.cuda.is_available() and not args.cpu else "cpu")
+        if len(teacher_paths) == 1:
+            data["QTE"], data["TEV"], te_info = teacher_targets(
+                args.teacher_from, data, names=names, reward_form=args.reward_form, err_scale=mb_scale,
+                init_err=mb_init, gamma=float(GAMMA), budget=int(args.episode_budget), device=_te_dev, **te_kw)
+        else:
+            data["QTE"], data["TEV"], te_info = teacher_ensemble_targets(
+                teacher_paths, data, names=names, reward_form=args.reward_form, err_scale=mb_scale,
+                init_err=mb_init, gamma=float(GAMMA), budget=int(args.episode_budget), device=_te_dev)
         # маску учителя ученик НЕ наследует (у него свой TD по всем действиям); она только в meta
         args._teacher_soft_mask = te_info.pop("mask")
         te_info["train_rows"] = int((data["TEV"] & train_mask).sum())

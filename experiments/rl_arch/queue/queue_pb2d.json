@@ -15102,6 +15102,196 @@
    ]
   },
   {
+   "id": "pb2d-w50-teach",
+   "wave": 50,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "два учителя MBPO на скалярах с сидами 1 и 2 (рецепт и собранный буфер учителя лидера), в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 1 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_w50s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 2 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --tag qpb2d_teach_mbpo_w50s2"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-wa-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "среднее весов второй половины обучения (EMA 0.99): лидер (one), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w50waone --wa ema --wa-start 0.5 --wa-decay 0.99"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50waone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50waone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-wa-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "среднее весов второй половины обучения (EMA 0.99): лидер (one), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w50waone --wa ema --wa-start 0.5 --wa-decay 0.99"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50waone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50waone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-all-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "обучение на всех переходах цели (без отложенных 20% цепочек): лидер (one), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w50allone --train-all"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50allone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50allone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-all-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "обучение на всех переходах цели (без отложенных 20% цепочек): лидер (one), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w50allone --train-all"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50allone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50allone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-lb-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "нижняя граница Q по исходу записанной цепочки (штраф, вес 1): лидер (one), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w50lbone --mc-lb 1.0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50lbone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50lbone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-lb-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "нижняя граница Q по исходу записанной цепочки (штраф, вес 1): лидер (one), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w50lbone --mc-lb 1.0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50lbone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50lbone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-tens-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w50s1.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w50s2.pt"
+   ],
+   "note": "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q: лидер (one), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt,rl_arch/agents_online/qpb2d_teach_mbpo_w50s1.pt,rl_arch/agents_online/qpb2d_teach_mbpo_w50s2.pt --teacher-w 0.5 --seeds 1 --model-tag w50tensone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50tensone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50tensone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w50-tens-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w50s1.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w50s2.pt"
+   ],
+   "note": "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q: лидер (one), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt,rl_arch/agents_online/qpb2d_teach_mbpo_w50s1.pt,rl_arch/agents_online/qpb2d_teach_mbpo_w50s2.pt --teacher-w 0.5 --seeds 2 --model-tag w50tensone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w50tensone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w50tensone_m2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

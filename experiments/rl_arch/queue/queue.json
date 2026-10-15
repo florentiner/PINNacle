@@ -16191,6 +16191,324 @@
    ]
   },
   {
+   "id": "w50-teach",
+   "wave": 50,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "два учителя MBPO на скалярах с сидами 1 и 2 (рецепт и собранный буфер учителя лидера), в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 1 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_w50s1"
+    },
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 2 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --tag q_teach_mbpo_w50s2"
+    }
+   ]
+  },
+  {
+   "id": "w50-wa-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "среднее весов второй половины обучения (EMA 0.99): лидер (two), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w50watwo --wa ema --wa-start 0.5 --wa-decay 0.99"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50watwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50watwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-wa-m1-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50watwo_seed1.pt"
+   ],
+   "note": "среднее весов второй половины обучения (EMA 0.99): лидер (two), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50watwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50watwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-wa-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "среднее весов второй половины обучения (EMA 0.99): лидер (two), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w50watwo --wa ema --wa-start 0.5 --wa-decay 0.99"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50watwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50watwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-wa-m2-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50watwo_seed2.pt"
+   ],
+   "note": "среднее весов второй половины обучения (EMA 0.99): лидер (two), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50watwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50watwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-all-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "обучение на всех переходах цели (без отложенных 20% цепочек): лидер (two), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w50alltwo --train-all"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50alltwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50alltwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-all-m1-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50alltwo_seed1.pt"
+   ],
+   "note": "обучение на всех переходах цели (без отложенных 20% цепочек): лидер (two), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50alltwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50alltwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-all-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "обучение на всех переходах цели (без отложенных 20% цепочек): лидер (two), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w50alltwo --train-all"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50alltwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50alltwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-all-m2-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50alltwo_seed2.pt"
+   ],
+   "note": "обучение на всех переходах цели (без отложенных 20% цепочек): лидер (two), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50alltwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50alltwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-lb-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "нижняя граница Q по исходу записанной цепочки (штраф, вес 1): лидер (two), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w50lbtwo --mc-lb 1.0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50lbtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50lbtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-lb-m1-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50lbtwo_seed1.pt"
+   ],
+   "note": "нижняя граница Q по исходу записанной цепочки (штраф, вес 1): лидер (two), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50lbtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50lbtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-lb-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "нижняя граница Q по исходу записанной цепочки (штраф, вес 1): лидер (two), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w50lbtwo --mc-lb 1.0"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50lbtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50lbtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-lb-m2-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50lbtwo_seed2.pt"
+   ],
+   "note": "нижняя граница Q по исходу записанной цепочки (штраф, вес 1): лидер (two), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50lbtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50lbtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-tens-m1",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt",
+    "rl_arch/agents_online/q_teach_mbpo_w50s1.pt",
+    "rl_arch/agents_online/q_teach_mbpo_w50s2.pt"
+   ],
+   "note": "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q: лидер (two), сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt,rl_arch/agents_online/q_teach_mbpo_w50s1.pt,rl_arch/agents_online/q_teach_mbpo_w50s2.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w50tenstwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50tenstwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50tenstwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-tens-m1-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50tenstwo_seed1.pt"
+   ],
+   "note": "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q: лидер (two), сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50tenstwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50tenstwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-tens-m2",
+   "wave": 50,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt",
+    "rl_arch/agents_online/q_teach_mbpo_w50s1.pt",
+    "rl_arch/agents_online/q_teach_mbpo_w50s2.pt"
+   ],
+   "note": "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q: лидер (two), сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt,rl_arch/agents_online/q_teach_mbpo_w50s1.pt,rl_arch/agents_online/q_teach_mbpo_w50s2.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w50tenstwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w50tenstwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w50tenstwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w50-tens-m2-b",
+   "wave": 50,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50tenstwo_seed2.pt"
+   ],
+   "note": "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q: лидер (two), сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w50tenstwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w50tenstwo_m2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

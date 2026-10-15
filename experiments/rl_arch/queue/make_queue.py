@@ -1824,6 +1824,62 @@ if PREFIX == "pb2d":
                 1.0 + 0.6 * MAP_EH * 2, needs=[ENC_MAE, W41_TEACH["two"]],
                 note=f"две сети ({_nm}), сид обучения {_m}, сиды 42-46")
 
+# ---------------------------------------------------------------- волна 50
+# Составляющие метода (обзор 15 октября, paper/lit_review/work/track3/areas_verdicts/components_2026-10-15.tsv):
+# четыре правки обучения лидера, по одной, против разброса между обучениями и узкого места данных (~130 переходов
+# цели). Все флаги offline_rl.py, по умолчанию выключены:
+#   wa   — развёртывается экспоненциальное среднее весов второй половины обучения (--wa ema --wa-start 0.5,
+#          распад 0.99; SWA, Izmailov et al. UAI 2018; EMA весов, Morales-Brotons et al. TMLR 2024): меньше
+#          дрожания жадной политики к концу обучения (policy churn, Schaul et al. NeurIPS 2022);
+#   all  — учиться на всех переходах цели (--train-all): 20% цепочек сейчас отложены только ради диагностик,
+#          а отложенный TD для отбора бесполезен (Paine et al. 2020; Kumar et al. CoRL 2021);
+#   lb   — нижняя граница Q записанного действия по исходу его цепочки (--mc-lb 1.0: штраф relu(G - Q)^2 / 2;
+#          SIL, Oh et al. ICML 2018; optimality tightening, He et al. ICLR 2017; MCAC, Wilcox et al. NeurIPS 2022):
+#          пессимизм MOPO в модельных целях занижает Q хороших записанных цепочек, настоящий исход его поправляет;
+#   tens — ансамбль из трёх учителей (сид 0 — учитель лидера, сиды 1 и 2 — новые, тот же рецепт учителя на том
+#          же собранном буфере), цель учителя — среднее их Q (дистилляция ансамбля, Hinton et al. 2015;
+#          Allen-Zhu, Li ICLR 2023).
+# У каждой правки два обучения (сиды обучения 1 и 2) лидера (pb2d — одна сеть, ns2d — две), оценка на сидах 42-46
+# (страж, без сбросов, бюджет 7000, все 27 действий). На ns2d сиды 45-46 — отдельным кернелом по модели из HF.
+# Контроль — лидер с MAE волн 41/43: pb2d t3m_ete_tbquart_g, t3m_w41one_m2_g, t3m_w41one_m3_g; ns2d t3m_ete_two_g,
+# t3m_w41two_m2_g, t3m_w41two_m3_g. Новый сбор (Thompson вместо LCB) сюда не входит: 8.4 / 17.1 GPU-ч на буфер.
+W50_ARMS = (("wa", "--wa ema --wa-start 0.5 --wa-decay 0.99", "среднее весов второй половины обучения (EMA 0.99)"),
+            ("all", "--train-all", "обучение на всех переходах цели (без отложенных 20% цепочек)"),
+            ("lb", "--mc-lb 1.0", "нижняя граница Q по исходу записанной цепочки (штраф, вес 1)"),
+            ("tens", "", "ансамбль трёх учителей (сиды 0, 1, 2), среднее Q"))
+W50_SEED_H = 1.4 if NS2D else 0.7
+W50_TEACH = [f"rl_arch/agents_online/{TEACH}_w50s{_k}.pt" for _k in (1, 2)]
+if W28_K:
+    _arch = W41_LEAD
+    add("w50-teach", 50, "H06",
+        [(COMBO, f"{TEACH_TR.replace('--seed 0', f'--seed {_k}')} --target-buffer {W33_SRC} --tag {TEACH}_w50s{_k}")
+         for _k in (1, 2)],
+        1.5, note="два учителя MBPO на скалярах с сидами 1 и 2 (рецепт и собранный буфер учителя лидера), в HF")
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + W50_SEED_H * len(sd.split(","))   # noqa: E731
+    for _nm, _fl, _what in W50_ARMS:
+        _mt = f"w50{_nm}{_arch}"
+        _needs = [ENC_MAE, W41_TEACH[_arch]]
+        for _m in (1, 2):
+            _scr, _a = w41_train(_arch, _m, _mt)
+            if _nm == "tens":
+                assert f"--teacher-from {W41_TEACH[_arch]} " in _a
+                _a = _a.replace(f"--teacher-from {W41_TEACH[_arch]} ",
+                                f"--teacher-from {','.join([W41_TEACH[_arch]] + W50_TEACH)} ")
+                _needs_m = _needs + W50_TEACH
+            else:
+                _a = f"{_a} {_fl}"
+                _needs_m = _needs
+            add(f"w50-{_nm}-m{_m}", 50, "H06",
+                [(_scr, _a), free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=_needs_m,
+                note=f"{_what}: лидер ({_arch}), сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w50-{_nm}-m{_m}-b", 50, "H06",
+                    [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"{_what}: лидер ({_arch}), сид обучения {_m}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
