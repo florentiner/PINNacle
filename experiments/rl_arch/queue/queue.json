@@ -16191,6 +16191,432 @@
    ]
   },
   {
+   "id": "w49-pre-vae",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение vae вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49vaens2d --subdirs all --configs ssl-vae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w49-vae-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49vaens2d_enc_vae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером vae вместо MAE, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49vaens2d_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w49vaetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49vaetwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49vaetwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-vae-m1-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49vaetwo_seed1.pt"
+   ],
+   "note": "лидер (two) с энкодером vae вместо MAE, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49vaetwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49vaetwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-vae-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49vaens2d_enc_vae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером vae вместо MAE, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49vaens2d_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w49vaetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49vaetwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49vaetwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-vae-m2-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49vaetwo_seed2.pt"
+   ],
+   "note": "лидер (two) с энкодером vae вместо MAE, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49vaetwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49vaetwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-pre-dyn",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение dyn вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49dynns2d --subdirs all --configs ssl-dyn-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w49-dyn-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49dynns2d_enc_dyn_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером dyn вместо MAE, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49dynns2d_enc_dyn_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w49dyntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49dyntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49dyntwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-dyn-m1-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49dyntwo_seed1.pt"
+   ],
+   "note": "лидер (two) с энкодером dyn вместо MAE, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49dyntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49dyntwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-dyn-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49dynns2d_enc_dyn_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером dyn вместо MAE, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49dynns2d_enc_dyn_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w49dyntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49dyntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49dyntwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-dyn-m2-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49dyntwo_seed2.pt"
+   ],
+   "note": "лидер (two) с энкодером dyn вместо MAE, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49dyntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49dyntwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-pre-out",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение out вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49outns2d --subdirs all --configs ssl-out-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w49-out-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49outns2d_enc_out_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером out вместо MAE, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49outns2d_enc_out_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w49outtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49outtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49outtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-out-m1-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49outtwo_seed1.pt"
+   ],
+   "note": "лидер (two) с энкодером out вместо MAE, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49outtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49outtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-out-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49outns2d_enc_out_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером out вместо MAE, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49outns2d_enc_out_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w49outtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49outtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49outtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-out-m2-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49outtwo_seed2.pt"
+   ],
+   "note": "лидер (two) с энкодером out вместо MAE, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49outtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49outtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-pre-maeout",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение maeout вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49maeoutns2d --subdirs all --configs ssl-maeout-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "w49-maeout-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49maeoutns2d_enc_maeout_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером maeout вместо MAE, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49maeoutns2d_enc_maeout_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w49maeouttwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49maeouttwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49maeouttwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-maeout-m1-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49maeouttwo_seed1.pt"
+   ],
+   "note": "лидер (two) с энкодером maeout вместо MAE, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49maeouttwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49maeouttwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-maeout-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49maeoutns2d_enc_maeout_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером maeout вместо MAE, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49maeoutns2d_enc_maeout_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w49maeouttwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49maeouttwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49maeouttwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-maeout-m2-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49maeouttwo_seed2.pt"
+   ],
+   "note": "лидер (two) с энкодером maeout вместо MAE, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49maeouttwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49maeouttwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-con-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером con вместо MAE, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w49contwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49contwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49contwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-con-m1-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49contwo_seed1.pt"
+   ],
+   "note": "лидер (two) с энкодером con вместо MAE, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49contwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49contwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-con-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "лидер (two) с энкодером con вместо MAE, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w49contwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w49contwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w49contwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w49-con-m2-b",
+   "wave": 49,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49contwo_seed2.pt"
+   ],
+   "note": "лидер (two) с энкодером con вместо MAE, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w49contwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w49contwo_m2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

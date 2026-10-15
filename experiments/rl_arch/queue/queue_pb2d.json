@@ -15102,6 +15102,272 @@
    ]
   },
   {
+   "id": "pb2d-w49-pre-vae",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение vae вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49vaepb2d --subdirs all --configs ssl-vae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-vae-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49vaepb2d_enc_vae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером vae вместо MAE, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49vaepb2d_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w49vaeone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49vaeone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49vaeone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-vae-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49vaepb2d_enc_vae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером vae вместо MAE, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49vaepb2d_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w49vaeone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49vaeone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49vaeone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-pre-dyn",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение dyn вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49dynpb2d --subdirs all --configs ssl-dyn-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-dyn-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49dynpb2d_enc_dyn_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером dyn вместо MAE, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49dynpb2d_enc_dyn_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w49dynone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49dynone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49dynone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-dyn-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49dynpb2d_enc_dyn_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером dyn вместо MAE, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49dynpb2d_enc_dyn_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w49dynone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49dynone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49dynone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-pre-out",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение out вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49outpb2d --subdirs all --configs ssl-out-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-out-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49outpb2d_enc_out_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером out вместо MAE, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49outpb2d_enc_out_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w49outone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49outone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49outone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-out-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49outpb2d_enc_out_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером out вместо MAE, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49outpb2d_enc_out_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w49outone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49outone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49outone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-pre-maeout",
+   "wave": 49,
+   "group": "H06",
+   "hours": 1.5,
+   "needs": [],
+   "note": "предобучение maeout вместо MAE на картах 22 задач, 1400 шагов, энкодер в HF",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w49maeoutpb2d --subdirs all --configs ssl-maeout-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-maeout-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49maeoutpb2d_enc_maeout_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером maeout вместо MAE, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49maeoutpb2d_enc_maeout_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w49maeoutone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49maeoutone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49maeoutone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-maeout-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w49maeoutpb2d_enc_maeout_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером maeout вместо MAE, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w49maeoutpb2d_enc_maeout_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w49maeoutone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49maeoutone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49maeoutone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-con-m1",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером con вместо MAE, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w49conone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49conone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49conone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w49-con-m2",
+   "wave": 49,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one) с энкодером con вместо MAE, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w21cv_enc_con_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w49conone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w49conone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w49conone_m2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
