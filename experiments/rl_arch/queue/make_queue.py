@@ -2197,6 +2197,16 @@ if W28_K:
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"лидер ({_arch}), энкодер: {_what}, сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 57
+# Лидер ns2d (две сети) без отката при росте лосса: агент статьи оценивался без отката, и если без него
+# лучший метод не хуже, метод проще и сравнение симметрично. На pb2d это уже есть (t3m_ete_tbquart_free:
+# медиана 0.0117 против 0.0118 с откатом, худший сид 0.0366 против 0.0181). Сиды 42-51, два кернела.
+if NS2D:
+    _m57 = "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+    for _nm, _sd in (("a", "42,43,44,45,46"), ("b", "47,48,49,50,51")):
+        add(f"w57-two-free-{_nm}", 57, "H06", [free_eval(_m57, "t3m_ete_two", _sd, guard=False)], 8.5,
+            needs=[_m57], note=f"лидер ns2d (две сети) без отката, сиды {_sd}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

@@ -17976,6 +17976,38 @@
    ]
   },
   {
+   "id": "w57-two-free-a",
+   "wave": 57,
+   "group": "H06",
+   "hours": 8.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "лидер ns2d (две сети) без отката, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_ete_two_free"
+    }
+   ]
+  },
+  {
+   "id": "w57-two-free-b",
+   "wave": 57,
+   "group": "H06",
+   "hours": 8.5,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt"
+   ],
+   "note": "лидер ns2d (две сети) без отката, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_ete_two_seed1.pt --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_ete_two_free"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",
