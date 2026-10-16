@@ -49,6 +49,18 @@
                 в HF rl_arch/encoders/) для offline_rl.py --encoder-init
     lopo:level, lopo:best   «исключить УрЧП»: level и лучший конфиг с картами на --lopo задачах
 
+Предобучение без чужих буферов (волна 55; только с --pretrain-only):
+    --views СПЕЦ   карты из файлов видов целевой задачи (map_views.py: render_views.py или collect_active.py --views;
+                   спецификация — префиксы rl_arch/views/<тег> через запятую или локальные папки, задача — единственная
+                   папка --subdirs). У состояния карта среды (вид 0) и V видов того же снимка траектории (другие старты
+                   автокодировщика); повторы состояний (общий префикс) убираются по ключу сид + начало цепочки.
+                   --views-max K — только виды 0..K-1 (1 — одна карта среды на состояние: контроль без видов)
+    --procedural N N процедурных цепочек (гауссовы поля, чаша или седло, рост к краю, плоские карты застоя) вместо
+                   буферов — ноль уравнений; вместе с --views — смесь
+    ssl-mv         MAE на всех видах + согласованность видов одного состояния: VICReg (Bardes et al., ICLR 2022) между
+                   проекциями признаков двух разных видов (--mv-w вес, --mv-dim ширина проектора); строки без второго
+                   вида (плоские карты, карта среды без видов) — только MAE. Нужны --views
+
 --pretrain-only — только предобучение и сохранение энкодеров (без level, фолдов и lopo; волна 46: MAE
 на картах одной задачи, --subdirs <папка> --max-per-pde N); --ssl-steps — число шагов предобучения
 вместо числа эпох, чтобы наборы разного размера получали одинаковое число шагов.
@@ -125,6 +137,7 @@ BASES = {
     "ssl-dyn":    dict(maps="raw", err=True, ssl="dyn"),
     "ssl-out":    dict(maps="raw", err=True, ssl="out"),
     "ssl-maeout": dict(maps="raw", err=True, ssl="maeout"),
+    "ssl-mv":     dict(maps="raw", err=True, ssl="mv"),
 }
 SSL_LABELS = ("out", "maeout")      # предобучение видит исход y: в режиме фолдов R² оптимистичен
 NOT_MAPS = ("scalars", "level", "level-hgb", "shuffle")     # не кандидаты в «лучший конфиг с картами»
@@ -150,6 +163,8 @@ def load_data(args, log=print):
     import offline_rl as O
     if getattr(args, "synthetic", 0):
         return synthetic_data(args.synthetic, seed=args.seed)
+    if getattr(args, "views", "") or getattr(args, "procedural", 0):
+        return map_only_data(args, log)
     meta = O.pde_meta()
     subdirs = O.resolve_subdirs(args.subdirs)
     if not os.environ.get("RL_BUFFER_DIR") and not args.max_files:
@@ -216,6 +231,40 @@ def load_data(args, log=print):
         maps[k:k + len(p)] = p
         k += len(p)
     return tab, maps
+
+
+def map_only_data(args, log=print):
+    """--views / --procedural: карты без переходов буфера (только для предобучения). Строки — map_views.view_rows:
+    цепочка (файл, вид) с нулевой картой на шаге 0; таблица минимальная: действие — следующее по цепочке (если
+    известно), ошибка — из файла видов, исхода нет (y = 0), VKEY — номер состояния, общий у его видов."""
+    import map_views as MV
+    import offline_rl as O
+    recs, names = [], []
+    if getattr(args, "views", ""):
+        subs = O.resolve_subdirs(args.subdirs)
+        if len(subs) != 1:
+            raise SystemExit(f"--views: нужна ровно одна папка задачи в --subdirs, а не {args.subdirs!r}")
+        recs += MV.load_records(args.views, subs[0], log)
+        names.append(f"views:{subs[0]}")
+    if getattr(args, "procedural", 0):
+        recs += MV.procedural_records(args.procedural, seed=args.seed, chain_len=args.procedural_len)
+        names.append("procedural")
+    r = MV.view_rows(recs, max_views=getattr(args, "views_max", 0))
+    maps = r["maps"]
+    n = len(maps)
+    step, ch = r["STEP"], r["CH"]
+    first = step == 0
+    A = np.where(r["A"] >= 0, r["A"], 0).astype(np.int64)
+    pa = np.where(first, -1, np.r_[-1, A[:-1]]).astype(np.int64)
+    L = np.array([np.log10(e) if (e is not None and np.isfinite(e) and e > 0) else 0.0 for e in r["ERR"]])
+    tab = dict(PDE=np.zeros(n, np.int64), FILE=r["FILE"], CH=ch, STEP=step, SPENT=np.zeros(n, np.int64), A=A, PA=pa,
+               L=L, LN=L.copy(), LV=S.level6(maps), LVN=np.full((n, 6), np.nan), SPF=np.zeros((n, 3)),
+               LAST=np.r_[first[1:], True], CTX=np.zeros((1, 7)), NAMES=["+".join(names)],
+               SUBDIRS=["+".join(names)], VKEY=r["VKEY"], VIEW=r["VIEW"], MAPONLY=True)
+    nv = np.bincount(r["VIEW"][~first]) if (~first).any() else np.zeros(1, np.int64)
+    log(f"  карты без буферов ({'+'.join(names)}): состояний {r['n_states']}, строк {int((~first).sum())} "
+        f"(по видам {nv.tolist()}), цепочек (файл, вид) {int(first.sum())}")
+    return tab, maps.astype(np.float16 if args.map_dtype == "float16" else np.float32)
 
 
 def synthetic_data(n=400, seed=0, n_pde=2, size=26, chain_len=5):
@@ -332,7 +381,12 @@ class Data:
             self.sums[key] = (np.bincount(self.ch, c, minlength=self.n_ch),
                               np.bincount(self.ch, c * c, minlength=self.n_ch))
         self._hgb_x = None
+        # номер состояния у видов одной карты (--views); у обычных буферов виды не известны
+        self.vkey = np.asarray(tab["VKEY"], dtype=np.int64) if "VKEY" in tab else None
+        self.map_only = bool(tab.get("MAPONLY", False))
         sig = np.concatenate([self.A, self.ch, self.step, self.pde]).astype(np.int64).tobytes()
+        if self.vkey is not None:
+            sig = sig + self.vkey.tobytes()
         self.fingerprint = f"{self.n}-{self.n_ch}-{zlib.crc32(sig):08x}"
 
     def fetch(self, idx, prev=False):
@@ -562,6 +616,39 @@ def nt_xent(z, temp=0.2):
     return F.cross_entropy(sim, tgt)
 
 
+def vicreg(z1, z2, inv=25.0, var=25.0, cov=1.0, eps=1e-4):
+    """VICReg (Bardes et al., ICLR 2022), как в официальном коде (коэффициенты 25/25/1), делённый на 25, чтобы
+    масштаб был сравним с MAE. Возвращает (лосс, части)."""
+    n, d = z1.shape
+    rep_l = F.mse_loss(z1, z2)
+    std_l = cov_l = 0.0
+    for z in (z1, z2):
+        z = z - z.mean(0)
+        std = torch.sqrt(z.var(0) + eps)
+        std_l = std_l + F.relu(1.0 - std).mean() / 2.0
+        c = (z.T @ z) / max(n - 1, 1)
+        cov_l = cov_l + (c - torch.diag(torch.diag(c))).pow(2).sum() / d
+    loss = (inv * rep_l + var * std_l + cov * cov_l) / 25.0
+    return loss, dict(inv=float(rep_l.item()), std=float(std_l.item()), cov=float(cov_l.item()))
+
+
+def view_partners(D, rows):
+    """Для ssl-mv: строки, сгруппированные по состоянию (VKEY). Возвращает (по позиции в rows: начало группы,
+    размер, место внутри группы; строки в порядке групп) — второй вид выбирается из своей группы."""
+    vk = D.vkey[rows]
+    order = np.argsort(vk, kind="stable")
+    svk = vk[order]
+    start = np.r_[0, np.where(np.diff(svk) != 0)[0] + 1]
+    size = np.diff(np.r_[start, len(svk)])
+    gid = np.repeat(np.arange(len(start)), size)
+    g_start, g_size = np.empty(len(rows), np.int64), np.empty(len(rows), np.int64)
+    g_rank = np.empty(len(rows), np.int64)
+    g_start[order], g_size[order] = start[gid], size[gid]
+    g_rank[order] = np.arange(len(rows)) - start[gid]
+    g_size[vk < 0] = 1
+    return g_start, g_size, g_rank, rows[order]
+
+
 class OutHead(nn.Module):
     """Голова исхода (ssl-out, ssl-maeout): как у Probe, но признаки энкодера подаются готовыми."""
 
@@ -669,6 +756,21 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
         aux = nn.ModuleDict(dict(
             mae=nn.Sequential(nn.Linear(zdim, 512), nn.GELU(), nn.Linear(512, D.C * D.H * D.W)),
             out=OutHead(zdim, Fn.shape[1]))).to(dev)
+    elif kind == "mv":
+        if D.vkey is None:
+            raise SystemExit("ssl-mv: нужны виды карт (--views): номер состояния у строк неизвестен")
+        k_ = int(args.mv_dim)
+        aux = nn.ModuleDict(dict(
+            mae=nn.Sequential(nn.Linear(zdim, 512), nn.GELU(), nn.Linear(512, D.C * D.H * D.W)),
+            proj=nn.Sequential(nn.Linear(zdim, k_), nn.BatchNorm1d(k_), nn.ReLU(), nn.Linear(k_, k_)))).to(dev)
+        g_start, g_size, g_rank, g_rows = (torch.as_tensor(x, device=dev) for x in view_partners(D, rows))
+        pos_of = torch.full((D.n,), -1, dtype=torch.long, device=dev)
+        pos_of[torch.as_tensor(rows, device=dev)] = torch.arange(len(rows), device=dev)
+        n_pair_rows = int((g_size > 1).sum())
+        if not n_pair_rows:
+            raise SystemExit("ssl-mv: ни у одного состояния нет второго вида (процедурные карты, --views-max 1?)")
+        log(f"    mv: строк {len(rows)}, из них со вторым видом {n_pair_rows}, состояний с видами "
+            f"{len(np.unique(D.vkey[rows][D.vkey[rows] >= 0]))}")
     else:
         raise ValueError(f"неизвестный вид предобучения {kind!r}")
     params = list(enc.parameters()) + list(aux.parameters())
@@ -743,6 +845,31 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
                 with _autocast(amp):
                     pr = aux(enc(x), Fn[idx])
                 loss = F.huber_loss(pr.float(), yn[idx], delta=1.0)
+            elif kind == "mv":
+                m = block_mask(len(x), D.H, D.W, args.mae_ratio, gen, dev)
+                v = x.masked_fill(m, 0.0)
+                p_ = pos_of[idx]
+                sz = g_size[p_]
+                pair = sz > 1
+                n_p = int(pair.sum())
+                if n_p >= 4:
+                    # второй вид того же состояния: сдвиг на 1..size-1 внутри группы (сам себя не выбирает)
+                    off = torch.randint(0, 1 << 30, (len(idx),), generator=gen, device=dev) % (sz - 1).clamp_min(1) + 1
+                    other = g_rows[g_start[p_] + (g_rank[p_] + off) % sz][pair]
+                    raw2, _ = D.fetch(other)
+                    x2 = build_input("raw", raw2, None, stats)
+                    with _autocast(amp):
+                        zz = enc(torch.cat([v, x[pair], x2]))
+                        out = aux["mae"](zz[:len(x)])
+                        zp = aux["proj"](zz[len(x):])
+                    lv, lp = vicreg(zp[:n_p].float(), zp[n_p:].float())
+                else:
+                    with _autocast(amp):
+                        out = aux["mae"](enc(v))
+                    lv, lp = torch.zeros((), device=dev), dict(inv=0.0, std=0.0, cov=0.0)
+                lm = mae_loss(out, raw, m)
+                loss = lm + args.mv_w * lv
+                part = dict(mae=lm.item(), vic=float(lv.item()), inv=lp["inv"], pairs=n_p / len(idx))
             else:                                # maeout
                 m = block_mask(len(x), D.H, D.W, args.mae_ratio, gen, dev)
                 v = x.masked_fill(m, 0.0)
@@ -779,7 +906,8 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
 def ssl_args(kind, args):
     """Параметры предобучения вида kind (в файл энкодера и отчёт)."""
     keys = dict(mae=("mae_ratio",), con=("con_temp", "shift"), vae=("vae_beta", "vae_dim"),
-                dyn=("dyn_ema", "dyn_inv"), out=(), maeout=("mae_ratio", "out_w")).get(kind, ())
+                dyn=("dyn_ema", "dyn_inv"), out=(), maeout=("mae_ratio", "out_w"),
+                mv=("mae_ratio", "mv_w", "mv_dim")).get(kind, ())
     return {k: getattr(args, k) for k in keys}
 
 
@@ -1399,6 +1527,12 @@ def build_parser():
     g.add_argument("--data-device", default="cpu", choices=["cpu", "cuda", "auto"],
                    help="где лежат карты: cpu — пачки переносятся на GPU; auto — на GPU, если хватает памяти")
     g.add_argument("--synthetic", type=int, default=0, help="N синтетических переходов вместо буферов")
+    g.add_argument("--views", default="", help="карты из файлов видов (map_views.py) вместо буфера задачи --subdirs "
+                                                "(только с --pretrain-only): префиксы rl_arch/views/<тег> или папки")
+    g.add_argument("--views-max", type=int, default=0, help="--views: только виды 0..K-1 (1 — карта среды); 0 — все")
+    g.add_argument("--procedural", type=int, default=0,
+                   help="N процедурных цепочек карт без уравнений (map_views.procedural_records; только с --pretrain-only)")
+    g.add_argument("--procedural-len", type=int, default=8, help="карт в процедурной цепочке")
     g = ap.add_argument_group("разбиения и конфиги")
     g.add_argument("--configs", default="all", help="имена через запятую; all — порядок по умолчанию")
     g.add_argument("--folds", type=int, default=3)
@@ -1424,6 +1558,8 @@ def build_parser():
     g.add_argument("--dyn-ema", type=float, default=0.99, help="ssl-dyn: постоянная EMA целевого энкодера")
     g.add_argument("--dyn-inv", type=float, default=1.0, help="ssl-dyn: вес обратной динамики")
     g.add_argument("--out-w", type=float, default=1.0, help="ssl-maeout: вес головы исхода рядом с MAE")
+    g.add_argument("--mv-w", type=float, default=1.0, help="ssl-mv: вес согласованности видов (VICReg / 25) рядом с MAE")
+    g.add_argument("--mv-dim", type=int, default=256, help="ssl-mv: ширина проектора VICReg")
     g.add_argument("--shift", type=int, default=2, help="наибольший сдвиг aug-shift и видов ssl-con, пикселей")
     g.add_argument("--shuffle-indep", action="store_true", help="shuffle: своя перестановка у каждого канала")
     g.add_argument("--no-amp", action="store_true")
@@ -1461,6 +1597,10 @@ def run(args, log=None):
                 setattr(args, flag[2:].replace("-", "_"), v)
         args.no_upload = True
     names = expand_configs(args.configs)
+    if (getattr(args, "views", "") or getattr(args, "procedural", 0)) and not getattr(args, "pretrain_only", False):
+        raise SystemExit("--views и --procedural дают карты без исходов: только с --pretrain-only")
+    if getattr(args, "views", "") and getattr(args, "synthetic", 0):
+        raise SystemExit("--views и --synthetic вместе не используются")
     if getattr(args, "pretrain_only", False):
         return run_pretrain_only(args, names, log, t0)
     if args.folds < 2:

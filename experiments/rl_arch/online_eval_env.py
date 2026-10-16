@@ -38,6 +38,11 @@ the env's delta/reward logic is replicated locally.
 остаток его эпох исполняет --guard-fallback (кусками своей длины). Эпохи шага те же, состояние строится после
 всего шага, прошлое действие в контексте — запасное (как после отката стража). Срезы — stall_log и stall_spent
 в строке результата. Без флага прогон, строка и чекпоинт прежние.
+
+Виды карты (--views V, map_views.py): после каждой неплоской карты среды строятся ещё V карт того же снимка
+траектории с другими случайными стартами автокодировщика и отдаются приёмнику args._view_sink (его задают
+collect_active.py --views и render_views.py; у самой оценки приёмника нет, main флаг не принимает). Состояние
+генераторов случайных чисел возвращается, поэтому прогон и карты среды те же, что без флага.
 """
 from __future__ import annotations
 
@@ -695,6 +700,10 @@ def run_seed(seed, args, progress_cb=None):
     agree, hist = [], []
     true_state = None
     t_ae_tot = t_srf_tot = t_opt_tot = 0.0
+    # --views V (только через collect_active.py --views и render_views.py, приёмник args._view_sink): рядом с
+    # картой среды строятся V видов того же снимка траектории (map_views.py); прогон и его карты прежние
+    n_views = int(getattr(args, "views", 0) or 0)
+    t_view_tot = 0.0
     bandit_arms = parse_chain(args.bandit_arms) if args.policy == "bandit" else []
     bd = dict(n=np.zeros(len(ALL_ACTIONS)), x=np.zeros(len(ALL_ACTIONS)), prev_loss=None)
     scout_set = parse_chain(args.scout_set) if args.policy == "scout" else []
@@ -1187,6 +1196,36 @@ def run_seed(seed, args, progress_cb=None):
             if getattr(args, "_map_sink", None) is not None:
                 # collect_active.py --save-buffer: карты после действия len(chain) — в буфер сбора
                 args._map_sink(len(chain), true_maps)
+            if n_views and getattr(args, "_view_sink", None) is not None:
+                # виды того же снимка: другие случайные старты автокодировщика (map_views.render_views).
+                # Плоская карта (все копии весов совпали) у любого автокодировщика одна и та же — видов нет.
+                # Состояние генераторов возвращается: прогон и карты среды совпадают с прогоном без видов
+                import map_views as MV
+                want = getattr(args, "_view_want", None)
+                vs, vinfo = [], dict(flat=MV.flat_raw(raw), k=0)
+                if not vinfo["flat"] and (want is None or want(len(chain))):
+                    rs_t, rs_n = torch.random.get_rng_state(), np.random.get_state()
+                    rs_c = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+                    torch.manual_seed(seed * 7907 + 101 * len(chain) + 3)
+                    try:
+                        vs, vinfo = MV.render_views(
+                            saver.saved_models, get_model_rec, n_views, GRID_RANGE,
+                            int(args.view_ae_epochs or args.ae_epochs), args.ae_lr, args.ae_cosine_patience,
+                            args.ae_batch, args.ae_es_patience, AE_MODEL_PARAMS, dev,
+                            sequential=bool(getattr(args, "view_sequential", False)), vm=vm,
+                            early_stopping=EarlyStopping)
+                        vinfo["flat"] = False
+                        t_view_tot += vinfo["t_ae"] + vinfo["t_srf"]
+                        print(f"[seed {seed}] виды: {vinfo['k']} шт., автокодировщики {vinfo['t_ae']:.1f}s, "
+                              f"поверхности {vinfo['t_srf']:.1f}s", flush=True)
+                    except Exception as e:      # noqa: BLE001 — виды не должны ронять прогон
+                        vs, vinfo = [], dict(flat=False, k=0, error=f"{type(e).__name__}: {e}"[:200])
+                        print(f"[seed {seed}] виды не построены ({vinfo['error']})", flush=True)
+                    finally:
+                        torch.random.set_rng_state(rs_t); np.random.set_state(rs_n)
+                        if rs_c is not None:
+                            torch.cuda.set_rng_state_all(rs_c)
+                args._view_sink(len(chain), np.array(true_maps, dtype=np.float32)[:3], vs, vinfo)
             if save_buf:
                 # --save-buffer: те же истинные карты (без вмешательств --state-mode), канал delta
                 # загрузчик буфера строит сам
@@ -1331,7 +1370,8 @@ def run_seed(seed, args, progress_cb=None):
                 guide_follow=int(guide_stat[0]), guide_deviate=int(guide_stat[1]),
                 state_every=int(args.state_every), keep_opt=bool(keep_opt),
                 keep_opt_mode=(keep_mode if keep_opt else None),
-                elapsed_s=round(time.time() - t0, 1), **sh_row, **ex_row, **sg_row)
+                elapsed_s=round(time.time() - t0, 1), **sh_row, **ex_row, **sg_row,
+                **(dict(views=n_views, t_views_s=round(t_view_tot, 1)) if n_views else {}))
 
 
 def result_done(name):
@@ -1579,6 +1619,16 @@ def build_parser():
                          "Без флага — выключено")
     ap.add_argument("--stall-ratio", type=float, default=0.95,
                     help="порог застоя для --explore-stall")
+    ap.add_argument("--views", type=int, default=0,
+                    help="виды карты (map_views.py): после каждой неплоской карты среды ещё столько карт того же "
+                         "снимка траектории с другими случайными стартами автокодировщика. Только для "
+                         "collect_active.py --views и render_views.py (приёмник видов задают они); прогон и карты "
+                         "среды не меняются. 0 — выключено")
+    ap.add_argument("--view-ae-epochs", type=int, default=None,
+                    help="эпох автокодировщика у видов (по умолчанию --ae-epochs)")
+    ap.add_argument("--view-sequential", action="store_true",
+                    help="виды по одному кодом статьи (VisualizationModel.train), а не одним сложенным проходом "
+                         "(map_views.train_view_aes): проверка и запасной путь, дольше в V раз")
     ap.add_argument("--smoke", action="store_true")
     return ap
 
@@ -1605,6 +1655,8 @@ def main():
         sys.exit("--state-compare требует агента и построения карт (без --no-state)")
     if args.state_every < 1:
         sys.exit("--state-every должен быть не меньше 1")
+    if args.views:
+        sys.exit("--views: виды пишут collect_active.py --views и render_views.py, у оценки приёмника видов нет")
     if any(g >= 27 for g in parse_chain(args.guide)):
         sys.exit("--guide: проводник сравнивается по Q агента, поэтому состоит только из 27 действий агента")
     if args.guard_rollback and not uses_agent and args.policy != "random":

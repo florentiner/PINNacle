@@ -16092,6 +16092,195 @@
    ]
   },
   {
+   "id": "pb2d-w55-ren-0",
+   "wave": 55,
+   "group": "H06",
+   "hours": 5.0,
+   "needs": [],
+   "note": "виды карт poisson_boltzmann_2d (V=12): повтор цепочек собранного буфера (половина по сидам, 0 из 2) до последней неплоской карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/render_views.py",
+     "args": "--pde poissonboltzmann2d --source rl_arch/buffers_new/tbuf_pb2d_w0 --worker 0/2 --hours 4.0 --views 12 --tag mv_pb2d --resume --save-dir runs_rl_online"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-ren-1",
+   "wave": 55,
+   "group": "H06",
+   "hours": 5.0,
+   "needs": [],
+   "note": "виды карт poisson_boltzmann_2d (V=12): повтор цепочек собранного буфера (половина по сидам, 1 из 2) до последней неплоской карты",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/render_views.py",
+     "args": "--pde poissonboltzmann2d --source rl_arch/buffers_new/tbuf_pb2d_w0 --worker 1/2 --hours 4.0 --views 12 --tag mv_pb2d --resume --save-dir runs_rl_online"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-pre",
+   "wave": 55,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/online_env/poissonboltzmann2d_mv_pb2d_w0_views_done.json",
+    "rl_arch/online_env/poissonboltzmann2d_mv_pb2d_w1_views_done.json"
+   ],
+   "note": "MAE и MAE+VICReg на видах карт poisson_boltzmann_2d (1400 шагов); контроль — MAE на одной карте среды на состояние",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w55mvpb2d --subdirs poisson_boltzmann_2d --views rl_arch/views/mv_pb2d --configs ssl-mae-resnet,ssl-mv-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w55mv1pb2d --subdirs poisson_boltzmann_2d --views rl_arch/views/mv_pb2d --views-max 1 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-pre-proc",
+   "wave": 55,
+   "group": "H06",
+   "hours": 0.6,
+   "needs": [],
+   "note": "MAE на 5000 процедурных цепочках карт (40 тыс. карт, ни одного уравнения), 1400 шагов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w55proc --procedural 5000 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-mvmae-m1",
+   "wave": 55,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one), энкодер: MAE на видах карт цели, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w55mvmaeone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w55mvmaeone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w55mvmaeone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-mvmae-m2",
+   "wave": 55,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one), энкодер: MAE на видах карт цели, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w55mvmaeone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w55mvmaeone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w55mvmaeone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-mvvic-m1",
+   "wave": 55,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55mvpb2d_enc_mv_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one), энкодер: MAE + согласованность видов (VICReg), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55mvpb2d_enc_mv_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w55mvvicone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w55mvvicone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w55mvvicone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-mvvic-m2",
+   "wave": 55,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55mvpb2d_enc_mv_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one), энкодер: MAE + согласованность видов (VICReg), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55mvpb2d_enc_mv_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w55mvvicone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w55mvvicone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w55mvvicone_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-proc-m1",
+   "wave": 55,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one), энкодер: MAE на процедурных картах (ноль уравнений), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 1 --model-tag w55procone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w55procone_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w55procone_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w55-proc-m2",
+   "wave": 55,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt"
+   ],
+   "note": "лидер (one), энкодер: MAE на процедурных картах (ноль уравнений), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_tbquart.pt --teacher-w 0.5 --seeds 2 --model-tag w55procone"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w55procone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w55procone_m2_g"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

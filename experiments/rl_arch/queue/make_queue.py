@@ -2098,6 +2098,80 @@ if W28_K:
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"лидер ({_arch}) с MAE на {len(_subs)} уравнениях x {_n} переходов, сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 55
+# Энкодер без буферов других уравнений: данные для самообучения даёт сам автокодировщик карт. Скрытая плоскость
+# автокодировщика статьи ничем не закреплена, поэтому другой случайный старт на тех же копиях весов PINN даёт другой
+# вид (поворот, отражение, масштаб, изгиб) того же ландшафта: V видов одного состояния стоят V автокодировщиков
+# (сложены в один проход, map_views.train_view_aes) и V поверхностей, без обучения PINN. Тот же шум агент видит
+# при развёртывании: вторая сборка карт меняла решение лидера ns2d на 0-60% шагов (волна 10, t3a_*_reb).
+# Состояния — повторный прогон цепочек собранного буфера цели (W33_SRC, на нём учится лидер; render_views.py: до
+# последней неплоской карты, виды только неплоских и ещё не встреченных состояний). Плоских карт (все копии весов
+# совпали: застой L-BFGS, PSO) в tbuf_pb2d_w0 55%, в tbuf_ns2d_w0/w1 83% — у ns2d неплоские только первые две
+# карты цепочки, поэтому у ns2d вторым кернелом ещё случайные цепочки цели со стопом после двух плоских карт.
+# Для новой задачи повтор не нужен: collect_active.py --views строит виды во время направленного сбора.
+# Армы (лидер дважды, сиды обучения 1 и 2, оценка на сидах 42-46, как в волнах 46/53/54):
+#   mvmae — MAE на всех видах цели (одна задача, ~V+1 карт на неплоское состояние);
+#   mvvic — MAE + согласованность видов одного состояния (VICReg, Bardes et al., ICLR 2022): признаки не
+#           зависят от случайности автокодировщика;
+#   proc  — MAE на процедурных картах (гауссовы поля, чаша или седло, рост к краю, плоские карты застоя; Baradad
+#           et al., NeurIPS 2021): ноль уравнений, один кернел предобучения на оба уравнения (в очереди pb2d).
+# Контроли уже есть: лидер с ENC_MAE (22 уравнения), волна 46 (MAE на 130/1000/всех картах случайного буфера цели),
+# без предобучения t3m_ete_resnp_g. Кернел предобучения видов пишет ещё энкодер MAE на одной карте среды на
+# состояние (--views-max 1, тег w55mv1<задача>): контроль «виды или сами состояния» — обучение по нему не в волне.
+RENDER = "experiments/rl_arch/render_views.py"
+W55_V = 12
+W55_TAG = f"mv_{W28_SHORT}"
+W55_SEED_H = 1.4 if NS2D else 0.7
+if W28_K:
+    _arch = W41_LEAD
+    _vt = W55_TAG
+    # кернелы видов: pb2d — два работника по сидам исходного буфера; ns2d — повтор целиком и случайные цепочки
+    _ren = ((("0", f"--source {W33_SRC} --worker 0/1 --hours 5.0", 6.0,
+              "повтор цепочек собранного буфера до второй карты (дальше плоские), виды неплоских состояний"),
+             ("1", f"--random 5 --random-len 6 --flat-stop 2 {KEEPS} --worker 1/2 --hours 6.0", 8.0,
+              "свежие случайные цепочки цели (все 27 действий) со стопом после двух плоских карт"))
+            if NS2D else
+            tuple((str(_k), f"--source {W33_SRC} --worker {_k}/2 --hours 4.0", 5.0,
+                   f"повтор цепочек собранного буфера (половина по сидам, {_k} из 2) до последней неплоской карты")
+                  for _k in range(2)))
+    _done = []
+    for _k, _a, _h, _what in _ren:
+        add(f"w55-ren-{_k}", 55, "H06",
+            [(RENDER, f"--pde {PDE} {_a} --views {W55_V} --tag {_vt} --resume --save-dir runs_rl_online")],
+            _h, note=f"виды карт {SUBDIR} (V={W55_V}): {_what}")
+        _done.append(f"rl_arch/online_env/{PDE}_{_vt}_w{_k}_views_done.json")
+    _cvtag, _cv1 = f"w55mv{W28_SHORT}", f"w55mv1{W28_SHORT}"
+    add("w55-pre", 55, "H06",
+        [(CVPROBE, f"--tag {_cvtag} --subdirs {SUBDIR} --views rl_arch/views/{_vt} --configs ssl-mae-resnet,ssl-mv-resnet "
+                   f"--pretrain-only --ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}"),
+         (CVPROBE, f"--tag {_cv1} --subdirs {SUBDIR} --views rl_arch/views/{_vt} --views-max 1 --configs ssl-mae-resnet "
+                   f"--pretrain-only --ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}")],
+        1.0, needs=_done, note=f"MAE и MAE+VICReg на видах карт {SUBDIR} ({W46_SSL_STEPS} шагов); контроль — MAE на "
+                               "одной карте среды на состояние")
+    if PREFIX == "pb2d":
+        add("w55-pre-proc", 55, "H06",
+            [(CVPROBE, f"--tag w55proc --procedural 5000 --configs ssl-mae-resnet --pretrain-only "
+                       f"--ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}")],
+            0.6, note=f"MAE на 5000 процедурных цепочках карт (40 тыс. карт, ни одного уравнения), {W46_SSL_STEPS} шагов")
+    _arms = (("mvmae", f"rl_arch/encoders/cvprobe_{_cvtag}_enc_mae_resnet.pt", "MAE на видах карт цели"),
+             ("mvvic", f"rl_arch/encoders/cvprobe_{_cvtag}_enc_mv_resnet.pt", "MAE + согласованность видов (VICReg)"),
+             ("proc", "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt", "MAE на процедурных картах (ноль уравнений)"))
+    for _nm, _enc, _what in _arms:
+        _mt = f"w55{_nm}{_arch}"
+        for _m in (1, 2):
+            _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+            _eh = lambda sd: (0.4 if NS2D else 0.3) + W55_SEED_H * len(sd.split(","))   # noqa: E731
+            add(f"w55-{_nm}-m{_m}", 55, "H06",
+                [w41_train(_arch, _m, _mt, init=_enc),
+                 free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=[_enc, W41_TEACH[_arch]],
+                note=f"лидер ({_arch}), энкодер: {_what}, сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w55-{_nm}-m{_m}-b", 55, "H06",
+                    [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"лидер ({_arch}), энкодер: {_what}, сид обучения {_m}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
