@@ -283,6 +283,19 @@ def lint_maestudy(argv):
         M.load_study_data, M.run_cost, K.killed = saved
 
 
+def lint_render(argv):
+    """Виды карт (render_views.py): разбор аргументов до чтения исходного буфера или первого прогона среды."""
+    import render_views as RV
+    import killswitch as K
+    saved = RV.TB.resolve, RV.run_item, K.killed
+    RV.TB.resolve = RV.run_item = _stop
+    K.killed = lambda *a, **k: None
+    try:
+        RV.main(list(argv) + ["--no-upload", "--save-dir", tempfile.mkdtemp(prefix="lint_rv_")])
+    finally:
+        RV.TB.resolve, RV.run_item, K.killed = saved
+
+
 def lint_wait(argv):
     """Шаг ожидания файлов в HF: только разбор аргументов (сеть при проверке не трогаем)."""
     import wait_hf as Wt
@@ -308,7 +321,7 @@ def lint_select(argv):
         SA.run = saved
 
 
-LINTERS = {"mae_data_study.py": lint_maestudy, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+LINTERS = {"mae_data_study.py": lint_maestudy, "render_views.py": lint_render, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}

@@ -102,6 +102,13 @@ offline_rl.load_episodes + episodes_to_arrays_chains и surrogate.build_table:
 Обучение на таком буфере вместо исходного: agent_combo.py / offline_rl.py --target-buffer
 rl_arch/buffers_new/<tag>[,...] (target_buffer.py).
 
+Виды карт (--views V, вместе с --save-buffer; map_views.py): у каждой неплоской карты среды строятся ещё V карт
+того же снимка траектории с другими стартами автокодировщика — данные самообучения энкодера на картах одной этой
+задачи, без лишнего обучения PINN (цена — автокодировщики, сложенные в один проход, и V поверхностей лоссов на
+состояние). Файл видов на цепочку: <save-dir>/views/<tag>/<папка задачи>/<tag>_cNNNN.pt, в HF
+rl_arch/views/<tag>/<папка задачи>/ тем же коммитом, что файлы буфера; в записи — view_file. Читает зонд CV:
+cv_probe.py --views rl_arch/views/<tag>. Без флага сбор, записи и файлы прежние.
+
 Несколько сборщиков параллельно (--worker k/K, свой --tag у каждого): кандидаты делятся между
 сборщиками по crc ключа цепочки (одна и та же цепочка двум сборщикам не достанется), сиды среды —
 срез пула [k::K], --collect-seed по умолчанию k. Выходы независимы и складываются перечислением
@@ -302,6 +309,10 @@ def env_args(a, script, ckpt_every=0, resume=False):
     argv += ["--keep-opt"] if a.keep_opt else []
     argv += ["--plain-fnn"] if a.plain_fnn else []
     argv += ["--lbfgs-tol", str(a.lbfgs_tol)] if a.lbfgs_tol is not None else []
+    if getattr(a, "views", 0):
+        # --views: виды карт рядом с картой среды (map_views.py); прогон и карты среды прежние
+        argv += ["--views", str(a.views)]
+        argv += ["--view-ae-epochs", str(a.view_ae_epochs)] if getattr(a, "view_ae_epochs", 0) else []
     return E.build_parser().parse_args(argv)
 
 
@@ -328,11 +339,12 @@ def _ckpt_read(name):
 
 
 def run_env(a, acts, seed, n_planned, watch=None, ckpt=None, ckpt_every=0, resume=False, base_trace=(),
-            base_maps=None):
+            base_maps=None, base_views=None):
     """Один вызов run_seed со скриптом acts. watch решает об остановке после каждого действия,
     пока исполнено меньше n_planned действий. Возвращает dict: ok, error, truncated, chain, hist,
     err, spent, l2re, stop, trace, elapsed_s, maps. maps (--save-buffer): {номер действия с 1:
-    карты (3, 26, 26) после него}; base_maps — карты общего префикса (докатка их не строит заново)."""
+    карты (3, 26, 26) после него}; base_maps — карты общего префикса (докатка их не строит заново).
+    С --views ещё views: {номер действия: (список видов (3, 26, 26), сведения)}; base_views — виды префикса."""
     args = env_args(a, chain_str(acts), ckpt_every=ckpt_every, resume=resume)
     args._ckpt_name = ckpt
     trace = [dict(p) for p in base_trace]
@@ -340,6 +352,9 @@ def run_env(a, acts, seed, n_planned, watch=None, ckpt=None, ckpt_every=0, resum
     if getattr(a, "save_buffer", False):
         # среда отдаёт состояние build_state (4, 26, 26); канал delta загрузчик буфера строит сам
         args._map_sink = lambda step, m: maps.__setitem__(int(step), np.array(m, dtype=np.float32)[:3])
+    views = dict(base_views or {})
+    if getattr(a, "views", 0):
+        args._view_sink = lambda step, m3, vs, info: views.__setitem__(int(step), (list(vs), dict(info)))
 
     def cb(info):
         e = _num(info.get("rmse", float("nan")) + info.get("brmse", float("nan")))
@@ -382,7 +397,7 @@ def run_env(a, acts, seed, n_planned, watch=None, ckpt=None, ckpt_every=0, resum
     return dict(ok=error is None, error=error, truncated=truncated,
                 chain=[[c[0], float(c[1]), int(c[2])] for c in chain], hist=hist,
                 err=[emap.get(h[0]) for h in hist], spent=int(spent), l2re=l2re, stop=stop,
-                trace=trace, elapsed_s=elapsed, maps=maps)
+                trace=trace, elapsed_s=elapsed, maps=maps, **(dict(views=views) if getattr(a, "views", 0) else {}))
 
 
 # --------------------------------------------------------------------------------------------
@@ -391,6 +406,32 @@ def run_env(a, acts, seed, n_planned, watch=None, ckpt=None, ckpt_every=0, resum
 
 def buffer_dir(a):
     return os.path.join(a.buffer_dir or os.path.join(a.save_dir, "buffers_new", a.tag), buffer_subdir(a.pde))
+
+
+def views_dir(a):
+    return os.path.join(a.save_dir, "views", a.tag, buffer_subdir(a.pde))
+
+
+def write_views(st, a, rec, res, idx):
+    """--views: файл видов цепочки (map_views.py) рядом с файлом буфера, в своей папке
+    <save-dir>/views/<tag>/<папка задачи>/<tag>_cNNNN.pt (--target-buffer его не видит). В записи — view_file.
+    Состояния общего префикса повторяются в файлах концовок; зонд CV убирает повторы по ключу (сид + начало)."""
+    import map_views as MV
+    vw = res.get("views") or {}
+    maps = res.get("maps") or {}
+    if not maps:
+        return
+    fname = f"{a.tag}_c{idx:04d}.pt"
+    MV.save_record(os.path.join(views_dir(a), fname), MV.make_record(
+        a.pde, a.tag, rec.get("buf_file") or f"{a.tag}#{idx}", rec["seed"], rec["env"], rec["chain"],
+        {s: m for s, m in maps.items()}, {s: v[0] for s, v in vw.items() if v[0]},
+        {s: {k: x for k, x in v[1].items()} for s, v in vw.items()},
+        err={i + 1: e for i, e in enumerate(rec.get("err") or [])},
+        l2re={i + 1: h[2] for i, h in enumerate(rec.get("hist") or [])}, hist=rec.get("hist")))
+    rec["view_file"] = fname
+    vs = st.setdefault("views", dict(dir=views_dir(a), files=0, maps=0))
+    vs["files"] += 1
+    vs["maps"] += int(sum(len(v[0]) for v in vw.values()) + len(maps))
 
 
 def write_buffer(st, a, rec, res):
@@ -410,6 +451,8 @@ def write_buffer(st, a, rec, res):
                     truncated=rec["truncated"], shared_prefix_len=rec["shared_prefix_len"],
                     stop=rec["stop"], round=rec["round"], acq=rec["acq"], l2re=rec["l2re"]))
     rec.update(buf_file=fname, buf_n=len(tr), buf_up=False)
+    if getattr(a, "views", 0):
+        write_views(st, a, rec, res, idx)
     buf = st.setdefault("buffer", dict(dir=d, hf=f"{BUF_HF}/{a.tag}/{buffer_subdir(a.pde)}", files=0,
                                        transitions=0, uploaded=0, lost=0))
     buf["dir"] = d
@@ -432,6 +475,9 @@ def flush_buffer(st, a):
     if not todo:
         return 0
     pairs = [(os.path.join(d, r["buf_file"]), f"{BUF_HF}/{a.tag}/{sub}/{r['buf_file']}") for r in todo]
+    # --views: файлы видов тем же коммитом
+    pairs += [(os.path.join(views_dir(a), r["view_file"]), f"rl_arch/views/{a.tag}/{sub}/{r['view_file']}")
+              for r in todo if r.get("view_file") and os.path.exists(os.path.join(views_dir(a), r["view_file"]))]
     if not upload_files(pairs, f"rl_arch buffers_new {a.tag}: {len(pairs)} цепочек, раунд {st['round']}"):
         return 0
     for r in todo:
@@ -859,7 +905,8 @@ def run_group(st, a, plen, items, over, save):
         shutil.copyfile(pre_local, br_local)
         try:
             res = run_env(a, it["actions"], seed, len(it["actions"]), watch=make_watch(st["records"], a),
-                          ckpt=br_name, resume=True, base_trace=pre["trace"], base_maps=pre.get("maps"))
+                          ckpt=br_name, resume=True, base_trace=pre["trace"], base_maps=pre.get("maps"),
+                          base_views=pre.get("views"))
         finally:
             _rm(br_local)
         new = max(0, res["spent"] - pre["spent"])
@@ -1011,6 +1058,13 @@ def build_parser():
     ap.add_argument("--worker", default="",
                     help="k/K — сборщик k из K независимых (у каждого свой --tag): своя доля кандидатов, свой "
                          "срез --seed-pool, --collect-seed по умолчанию k")
+    ap.add_argument("--views", type=int, default=0,
+                    help="с --save-buffer: у каждой неплоской карты ещё столько видов того же снимка траектории "
+                         "(другие старты автокодировщика, map_views.py) — данные предобучения энкодера на картах "
+                         "одной этой задачи без лишнего обучения PINN. Файл видов на цепочку: "
+                         "<save-dir>/views/<tag>/<папка задачи>/<tag>_cNNNN.pt, в HF rl_arch/views/<tag>/... тем же "
+                         "коммитом, что буфер. 0 — выключено, сбор прежний")
+    ap.add_argument("--view-ae-epochs", type=int, default=0, help="эпох автокодировщика видов (0 — как у среды)")
     ap.add_argument("--smoke", action="store_true", help="бюджет 300 (если не задан), без HF")
     return ap
 
@@ -1026,6 +1080,10 @@ def main(argv=None):
         a.truncate_min = a.budget // 2
     if a.truncate and a.truncate <= 1.0:
         sys.exit("--truncate: множитель должен быть больше 1 (или 0 — выключено)")
+    if a.views and not a.save_buffer:
+        sys.exit("--views строит виды рядом с картами среды: нужен --save-buffer")
+    if a.views < 0:
+        sys.exit("--views >= 0")
     a._worker = parse_worker(a.worker)
     if a._worker[1] > 1 and "--collect-seed" not in given:
         a.collect_seed = a._worker[0]
