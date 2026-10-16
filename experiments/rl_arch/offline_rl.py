@@ -59,6 +59,14 @@ Results: JSON per run, uploaded to HF dataset rl_arch/{variant}_seed{n}.json.
     --ft-mode lora                  веса энкодера стоят, к каждой Conv2d и Linear добавлен низкоранговый адаптер
     --lora-rank R --lora-alpha A    (LoRA, Hu et al. ICLR 2022; свёртка kxk -> R каналов, затем 1x1, масштаб A/R)
     --ft-mode lastblock             учится только последний блок ResNet (body.3) и проекция head
+Обучение на видах карт и дольше (волна 58; всё выключено по умолчанию):
+    --view-aug SPEC [--view-aug-p P] виды карт состояний собранного буфера (map_views.py, render_views.py; SPEC как у
+                                    cv_probe --views): у перехода, состояние которого (сид + начало цепочки + шаг)
+                                    есть в файлах видов, карты s и независимо s' с вероятностью P заменяются
+                                    случайным видом; delta — по тому же виду предыдущего шага (view_rows)
+    --view-cons W                   согласованность: MSE Q(s) на двух разных наблюдениях одного состояния, вторая
+                                    сторона — целевая сеть без градиента
+    --lr-schedule cosine [--lr-min L] косинусный спад шага Adam по всем шагам обучения (арм: --epochs 1000)
 Вид энкодера и число голов пишутся в meta чекпоинта: online_eval_env.load_agent строит ту же сеть.
 """
 from __future__ import annotations
@@ -1567,6 +1575,9 @@ MC_LB_MODES = ("loss", "target")
 # --mc-lb-mode target меняет цель TD только у обычной головы DQN (не ансамбль, не бины, не квантили)
 MC_LB_TARGET_VARIANTS = ("cnn_dqn", "convnext_dqn", "cnn_cql", "cnx_cql", "cnx_dueling", "cnx_factored",
                          "their_dqn", "their_cql", "cnx_bcq")
+# дольше учиться (волна 58): план шага Adam по шагам всего обучения (--lr-schedule, --lr-min)
+LR_SCHEDULES = ("const", "cosine")
+VIEW_AUG_P = 0.5                # --view-aug-p по умолчанию
 
 
 def mc_returns(data, gamma):
@@ -1630,6 +1641,220 @@ def recompute_bn(model, forward, X, bs=256, skip=()):
         m.momentum = mo
     model.train(was)
     return len(bns)
+
+
+def lr_at(step, total, lr0, lr_min=0.0, schedule="const"):
+    """Шаг Adam на шаге обучения step (с нуля) из total (--lr-schedule). const — lr0 всегда (прежнее поведение);
+    cosine — lr_min + (lr0 - lr_min) * (1 + cos(pi * step / total)) / 2 (Loshchilov, Hutter, ICLR 2017, без
+    перезапусков): первый шаг — lr0, середина — (lr0 + lr_min) / 2, к концу — почти lr_min (как
+    CosineAnnealingLR с T_max = total и шагом планировщика после каждого шага оптимизатора)."""
+    if schedule == "const":
+        return float(lr0)
+    if schedule != "cosine":
+        raise ValueError(f"--lr-schedule {schedule!r}: допустимо {LR_SCHEDULES}")
+    t = min(max(int(step), 0), max(int(total), 1))
+    return float(lr_min) + (float(lr0) - float(lr_min)) * 0.5 * (1.0 + math.cos(math.pi * t / max(int(total), 1)))
+
+
+# --------------------------------------------------------------------------
+# Виды карт для обучения Q (--view-aug, волна 58)
+# --------------------------------------------------------------------------
+
+def view_row_keys(episodes, data):
+    """Ключи состояний строк набора для сопоставления с файлами видов (map_views.state_key: сид + исполненное
+    начало цепочки + шаг) — так же, как их строит render_views.py по файлу собранного буфера: сид — meta первого
+    перехода файла, цепочка — номинальные действия всех переходов файла (таблица 27 действий), шаг состояния s
+    строки — её номер в файле (STEP загрузчика с --chain-fix), шаг s' — на один больше.
+    Строки сопоставляются с файлами по номеру цепочки EP: episodes_to_arrays_chains нумерует цепочки подряд по
+    непустым файлам (граница — done != 0). Сопоставляется только первая цепочка файла (render_views повторяет
+    файл как одну цепочку с шага 0; файлы сбора — одна цепочка на файл). Возвращает dict: KS, KS2 — ключ или
+    None (шаг 0 — нулевая карта, у неё видов нет; терминальная строка — её s' в цель не входит), KP — ключ
+    предыдущего состояния s (шаг s-1 >= 1; для канала delta), POS — номер перехода в файле (-1 у
+    несопоставленных)."""
+    import map_views as MV
+    import target_buffer as TB
+    first = {}                      # номер цепочки -> (сид, цепочка файла)
+    cid = -1
+    for ep in episodes:
+        if not ep:
+            continue
+        meta = ep[0].get("meta") or {}
+        seed = meta.get("seed")
+        acts = [int(t["action"][0]) * 9 + int(t["action"][1]["lr"]) * 3 + int(t["action"][1]["epochs"]) for t in ep]
+        chain = [list(TB.S.ACTIONS[a]) for a in acts]
+        n_ch = sum(int(t.get("done", 0)) != 0 for t in ep) + int(int(ep[-1].get("done", 0)) == 0)
+        for c in range(n_ch):
+            cid += 1
+            if c == 0 and seed is not None:
+                first[cid] = (int(seed), chain)
+    EP, STEP, D = (np.asarray(data[k]) for k in ("EP", "STEP", "D"))
+    n = len(EP)
+    KS, KS2, KP, POS = [None] * n, [None] * n, [None] * n, np.full(n, -1, dtype=np.int64)
+    for i in range(n):
+        src = first.get(int(EP[i]))
+        if src is None:
+            continue
+        seed, chain = src
+        p = int(STEP[i])
+        POS[i] = p
+        if p >= 1:
+            KS[i] = MV.state_key(seed, chain, p)
+        if p >= 2:
+            KP[i] = MV.state_key(seed, chain, p - 1)
+        if float(D[i]) == 0.0 and p + 1 <= len(chain):
+            KS2[i] = MV.state_key(seed, chain, p + 1)
+    return dict(KS=KS, KS2=KS2, KP=KP, POS=POS)
+
+
+def view_bank(records, episodes, data):
+    """Банк видов для --view-aug: каждое состояние строки (s и, отдельно, s'), у которого в файлах видов есть
+    построенные виды, получает k альтернативных входов — та же строка data['S'] (data['S2']) с картами вида v
+    вместо карт среды (каналы 0-2) и каналом delta (3) по тому же виду предыдущего шага, как у
+    map_views.view_rows: шаг 1 — нули; дальше — разность с видом v состояния шага s-1, если он есть, иначе с
+    картой среды шага s-1 из буфера. Каналы скалярного контекста (4+) не меняются: вид — другое наблюдение того
+    же состояния. Ключ состояния — view_row_keys; первый встреченный файл видов с ключом (по порядку имён) —
+    его, как dedupe у view_rows. Вид 0 (карта среды) — это сама строка буфера, в банк не входит.
+    Возвращает dict: ALT (M, C, H, W) float32 — сырые (до нормировки) входы, OFF_S/K_S и OFF_S2/K_S2 (N,) —
+    начало и число видов строки в ALT (K = 0 — видов нет), и сводку info."""
+    import map_views as MV
+    S, S2 = data["S"], data["S2"]
+    if S.shape[1] < 4:
+        raise ValueError("--view-aug: нужны 4 канала карт (3 карты среды и delta)")
+    views = {}
+    for rec in records:
+        chain = rec["chain"]
+        for s, v in (rec.get("views") or {}).items():
+            if len(v):
+                views.setdefault(MV.state_key(rec["seed"], chain, int(s)), np.asarray(v, dtype=np.float32))
+    kk = view_row_keys(episodes, data)
+    EP, STEP = np.asarray(data["EP"]), np.asarray(data["STEP"])
+    n = len(EP)
+    # карта среды (loss_total) шага p цепочки: s строки со STEP = p
+    tot = {(int(EP[i]), int(STEP[i])): S[i, 0] for i in range(n)}
+    alt = []
+    OFF_S, K_S = np.zeros(n, np.int64), np.zeros(n, np.int64)
+    OFF_S2, K_S2 = np.zeros(n, np.int64), np.zeros(n, np.int64)
+    m = 0
+    for side, keys, base, OFF, K in (("s", kk["KS"], S, OFF_S, K_S), ("s2", kk["KS2"], S2, OFF_S2, K_S2)):
+        for i in range(n):
+            key = keys[i]
+            if key is None or key not in views:
+                continue
+            p = int(kk["POS"][i]) + (1 if side == "s2" else 0)      # шаг состояния в цепочке файла
+            vs = views[key]
+            # виды предыдущего состояния: у s' — сама s строки, у s — шаг s-1 той же цепочки
+            pk = kk["KS"][i] if side == "s2" else kk["KP"][i]
+            prev_v = views.get(pk) if pk is not None else None
+            prev_env = tot.get((int(EP[i]), p - 1)) if p >= 2 else None
+            OFF[i], K[i] = m, len(vs)
+            for v in range(len(vs)):
+                x = np.array(base[i], dtype=np.float32, copy=True)
+                x[:3] = vs[v]
+                if p < 2:
+                    x[3] = 0.0                      # после первого действия delta нулевой, как у среды
+                else:
+                    prev = prev_v[v][0] if (prev_v is not None and v < len(prev_v)) else prev_env
+                    x[3] = _delta_like_env(vs[v][0], prev)
+                alt.append(x)
+                m += 1
+    ALT = (np.stack(alt).astype(np.float32) if alt else np.zeros((0,) + S.shape[1:], np.float32))
+    ms, ms2 = K_S > 0, K_S2 > 0
+    info = dict(records=len(records), states=len(views), rows=int(n), rows_s=int(ms.sum()), rows_s2=int(ms2.sum()),
+                mean_k_s=(round(float(K_S[ms].mean()), 3) if ms.any() else 0.0),
+                mean_k_s2=(round(float(K_S2[ms2].mean()), 3) if ms2.any() else 0.0),
+                rows_keyed=int(sum(k is not None for k in kk["KS"])), alt=int(m))
+    return dict(ALT=ALT, OFF_S=OFF_S, K_S=K_S, OFF_S2=OFF_S2, K_S2=K_S2, info=info)
+
+
+def load_view_records(spec, subdir, log=print):
+    """Файлы видов по спецификации --view-aug (как cv_probe --views: префиксы rl_arch/views/<тег> или папки)."""
+    import map_views as MV
+    return MV.load_records(spec, subdir, log)
+
+
+def attach_views(data, episodes, spec, subdir, log=print):
+    """--view-aug: банк видов в data['VIEWS'] (не массив строк: срезы набора его не трогают). Возвращает сводку."""
+    recs = load_view_records(spec, subdir, log)
+    bank = view_bank(recs, episodes, data)
+    data["VIEWS"] = bank
+    return dict(bank["info"])
+
+
+class ViewAug:
+    """Замена карт выбранных строк пачки видом (--view-aug). Банк — view_bank, нормированный как вход сети и
+    лежащий на устройстве. Случайность — свой генератор numpy (сид обучения): поток перестановок пачек и
+    D4 тот же, что без флага, поэтому арм отличается от контроля только видами."""
+
+    def __init__(self, bank, alt_t, p, seed):
+        self.p = float(p)
+        self.alt = alt_t
+        self.off = {"s": bank["OFF_S"], "s2": bank["OFF_S2"]}
+        self.k = {"s": bank["K_S"], "s2": bank["K_S2"]}
+        self.rng = np.random.default_rng([int(seed), 58])
+        self.n = {"s": 0, "s2": 0}
+        self.hit = {"s": 0, "s2": 0}
+        self.cand = {"s": 0, "s2": 0}
+
+    def pick(self, x, rows, side):
+        """x — входы строк rows (тензор пачки, копия); с вероятностью p строка с видами получает случайный из
+        своих k видов (равновероятно). Два числа на строку при любом исходе. Возвращает x."""
+        import torch
+        k = self.k[side][rows]
+        u, w = self.rng.random(len(rows)), self.rng.random(len(rows))
+        sel = np.where((k > 0) & (u < self.p))[0]
+        self.n[side] += len(rows)
+        self.cand[side] += int((k > 0).sum())
+        if len(sel):
+            v = np.minimum((w[sel] * k[sel]).astype(np.int64), k[sel] - 1)
+            j = torch.as_tensor(self.off[side][rows[sel]] + v, device=x.device).long()
+            x[torch.as_tensor(sel, device=x.device).long()] = self.alt[j]
+            self.hit[side] += len(sel)
+        return x
+
+    def pair(self, x, rows):
+        """Пары разных наблюдений одного состояния для --view-cons: у строк с видами (k > 0) — два разных
+        номера из 0..k (0 — карта среды, т.е. сама строка x). Возвращает (номера строк в пачке, xa, xb) или
+        None, если в пачке нет строк с видами."""
+        import torch
+        k = self.k["s"][rows]
+        u, w = self.rng.random(len(rows)), self.rng.random(len(rows))
+        sel = np.where(k > 0)[0]
+        if not len(sel):
+            return None
+        ks = k[sel]
+        i1 = np.minimum((u[sel] * (ks + 1)).astype(np.int64), ks)
+        i2 = (i1 + 1 + np.minimum((w[sel] * ks).astype(np.int64), ks - 1)) % (ks + 1)
+        st = torch.as_tensor(sel, device=x.device).long()
+
+        def obs(ii):
+            out = x[st].clone()
+            has = np.where(ii > 0)[0]
+            if len(has):
+                j = torch.as_tensor(self.off["s"][rows[sel[has]]] + ii[has] - 1, device=x.device).long()
+                out[torch.as_tensor(has, device=x.device).long()] = self.alt[j]
+            return out
+        return sel, obs(i1), obs(i2)
+
+    def summary(self):
+        """Доли строк пачек: с видами и заменённых (по s и по s')."""
+        out = {}
+        for side in ("s", "s2"):
+            n = max(self.n[side], 1)
+            out[f"view_aug_cand_{side}"] = round(self.cand[side] / n, 4)
+            out[f"view_aug_frac_{side}"] = round(self.hit[side] / n, 4)
+        return out
+
+
+def view_cons_loss(net, xa, xb):
+    """--view-cons: MSE между скалярными Q всех действий на двух видах одного состояния; вторая сторона —
+    целевая сеть без градиента (как цель TD). При одинаковых видах и целевой сети, равной онлайновой (в
+    одном режиме), — ровно ноль."""
+    import torch
+    import torch.nn.functional as F
+    qa = net.q_scalar(xa)
+    with torch.no_grad():
+        qb = net.scalar(net.q_target(xb))
+    return F.mse_loss(qa, qb)
 
 
 def compose_two_nets(q_opt, a_lr, a_ep, center="max"):
@@ -2728,6 +2953,26 @@ def train_variant(variant, data, train_mask, args, seed):
         fit_behaviour(_h, S[np.where(train_mask)[0]], data["A"][train_mask], device)
         print(f"  [cnx_bcq s{seed}] модель поведения обучена", flush=True)
 
+    # --view-aug: виды карт строк (банк data['VIEWS'] строит attach_views); без флага ничего не меняется
+    va, w_vc = None, 0.0
+    if getattr(args, "view_aug", "") and QT is None:
+        bank = data.get("VIEWS")
+        if bank is None:
+            raise ValueError("--view-aug: в наборе нет банка видов data['VIEWS'] (его строит attach_views)")
+        va = ViewAug(bank, to_t(norm(bank["ALT"])).float(), float(getattr(args, "view_aug_p", VIEW_AUG_P)), seed)
+        w_vc = float(getattr(args, "view_cons", 0.0) or 0.0)
+        tr_s, tr_s2 = int((bank["K_S"][idx] > 0).sum()), int((bank["K_S2"][idx] > 0).sum())
+        aux_info.update(view_rows_s_train=tr_s, view_rows_s2_train=tr_s2)
+        print(f"  [{variant} s{seed}] виды карт: у {tr_s} обучающих переходов из {len(idx)} есть виды s, у {tr_s2} — "
+              f"виды s'; замена с вероятностью {va.p:g}"
+              + (f", согласованность видов с весом {w_vc:g}" if w_vc else ""), flush=True)
+    # --lr-schedule: шаг Adam по шагам всего обучения (const — прежний постоянный шаг)
+    lr_sched = getattr(args, "lr_schedule", "const") or "const"
+    lr_min = float(getattr(args, "lr_min", 0.0) or 0.0)
+    lr_total = n_epochs * max(1, int(math.ceil(len(idx) / bs)))
+    lr_base = [pg["lr"] for pg in opt.param_groups]
+    gstep = 0
+
     t0 = time.time()
     rng = np.random.default_rng(seed)
     best_td, stall = float("inf"), 0
@@ -2745,6 +2990,11 @@ def train_variant(variant, data, train_mask, args, seed):
             s, a, r, d, gm = S[b], A[b], NR[b], ND[b], NG[b]
             s2 = S2[NIDX[b]]
             s_raw = s                      # неаугментированное s: маска BCQ и margin
+            if va is not None:
+                # виды: s и s' заменяются независимо (у каждого свой вид); строки без видов — как есть
+                rows_np = order[k:k + bs]
+                s = va.pick(s.clone(), rows_np, "s")
+                s2 = va.pick(s2, nidx_np[rows_np], "s2")
             if aug_n > 1:                  # одно преобразование на батч, общее для s и s'
                 g = int(rng.integers(aug_n))
                 s = d4_apply(s, g); s2 = d4_apply(s2, g)
@@ -2937,6 +3187,22 @@ def train_variant(variant, data, train_mask, args, seed):
                 loss = loss + w_nx * l_nx
                 aux_acc.setdefault("aux_next_loss", []).append(l_nx.item())
 
+            if w_vc:
+                # согласованность видов: Q(s) на двух разных наблюдениях одного состояния (карта среды и
+                # виды), вторая сторона — целевая сеть без градиента; только строки с видами
+                pr = va.pair(S[b], rows_np)
+                if pr is not None:
+                    _, xa, xb = pr
+                    if aug_n > 1:
+                        xa, xb = d4_apply(xa, g), d4_apply(xb, g)
+                    l_vc = view_cons_loss(net, xa, xb)
+                    loss = loss + w_vc * l_vc
+                    aux_acc.setdefault("view_cons_loss", []).append(l_vc.item())
+
+            if lr_sched != "const":
+                for pg, b0 in zip(opt.param_groups, lr_base):
+                    pg["lr"] = lr_at(gstep, lr_total, b0, lr_min, lr_sched)
+            gstep += 1
             opt.zero_grad(); loss.backward(); opt.step()
             net.soft_update(float(getattr(args, "tau", 0.005)))
             if wa_mode != "none" and epoch >= wa_from:
@@ -2954,7 +3220,8 @@ def train_variant(variant, data, train_mask, args, seed):
                 net.target.load_state_dict(net.model.state_dict())
                 opt = torch.optim.Adam(net.params(), lr=1e-3)
         if (epoch + 1) % max(1, n_epochs // 5) == 0:
-            print(f"  [{variant} s{seed}] epoch {epoch+1}/{n_epochs} loss={loss.item():.4f}", flush=True)
+            print(f"  [{variant} s{seed}] epoch {epoch+1}/{n_epochs} loss={loss.item():.4f}"
+                  + (f" lr={opt.param_groups[0]['lr']:.3g}" if lr_sched != "const" else ""), flush=True)
         if args.plateau_patience and (epoch + 1) % 25 == 0:
             net.set_train(False)
             with torch.no_grad():
@@ -2979,6 +3246,10 @@ def train_variant(variant, data, train_mask, args, seed):
     train_time = time.time() - t0
     net.set_train(False)
     aux_info.update({k: float(np.mean(v)) for k, v in aux_acc.items()})   # средние последней эпохи
+    if va is not None:
+        aux_info.update(va.summary())
+    if lr_sched != "const":
+        aux_info.update(lr_steps=int(lr_total), lr_last=float(opt.param_groups[0]["lr"]))
     if wa_avg is not None:
         # --wa: в сеть кладутся усреднённые веса; BatchNorm (кроме замороженного энкодера) пересчитывается
         # на обучающих состояниях. Доля обучающих строк, где жадное действие среднего совпало с последней
@@ -3587,6 +3858,25 @@ def main():
                     help="--mc-lb: loss — штраф W * relu(G - Q(s,a))^2 / 2 на всех головах (SIL, Oh et al. "
                          "2018; optimality tightening, He et al. 2017); target — цель TD max(цель, G) (MCAC, "
                          "Wilcox et al. 2022), только у обычной головы DQN; W > 0 лишь включает её")
+    # --- обучение дольше и на видах карт, волна 58 (по умолчанию выключено: прежнее поведение бит в бит) ---
+    ap.add_argument("--view-aug", default="",
+                    help="Виды карт собранного буфера цели (map_views.py, render_views.py): префиксы rl_arch/views/<тег> "
+                         "через запятую или локальные папки, как cv_probe --views. У перехода, состояние которого "
+                         "(сид + исполненное начало цепочки + шаг) есть в файлах видов, карты s и, независимо, s' "
+                         "с вероятностью --view-aug-p заменяются случайным видом; канал delta — по тому же виду "
+                         "предыдущего шага (map_views.view_rows). Переходы без видов (плоские карты) — как есть; "
+                         "модельные цели и цели учителя от карт не зависят. Нужен --target-buffer")
+    ap.add_argument("--view-aug-p", type=float, default=VIEW_AUG_P,
+                    help="--view-aug: вероятность замены карт состояния с видами (по умолчанию 0.5)")
+    ap.add_argument("--view-cons", type=float, default=0.0,
+                    help="--view-aug: вес согласованности видов — MSE между Q(s) на двух разных наблюдениях одного "
+                         "состояния (карта среды или вид), вторая сторона — целевая сеть без градиента; 0 — выключено")
+    ap.add_argument("--lr-schedule", default="const", choices=list(LR_SCHEDULES),
+                    help="План шага Adam по шагам всего обучения: const — постоянный --lr (прежнее), cosine — "
+                         "косинусный спад от --lr до --lr-min (вместе с --epochs 1000: дольше учиться и не "
+                         "развёртывать шумную последнюю итерацию)")
+    ap.add_argument("--lr-min", type=float, default=0.0,
+                    help="--lr-schedule cosine: шаг в конце обучения (по умолчанию 0)")
     args = ap.parse_args()
     if args.fqe_select and not args.ckpt_every:
         ap.error("--fqe-select требует --ckpt-every N")
@@ -3703,6 +3993,26 @@ def main():
         if args.mc_lb_mode == "target" and (args.variant not in MC_LB_TARGET_VARIANTS or args.ens > 1 or args.hlg):
             ap.error("--mc-lb-mode target меняет цель TD только у обычной головы DQN (без --ens > 1 и --hlg); "
                      "иначе --mc-lb-mode loss")
+    # волна 58: виды карт и план шага
+    if args.view_aug:
+        if not args.target_buffer:
+            ap.error("--view-aug требует --target-buffer: виды сопоставляются с файлами собранного буфера (сид и "
+                     "цепочка из файла)")
+        if not 0.0 < args.view_aug_p <= 1.0 or args.view_cons < 0:
+            ap.error("--view-aug-p в (0, 1], --view-cons >= 0")
+        if args.state_mode != "full":
+            ap.error("--view-aug: только --state-mode full (виды — сырые карты среды)")
+        if args.variant in ("cnx_smdp", "cnn_vqc") or args.distill_from:
+            ap.error("--view-aug несовместим с cnx_smdp (свой тренер), cnn_vqc и --distill-from")
+    elif args.view_aug_p != VIEW_AUG_P or args.view_cons != 0.0:
+        ap.error("--view-aug-p и --view-cons задаются вместе с --view-aug")
+    if args.lr_schedule != "const":
+        if args.variant in ("cnx_smdp", "cnx_bbf"):
+            ap.error("--lr-schedule несовместим с cnx_smdp (свой тренер) и cnx_bbf (оптимизатор пересоздаётся)")
+        if not 0.0 <= args.lr_min < args.lr:
+            ap.error("--lr-min в [0, --lr)")
+    elif args.lr_min != 0.0:
+        ap.error("--lr-min задаётся вместе с --lr-schedule cosine")
     teacher_paths = [x.strip() for x in args.teacher_from.split(",") if x.strip()]
     if len(teacher_paths) > 1 and (args.train_tol > 0 or args.train_kmax > 0):
         ap.error("ансамбль учителей (--teacher-from через запятую) несовместим с правилом остановки обучения")
@@ -3979,6 +4289,10 @@ def main():
                    two_nets_mode=args.two_nets_mode, two_nets_shared=bool(args.two_nets_shared))
         if args.two_nets_shared:
             arm.update(two_nets_shared_grad=args.two_nets_shared_grad)
+    if args.view_aug:
+        arm.update(view_aug=args.view_aug, view_aug_p=float(args.view_aug_p), view_cons=float(args.view_cons))
+    if args.lr_schedule != "const":
+        arm.update(lr_schedule=args.lr_schedule, lr_min=float(args.lr_min))
     if args.ft_mode != "full":
         # по полям ft_mode, lora_rank, lora_alpha в meta чекпоинта offline_rl.ckpt_arch строит адаптеры;
         # число обучаемых параметров энкодера — в строке сида (ft_enc_trainable, ft_enc_total)
@@ -4074,6 +4388,19 @@ def main():
         args._teacher_soft_mask = te_info.pop("mask")
         te_info["train_rows"] = int((data["TEV"] & train_mask).sum())
         run_meta["teacher"] = dict(te_info, mask=list(args._teacher_soft_mask))
+    va_row = {}
+    if args.view_aug:
+        # банк видов — после всех срезов набора и контекста: альтернативные входы — те же строки с другими картами
+        va_info = attach_views(data, episodes, args.view_aug, args.subdir, log=lambda *x: print(*x, flush=True))
+        print(f"виды карт ({args.view_aug}): файлов {va_info['records']}, состояний с видами {va_info['states']}; "
+              f"у переходов: s с видами {va_info['rows_s']} из {va_info['rows']} (в среднем {va_info['mean_k_s']} "
+              f"видов), s' с видами {va_info['rows_s2']} (в среднем {va_info['mean_k_s2']}); ключ есть у "
+              f"{va_info['rows_keyed']} переходов", flush=True)
+        if not va_info["rows_s"] and not va_info["rows_s2"]:
+            raise SystemExit("--view-aug: ни у одного перехода буфера нет видов (сид, цепочка и шаг не совпали ни с "
+                             "одним файлом видов) — не тот тег видов или не тот буфер")
+        run_meta["views"] = dict(va_info)
+        va_row = {"view_" + k: v for k, v in va_info.items()}
     verify_bad = False
 
     for seed in [int(s) for s in args.seeds.split(",")]:
@@ -4096,7 +4423,7 @@ def main():
                        encoder=getattr(net, "enc_kind", "convnext"), ens=int(getattr(net, "ens", 1)), **arm,
                        **{"tc_" + k: v for k, v in tc_info.items()}, **tb_row,
                        **{"mb_" + k: v for k, v in mb_info.items()},
-                       **{"teacher_" + k: v for k, v in te_info.items()},
+                       **{"teacher_" + k: v for k, v in te_info.items()}, **va_row,
                        **getattr(net, "extra", {}), **m, **fq)
             print(json.dumps(row), flush=True)
             if not args.smoke:

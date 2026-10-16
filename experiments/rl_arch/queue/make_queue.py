@@ -2207,6 +2207,52 @@ if NS2D:
         add(f"w57-two-free-{_nm}", 57, "H06", [free_eval(_m57, "t3m_ete_two", _sd, guard=False)], 8.5,
             needs=[_m57], note=f"лидер ns2d (две сети) без отката, сиды {_sd}")
 
+# ---------------------------------------------------------------- волна 58
+# Разброс между обучениями лидера (одно из трёх обучений выходит плохим) — две правки обучения, без новых данных:
+#   viewaug — обучение Q на видах карт (offline_rl.py --view-aug): у перехода собранного буфера, состояние которого
+#             (сид + исполненное начало цепочки + шаг) есть в файлах видов волны 55 (rl_arch/views/mv_<задача>,
+#             render_views.py: V = 12 автокодировщиков на тех же копиях весов), карты s и независимо s' с
+#             вероятностью 0.5 заменяются случайным видом; канал delta — по тому же виду предыдущего шага. Вторая
+#             сборка карт того же состояния меняет действие лидера ns2d на 22-63% шагов: агент учится на том же
+#             шуме наблюдения, что видит при развёртывании (DrQ, Kostrikov et al. ICLR 2021: аугментация
+#             наблюдений в офлайновом Q). Плоские карты видов не имеют (у ns2d виды только у первых двух карт
+#             цепочки), модельные цели и цели учителя от карт не зависят. Ждёт меток конца рендера волны 55;
+#   cos1k   — дольше и с затуханием шага: буфер (~130 переходов) меньше пачки (256), обучение — 200 шагов Adam
+#             по всей выборке с постоянным шагом 1e-3, и развёртывается последняя шумная итерация; здесь 1000 эпох
+#             с косинусным спадом шага до нуля (--epochs 1000 --lr-schedule cosine; Loshchilov, Hutter ICLR 2017).
+# У каждой правки два обучения лидера (pb2d — одна сеть, ns2d — две; сиды обучения 1 и 2, тот же учитель и
+# собранный буфер, что в волнах 41/50), оценка на сидах 42-46 (страж, без сбросов, бюджет 7000, все 27 действий);
+# на ns2d сиды 45-46 — отдельным кернелом по модели из HF (кернел не больше 9 часов). Контроль — лидер с MAE волн
+# 41/43: pb2d t3m_ete_tbquart_g, t3m_w41one_m2_g, t3m_w41one_m3_g; ns2d t3m_ete_two_g, t3m_w41two_m2_g,
+# t3m_w41two_m3_g. Среднее весов (--wa ema) и обучение на всех переходах (--train-all) — в волне 50.
+W58_REN_DONE = [f"rl_arch/online_env/{PDE}_{W55_TAG}_w{_k}_views_done.json" for _k in (0, 1)]
+W58_ARMS = (("viewaug", f"--view-aug rl_arch/views/{W55_TAG} --view-aug-p 0.5", 1.0,
+             "Q на видах карт волны 55 (замена с вероятностью 0.5)"),
+            ("cos1k", "--epochs 1000 --lr-schedule cosine", 1.2, "1000 эпох, косинусный спад шага Adam до нуля"))
+W58_SEED_H = 1.4 if NS2D else 0.7
+if W28_K:
+    _arch = W41_LEAD
+    # метки конца рендера видов — те же, которых ждёт предобучение волны 55
+    _pre55 = next(j for j in jobs if j["id"] == (f"{PREFIX}-w55-pre" if PREFIX else "w55-pre"))
+    assert sorted(_pre55["needs"]) == sorted(W58_REN_DONE), (_pre55["needs"], W58_REN_DONE)
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + W58_SEED_H * len(sd.split(","))   # noqa: E731
+    for _nm, _fl, _th, _what in W58_ARMS:
+        _mt = f"w58{_nm}{_arch}"
+        _needs = [ENC_MAE, W41_TEACH[_arch]] + (W58_REN_DONE if _nm == "viewaug" else [])
+        for _m in (1, 2):
+            _scr, _a = w41_train(_arch, _m, _mt)
+            assert "--epochs" not in _a and "--view-aug" not in _a, _a
+            add(f"w58-{_nm}-m{_m}", 58, "H06",
+                [(_scr, f"{_a} {_fl}"), free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(_th + _eh(_blocks[0]), 2), needs=_needs,
+                note=f"{_what}: лидер ({_arch}), сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w58-{_nm}-m{_m}-b", 58, "H06",
+                    [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"{_what}: лидер ({_arch}), сид обучения {_m}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

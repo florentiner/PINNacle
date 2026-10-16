@@ -97,6 +97,13 @@ def lint_offline(argv):
         i = argv.index("--target-buffer")
         assert "--target-buffer" in open(O.__file__).read(), "offline_rl.py не знает --target-buffer"
         argv = argv[:i] + argv[i + 2:]
+        # виды карт сопоставляются с файлами того же собранного буфера (и пишутся той же ночью): флаги
+        # проверяются на наличие в разборе аргументов и уходят вместе с --target-buffer
+        for flag in ("--view-aug", "--view-aug-p", "--view-cons"):
+            if flag in argv:
+                assert f'"{flag}"' in open(O.__file__).read(), f"offline_rl.py не знает {flag}"
+                j = argv.index(flag)
+                argv = argv[:j] + argv[j + 2:]
     saved_mb = None
     if "--holdout" in argv and "--mb-aux" in argv:
         # таблицы суррогата без отложенной задачи нет ни в одном локальном кэше: её сборка качает буферы
