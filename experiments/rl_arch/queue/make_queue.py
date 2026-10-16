@@ -2098,6 +2098,32 @@ if W28_K:
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"лидер ({_arch}) с MAE на {len(_subs)} уравнениях x {_n} переходов, сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 56
+# Сколько и каких данных нужно MAE, без обучения агентов (ответ рецензенту о цене сбора буферов). Кернел study
+# (mae_data_study.py): A — распределения карт 22 уравнений (PCA, t-SNE/UMAP, MMD, Фреше, кластеры, покрытие
+# k-NN, жадное ядро уравнений без целей, отбор карт k-center, избыточные пары, отдельно пара хаотических) в
+# пространствах сырых карт, формы и признаков ENC_MAE; B — ~50 коротких прогонов MAE (тот же ResNet, цель и
+# 1400 шагов, что у ENC_MAE): каждое уравнение отдельно, ядра 1-6 уравнений по 2000 переходов, лучшее ядро на
+# 10-1000 переходах, повторы армов волн 46/53/54 для сверки прокси с агентом, наборы без хаотических/нерешаемых/
+# избыточных, случайные наборы, второй сид; прокси — восстановление отложенных карт целей и невиденных
+# уравнений, CKA с ENC_MAE и с полным набором, линейный зонд исхода. Кернелы cost: цена перехода с картами для
+# каждого уравнения (цепочка Adam 1000 / L-BFGS 500 / PSO 200 той же средой, карты после 1-го и 3-го действия),
+# 11 уравнений на кернел, poisson_boltzmann_2d в обоих — для приведения GPU разных кернелов. Предобучение и
+# цена не зависят от цели, поэтому кернелы только в очереди pb2d. Всё — в HF rl_arch/mae_study/ (энкодеры армов
+# — rl_arch/mae_study/encoders/, формат --encoder-init); отчёт — mae_study_report.py --tag w56 --cost-tags w56a,w56b.
+MAESTUDY = "experiments/rl_arch/mae_data_study.py"
+W56_COST = (("a", ("poisson_boltzmann_2d",) + ALL_SUBDIRS22[0::2]), ("b", ("poisson_boltzmann_2d",) + ALL_SUBDIRS22[1::2]))
+if PREFIX == "pb2d":
+    add("w56-study", 56, "H06",
+        [(MAESTUDY, f"study --tag w56 --hours 8 --resume --out-dir {W33_CV}")],
+        5.0, needs=[ENC_MAE], note="MAE и данные: распределения карт 22 уравнений, ядро, ~50 коротких MAE с прокси")
+    for _k, _subs in W56_COST:
+        _subs = tuple(dict.fromkeys(_subs))
+        add(f"w56-cost-{_k}", 56, "H06",
+            [(MAESTUDY, f"cost --tag w56{_k} --pdes {','.join(_subs)} --hours 8 --timeout-min 45 --resume "
+                        f"--out-dir {W33_CV}")],
+            round(0.3 * len(_subs), 1), note=f"цена перехода с картами: {len(_subs)} уравнений (вместе с pb2d для сверки GPU)")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

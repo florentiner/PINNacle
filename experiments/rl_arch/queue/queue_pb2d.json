@@ -16092,6 +16092,50 @@
    ]
   },
   {
+   "id": "pb2d-w56-study",
+   "wave": 56,
+   "group": "H06",
+   "hours": 5.0,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w21cv_enc_mae_resnet.pt"
+   ],
+   "note": "MAE и данные: распределения карт 22 уравнений, ядро, ~50 коротких MAE с прокси",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/mae_data_study.py",
+     "args": "study --tag w56 --hours 8 --resume --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w56-cost-a",
+   "wave": 56,
+   "group": "H06",
+   "hours": 3.3,
+   "needs": [],
+   "note": "цена перехода с картами: 11 уравнений (вместе с pb2d для сверки GPU)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/mae_data_study.py",
+     "args": "cost --tag w56a --pdes poisson_boltzmann_2d,burgers1d,grayscott,heat2d_longtime,heat2d_varyingcoef,heatnd,ns2d_backstep,ns2d_longtime,poisson2d_manyarea,poissonnd,wave2d_heterogeneous --hours 8 --timeout-min 45 --resume --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w56-cost-b",
+   "wave": 56,
+   "group": "H06",
+   "hours": 3.6,
+   "needs": [],
+   "note": "цена перехода с картами: 12 уравнений (вместе с pb2d для сверки GPU)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/mae_data_study.py",
+     "args": "cost --tag w56b --pdes poisson_boltzmann_2d,burgers2d,heat2d_complexgeometry,heat2d_multiscale,heatinv,kuramoto_sivashinsky,ns2d_liddriven,poisson2d_classic,poisson3d_complexgeometry,poissoninv,wave1d,wave2d_longtime --hours 8 --timeout-min 45 --resume --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

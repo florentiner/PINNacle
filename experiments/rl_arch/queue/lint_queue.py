@@ -266,6 +266,23 @@ def lint_cvprobe(argv):
         V.load_data, K.killed = saved
 
 
+def lint_maestudy(argv):
+    """Исследование данных MAE (mae_data_study.py): разбор аргументов и проверки до загрузки буферов (study)
+    или до первого подпроцесса среды (cost)."""
+    import mae_data_study as M
+    import killswitch as K
+    saved = M.load_study_data, M.run_cost, K.killed
+
+    def reached(*a, **k):
+        raise Reached()
+    M.load_study_data = M.run_cost = reached
+    K.killed = lambda *a, **k: None
+    try:
+        M.main(list(argv) + ["--no-upload", "--out-dir", tempfile.mkdtemp(prefix="lint_mae_")])
+    finally:
+        M.load_study_data, M.run_cost, K.killed = saved
+
+
 def lint_wait(argv):
     """Шаг ожидания файлов в HF: только разбор аргументов (сеть при проверке не трогаем)."""
     import wait_hf as Wt
@@ -291,7 +308,7 @@ def lint_select(argv):
         SA.run = saved
 
 
-LINTERS = {"select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+LINTERS = {"mae_data_study.py": lint_maestudy, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}
