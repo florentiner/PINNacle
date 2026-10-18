@@ -2253,6 +2253,30 @@ if W28_K:
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"{_what}: лидер ({_arch}), сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 59
+# Подтверждение двух находок очереди 1 (18 октября). pb2d: ConvNeXt без MAE с обрезкой застрявшего действия дал
+# 0.0089 / 0.0112 / 0.0115 на сидах 42-46 у трёх агентов — добор сидов 47-51 у всех трёх. ns2d: MAE на
+# процедурных картах (ноль буферов) дал 0.0437 / 0.0558, на уровне лидера — третье обучение и добор сидов 47-51
+# у всех трёх. Контроль обрезки на лидерах — задачи волны 51 (w51-lead*), ставятся вместе с этой волной.
+if PREFIX == "pb2d":
+    for _nm, _ck, _tg in (("cnx", "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt", "t3m_w51cnx"),
+                          ("cnxone-m2", w41_hf_model("w51cnxone", 2), "t3m_w51cnxone_m2"),
+                          ("cnxone-m3", w41_hf_model("w51cnxone", 3), "t3m_w51cnxone_m3")):
+        add(f"w59-{_nm}-c", 59, "H06", [sg_eval(_ck, _tg, "47,48,49,50,51")], 4.1, needs=[_ck],
+            note=f"ConvNeXt без MAE с обрезкой застрявшего действия, добор сидов 47-51 ({_tg})")
+if NS2D:
+    _arch = W41_LEAD
+    _mt = f"w55proc{_arch}"
+    _enc = "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+    add("w59-proc-m3", 59, "H06",
+        [w41_train(_arch, 3, _mt, init=_enc), free_eval(off_model("convnext_dqn", _mt, 3), f"t3m_{_mt}_m3", "42,43,44")],
+        5.6, needs=[_enc, W41_TEACH[_arch]], note="процедурные карты, третье обучение, сиды 42-44")
+    add("w59-proc-m3-b", 59, "H06", [free_eval(w41_hf_model(_mt, 3), f"t3m_{_mt}_m3", "45,46")], 3.2,
+        needs=[w41_hf_model(_mt, 3)], note="процедурные карты, третье обучение, сиды 45-46")
+    for _m in (1, 2, 3):
+        add(f"w59-proc-m{_m}-c", 59, "H06", [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", "47,48,49,50,51")],
+            8.0, needs=[w41_hf_model(_mt, _m)], note=f"процедурные карты, обучение {_m}, добор сидов 47-51")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

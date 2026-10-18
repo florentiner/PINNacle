@@ -18160,6 +18160,91 @@
    ]
   },
   {
+   "id": "w59-proc-m3",
+   "wave": 59,
+   "group": "H06",
+   "hours": 5.6,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt",
+    "rl_arch/agents_online/q_teach_mbpo_two.pt"
+   ],
+   "note": "процедурные карты, третье обучение, сиды 42-44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 3 --model-tag w55proctwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w55proctwo_m3_g"
+    }
+   ]
+  },
+  {
+   "id": "w59-proc-m3-b",
+   "wave": 59,
+   "group": "H06",
+   "hours": 3.2,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed3.pt"
+   ],
+   "note": "процедурные карты, третье обучение, сиды 45-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w55proctwo_m3_g"
+    }
+   ]
+  },
+  {
+   "id": "w59-proc-m1-c",
+   "wave": 59,
+   "group": "H06",
+   "hours": 8.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed1.pt"
+   ],
+   "note": "процедурные карты, обучение 1, добор сидов 47-51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w55proctwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w59-proc-m2-c",
+   "wave": 59,
+   "group": "H06",
+   "hours": 8.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed2.pt"
+   ],
+   "note": "процедурные карты, обучение 2, добор сидов 47-51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w55proctwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w59-proc-m3-c",
+   "wave": 59,
+   "group": "H06",
+   "hours": 8.0,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed3.pt"
+   ],
+   "note": "процедурные карты, обучение 3, добор сидов 47-51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w55proctwo_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w55proctwo_m3_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

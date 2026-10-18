@@ -16413,6 +16413,54 @@
    ]
   },
   {
+   "id": "pb2d-w59-cnx-c",
+   "wave": 59,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt"
+   ],
+   "note": "ConvNeXt без MAE с обрезкой застрявшего действия, добор сидов 47-51 (t3m_w51cnx)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_cnx_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w51cnx_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w59-cnxone-m2-c",
+   "wave": 59,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w51cnxone_seed2.pt"
+   ],
+   "note": "ConvNeXt без MAE с обрезкой застрявшего действия, добор сидов 47-51 (t3m_w51cnxone_m2)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w51cnxone_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w51cnxone_m2_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w59-cnxone-m3-c",
+   "wave": 59,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w51cnxone_seed3.pt"
+   ],
+   "note": "ConvNeXt без MAE с обрезкой застрявшего действия, добор сидов 47-51 (t3m_w51cnxone_m3)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w51cnxone_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w51cnxone_m3_sg"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
