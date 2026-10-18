@@ -43,6 +43,9 @@ the env's delta/reward logic is replicated locally.
 траектории с другими случайными стартами автокодировщика и отдаются приёмнику args._view_sink (его задают
 collect_active.py --views и render_views.py; у самой оценки приёмника нет, main флаг не принимает). Состояние
 генераторов случайных чисел возвращается, поэтому прогон и карты среды те же, что без флага.
+Приёмник args._plane_sink(шаг, сеть, фабрика лоссов) (render_views.py --plane random) вызывается после каждого
+действия, где строилась бы карта, и при --no-state: карты на случайных плоскостях через текущие веса
+(map_views.render_random_planes); генераторы тоже возвращаются. Флага у оценки нет.
 """
 from __future__ import annotations
 
@@ -1180,6 +1183,17 @@ def run_seed(seed, args, progress_cb=None):
             del pls_, ae_
             return raw_, t_a, t_s
 
+        # карты на случайных плоскостях через текущие веса (render_views.py --plane random, приёмник
+        # args._plane_sink): после каждого действия, где строилась бы карта среды, в том числе в застое и при
+        # --no-state. Генераторы возвращаются (map_views.keep_rng), ошибка приёмника прогон не роняет
+        if getattr(args, "_plane_sink", None) is not None:
+            import map_views as MV
+            try:
+                with MV.keep_rng():
+                    args._plane_sink(len(chain), model.net, get_model_rec)
+            except Exception as e:      # noqa: BLE001
+                print(f"[seed {seed}] карты на случайных плоскостях не построены ({type(e).__name__}: "
+                      f"{str(e)[:160]})", flush=True)
         # --state-every K: карты строятся после действий 1, 1+K, 1+2K, ...; между ними
         # агент видит последнюю построенную карту (цена наблюдения делится на K)
         due = (len(chain) - 1) % max(1, args.state_every) == 0

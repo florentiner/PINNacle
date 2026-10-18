@@ -61,6 +61,15 @@
                    проекциями признаков двух разных видов (--mv-w вес, --mv-dim ширина проектора); строки без второго
                    вида (плоские карты, карта среды без видов) — только MAE. Нужны --views
 
+Мало данных цели (волна 61):
+    --mix-real     вместе с --procedural/--views ещё настоящие переходы буфера --subdirs (--max-per-pde N — случайные
+                   цепочки целиком, тот же отбор, что у волны 46) одним набором; --mix-real-frac F — доля строк буфера
+                   в каждой пачке и в нормировке карт (0 — общий пул: 130 переходов тонут в 40 тыс. процедурных карт).
+                   ssl-out/ssl-maeout учат исход только на строках буфера
+    --ssl-d4       случайный поворот/отражение (D4) каждой карты при предобучении mae, maeout, mv, vae, out: скрытая
+                   плоскость автокодировщика ориентации не имеет; агент учится без D4
+    Карты на случайных плоскостях через веса PINN (render_views.py --plane random) читаются тем же --views
+
 --pretrain-only — только предобучение и сохранение энкодеров (без level, фолдов и lopo; волна 46: MAE
 на картах одной задачи, --subdirs <папка> --max-per-pde N); --ssl-steps — число шагов предобучения
 вместо числа эпох, чтобы наборы разного размера получали одинаковое число шагов.
@@ -160,11 +169,18 @@ def load_data(args, log=print):
     (N, 4, H, W) состояния ДО действия в том же порядке строк. Таблица и карты строятся одним
     загрузчиком (offline_rl.episodes_to_arrays_chains по файлу), совпадение строк проверяется по
     шести числам уровня. --max-per-pde оставляет случайные цепочки целиком."""
-    import offline_rl as O
     if getattr(args, "synthetic", 0):
         return synthetic_data(args.synthetic, seed=args.seed)
     if getattr(args, "views", "") or getattr(args, "procedural", 0):
+        if getattr(args, "mix_real", False):
+            return mixed_data(args, log)
         return map_only_data(args, log)
+    return buffer_data(args, log)
+
+
+def buffer_data(args, log=print):
+    """Карты и таблица переходов буферов --subdirs (см. load_data)."""
+    import offline_rl as O
     meta = O.pde_meta()
     subdirs = O.resolve_subdirs(args.subdirs)
     if not os.environ.get("RL_BUFFER_DIR") and not args.max_files:
@@ -260,11 +276,43 @@ def map_only_data(args, log=print):
     tab = dict(PDE=np.zeros(n, np.int64), FILE=r["FILE"], CH=ch, STEP=step, SPENT=np.zeros(n, np.int64), A=A, PA=pa,
                L=L, LN=L.copy(), LV=S.level6(maps), LVN=np.full((n, 6), np.nan), SPF=np.zeros((n, 3)),
                LAST=np.r_[first[1:], True], CTX=np.zeros((1, 7)), NAMES=["+".join(names)],
-               SUBDIRS=["+".join(names)], VKEY=r["VKEY"], VIEW=r["VIEW"], MAPONLY=True)
+               SUBDIRS=["+".join(names)], VKEY=r["VKEY"], VIEW=r["VIEW"], MAPONLY=True, HASY=np.zeros(n, bool))
     nv = np.bincount(r["VIEW"][~first]) if (~first).any() else np.zeros(1, np.int64)
     log(f"  карты без буферов ({'+'.join(names)}): состояний {r['n_states']}, строк {int((~first).sum())} "
         f"(по видам {nv.tolist()}), цепочек (файл, вид) {int(first.sum())}")
     return tab, maps.astype(np.float16 if args.map_dtype == "float16" else np.float32)
+
+
+def mixed_data(args, log=print):
+    """--mix-real (волна 61): карты без буферов (--procedural и/или --views; задача 0) и настоящие переходы буфера
+    --subdirs (--max-per-pde — случайные цепочки целиком, как у волны 46) одним набором. Строки буфера идут после
+    карт без буферов, их задачи — 1.., номера цепочек и файлов сдвинуты; REAL — строка из буфера, HASY — у строки
+    есть исход (только у буфера: на них учатся головы исхода ssl-out и ssl-maeout). Доля строк буфера в пачке
+    предобучения — --mix-real-frac (0 — общий пул, пачки равномерно по всем строкам)."""
+    tm, mm = map_only_data(args, log)
+    tr, mr = buffer_data(args, log)
+    if mm.shape[1:] != mr.shape[1:]:
+        raise SystemExit(f"--mix-real: размеры карт без буферов {mm.shape[1:]} и буфера {mr.shape[1:]} различаются")
+    nm, nr = len(mm), len(mr)
+    tab = {}
+    for k in ROWKEYS:
+        a, b = np.asarray(tm[k]), np.asarray(tr[k])
+        if k == "PDE":
+            b = b + 1
+        elif k in ("CH", "FILE"):
+            b = b + int(a.max()) + 1
+        tab[k] = np.concatenate([a, b.astype(a.dtype, copy=False)], 0)
+    tab["CTX"] = np.concatenate([tm["CTX"], tr["CTX"]], 0)
+    tab["NAMES"] = list(tm["NAMES"]) + list(tr["NAMES"])
+    tab["SUBDIRS"] = list(tm["SUBDIRS"]) + list(tr["SUBDIRS"])
+    tab["VKEY"] = np.r_[tm["VKEY"], np.full(nr, -1, np.int64)]
+    tab["VIEW"] = np.r_[tm["VIEW"], np.zeros(nr, np.int64)]
+    tab["REAL"] = np.r_[np.zeros(nm, bool), np.ones(nr, bool)]
+    tab["HASY"] = tab["REAL"].copy()
+    maps = np.concatenate([mm, mr.astype(mm.dtype, copy=False)], 0)
+    log(f"  смесь: карт без буферов {nm}, переходов буфера {nr} ({', '.join(tr['NAMES'])}), доля буфера в пачке "
+        + (f"{args.mix_real_frac:g}" if args.mix_real_frac > 0 else "по объёму"))
+    return tab, maps
 
 
 def synthetic_data(n=400, seed=0, n_pde=2, size=26, chain_len=5):
@@ -384,6 +432,9 @@ class Data:
         # номер состояния у видов одной карты (--views); у обычных буферов виды не известны
         self.vkey = np.asarray(tab["VKEY"], dtype=np.int64) if "VKEY" in tab else None
         self.map_only = bool(tab.get("MAPONLY", False))
+        # --mix-real: строки буфера в смеси с картами без буферов; у каких строк есть исход (ssl-out, ssl-maeout)
+        self.real = np.asarray(tab["REAL"], dtype=bool) if "REAL" in tab else None
+        self.has_y = np.asarray(tab["HASY"], dtype=bool) if "HASY" in tab else None
         sig = np.concatenate([self.A, self.ch, self.step, self.pde]).astype(np.int64).tobytes()
         if self.vkey is not None:
             sig = sig + self.vkey.tobytes()
@@ -709,7 +760,12 @@ def pretrain_rows(kind, D):
             raise SystemExit("ssl-dyn: нет переходов внутри цепочек (нужны карты следующего шага)")
         return rows, tr
     if kind in SSL_LABELS:
-        return rows, rows[np.isfinite(D.y[rows])]
+        tr = rows[np.isfinite(D.y[rows])]
+        if D.has_y is not None:          # карты без буферов исхода не имеют (y = 0 по построению)
+            tr = tr[D.has_y[tr]]
+            if len(tr) < 2:
+                raise SystemExit(f"ssl-{kind}: нет строк с исходом (карты без буферов; нужен буфер --mix-real)")
+        return rows, tr
     return rows, rows
 
 
@@ -723,7 +779,10 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
     t0 = time.time()
     torch.manual_seed(args.seed + 17)
     stat_rows, rows = pretrain_rows(kind, D)
-    stats = map_stats(D, stat_rows, seed=args.seed)
+    mix = mix_split(D, rows, args, log)
+    stats = (map_stats(D, stat_rows, seed=args.seed) if mix is None
+             else mix_stats(D, stat_rows, args.mix_real_frac, seed=args.seed))
+    d4 = bool(getattr(args, "ssl_d4", False)) and kind not in ("con", "dyn")    # у con и dyn D4 уже в видах
     enc = make_encoder(enc_name, D.C, D.H).to(dev)
     zdim = int(enc.out_dim)
     tgt = Fn = yn = None
@@ -795,13 +854,27 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
         rec = out.float().view_as(raw)
         return (((rec - shape_norm(raw)) ** 2) * m).sum() / (m.sum().clamp_min(1) * D.C)
 
+    def epoch_batches():
+        """Пачки эпохи: без --mix-real-frac — перестановка всех строк (как раньше); со смесью — в каждой пачке
+        строк буфера ровно mix[2], остальные — карты без буферов, обе части идут по своим перестановкам по кругу."""
+        if mix is None:
+            perm = rows_t[torch.randperm(len(rows_t), device=dev)]
+            for i in range(0, len(perm) - bs + 1, bs):
+                yield perm[i:i + bs]
+            return
+        rr, rm, nr = mix
+        pr, pm = rr[torch.randperm(len(rr), device=dev)], rm[torch.randperm(len(rm), device=dev)]
+        ar, am = torch.arange(nr, device=dev), torch.arange(bs - nr, device=dev)
+        for j in range(per):
+            yield torch.cat([pr[(j * nr + ar) % len(pr)], pm[(j * (bs - nr) + am) % len(pm)]])
+
     for ep in range(n_ep):
-        perm = rows_t[torch.randperm(len(rows_t), device=dev)]
         tot, k = 0.0, 0
         parts = {}
-        for i in range(0, len(perm) - bs + 1, bs):
-            idx = perm[i:i + bs]
+        for idx in epoch_batches():
             raw, _ = D.fetch(idx)
+            if d4:                               # --ssl-d4: случайный элемент D4 на карту (с нормировкой по каналам
+                raw = aug_d4(raw, gen)           # перестановочен), маска и цель MAE — уже на повёрнутой карте
             x = build_input("raw", raw, None, stats)
             part = {}
             if kind == "mae":
@@ -857,6 +930,8 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
                     off = torch.randint(0, 1 << 30, (len(idx),), generator=gen, device=dev) % (sz - 1).clamp_min(1) + 1
                     other = g_rows[g_start[p_] + (g_rank[p_] + off) % sz][pair]
                     raw2, _ = D.fetch(other)
+                    if d4:                       # свой элемент D4 у второго вида
+                        raw2 = aug_d4(raw2, gen)
                     x2 = build_input("raw", raw2, None, stats)
                     with _autocast(amp):
                         zz = enc(torch.cat([v, x[pair], x2]))
@@ -899,8 +974,41 @@ def pretrain(kind, enc_name, D, args, dev, log=print):
                 + "".join(f", {key} {val:.4f}" for key, val in parts_last.items()))
     enc.eval()
     state = {k: v.detach().cpu().clone() for k, v in enc.state_dict().items()}
-    return dict(state=state, stats=stats, seconds=time.time() - t0, loss_first=first, loss_last=last,
-                epochs=int(n_ep), steps=int(steps), n_maps=int(len(rows)), loss_parts=parts_last)
+    out = dict(state=state, stats=stats, seconds=time.time() - t0, loss_first=first, loss_last=last,
+               epochs=int(n_ep), steps=int(steps), n_maps=int(len(rows)), loss_parts=parts_last)
+    if mix is not None:
+        out["n_maps_real"], out["real_per_batch"] = int(len(mix[0])), int(mix[2])
+    return out
+
+
+def mix_split(D, rows, args, log=print):
+    """--mix-real-frac F > 0 на смеси (--mix-real): (строки буфера, строки без буферов, строк буфера в пачке) на
+    устройстве обучения; None — пачки по общему пулу (флаг выключен, данных не смесь или одной из частей нет)."""
+    frac = float(getattr(args, "mix_real_frac", 0.0) or 0.0)
+    if frac <= 0 or D.real is None:
+        return None
+    rr, rm = rows[D.real[rows]], rows[~D.real[rows]]
+    if not len(rr) or not len(rm):
+        log(f"    смесь: строк буфера {len(rr)}, без буферов {len(rm)} — пачки по общему пулу")
+        return None
+    bs = min(args.batch, len(rows))
+    nr = int(min(bs - 1, max(1, round(frac * bs))))
+    log(f"    смесь: строк буфера {len(rr)}, без буферов {len(rm)}; в пачке {bs}: буфера {nr}")
+    dev = D.feat_t.device
+    return torch.as_tensor(rr, device=dev), torch.as_tensor(rm, device=dev), nr
+
+
+def mix_stats(D, rows, frac, seed=0):
+    """Нормировка карт под смесь --mix-real-frac: среднее и разброс каждого канала смеси «буфер с долей frac,
+    остальное — карты без буферов» (по статистикам частей), а не по объёму, где карт без буферов в сотни раз больше."""
+    rows = np.asarray(rows)
+    rr, rm = rows[D.real[rows]], rows[~D.real[rows]]
+    if not len(rr) or not len(rm):
+        return map_stats(D, rows, seed=seed)
+    (m1, s1), (m2, s2) = map_stats(D, rr, seed=seed), map_stats(D, rm, seed=seed)
+    mean = frac * m1 + (1.0 - frac) * m2
+    ex2 = frac * (s1 ** 2 + m1 ** 2) + (1.0 - frac) * (s2 ** 2 + m2 ** 2)
+    return mean, (ex2 - mean ** 2).clamp_min(1e-12).sqrt().clamp_min(1e-6)
 
 
 def ssl_args(kind, args):
@@ -908,7 +1016,12 @@ def ssl_args(kind, args):
     keys = dict(mae=("mae_ratio",), con=("con_temp", "shift"), vae=("vae_beta", "vae_dim"),
                 dyn=("dyn_ema", "dyn_inv"), out=(), maeout=("mae_ratio", "out_w"),
                 mv=("mae_ratio", "mv_w", "mv_dim")).get(kind, ())
-    return {k: getattr(args, k) for k in keys}
+    out = {k: getattr(args, k) for k in keys}
+    if getattr(args, "ssl_d4", False) and kind not in ("con", "dyn"):
+        out["ssl_d4"] = True
+    if getattr(args, "mix_real", False):
+        out["mix_real_frac"] = float(args.mix_real_frac)
+    return out
 
 
 def save_encoder(pre, kind, enc_name, D, args, log=print):
@@ -1533,6 +1646,12 @@ def build_parser():
     g.add_argument("--procedural", type=int, default=0,
                    help="N процедурных цепочек карт без уравнений (map_views.procedural_records; только с --pretrain-only)")
     g.add_argument("--procedural-len", type=int, default=8, help="карт в процедурной цепочке")
+    g.add_argument("--mix-real", action="store_true",
+                   help="вместе с --procedural/--views ещё настоящие переходы буфера --subdirs (--max-per-pde) одним "
+                        "набором (только с --pretrain-only; волна 61)")
+    g.add_argument("--mix-real-frac", type=float, default=0.0,
+                   help="--mix-real: доля строк буфера в каждой пачке предобучения (и в нормировке карт); 0 — общий "
+                        "пул без перевеса")
     g = ap.add_argument_group("разбиения и конфиги")
     g.add_argument("--configs", default="all", help="имена через запятую; all — порядок по умолчанию")
     g.add_argument("--folds", type=int, default=3)
@@ -1561,6 +1680,9 @@ def build_parser():
     g.add_argument("--mv-w", type=float, default=1.0, help="ssl-mv: вес согласованности видов (VICReg / 25) рядом с MAE")
     g.add_argument("--mv-dim", type=int, default=256, help="ssl-mv: ширина проектора VICReg")
     g.add_argument("--shift", type=int, default=2, help="наибольший сдвиг aug-shift и видов ssl-con, пикселей")
+    g.add_argument("--ssl-d4", action="store_true",
+                   help="предобучение (mae, maeout, mv, vae, out): случайный элемент D4 (поворот/отражение) каждой "
+                        "карты пачки; у con и dyn D4 уже есть. Обучение агента остаётся без D4")
     g.add_argument("--shuffle-indep", action="store_true", help="shuffle: своя перестановка у каждого канала")
     g.add_argument("--no-amp", action="store_true")
     g.add_argument("--cpu", action="store_true")
@@ -1601,6 +1723,15 @@ def run(args, log=None):
         raise SystemExit("--views и --procedural дают карты без исходов: только с --pretrain-only")
     if getattr(args, "views", "") and getattr(args, "synthetic", 0):
         raise SystemExit("--views и --synthetic вместе не используются")
+    if getattr(args, "mix_real", False) and not (getattr(args, "views", "") or getattr(args, "procedural", 0)):
+        raise SystemExit("--mix-real смешивает буфер с --procedural или --views: без них это обычный буфер")
+    if getattr(args, "mix_real", False) and getattr(args, "synthetic", 0):
+        raise SystemExit("--mix-real и --synthetic вместе не используются")
+    frac = float(getattr(args, "mix_real_frac", 0.0) or 0.0)
+    if frac and not getattr(args, "mix_real", False):
+        raise SystemExit("--mix-real-frac действует только с --mix-real")
+    if not 0.0 <= frac < 1.0:
+        raise SystemExit("--mix-real-frac — доля из [0, 1)")
     if getattr(args, "pretrain_only", False):
         return run_pretrain_only(args, names, log, t0)
     if args.folds < 2:

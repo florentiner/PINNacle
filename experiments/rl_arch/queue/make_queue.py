@@ -2299,6 +2299,90 @@ if PREFIX == "pb2d":
         add(f"w60-sg-{_nm}", 60, "H06", [sg_eval(_ck, f"t3m_w60{_nm}", S5)], 4.1, needs=[_ck],
             note=f"pb2d, две сети с MAE ({_nm}): обрезка застрявшего действия, сиды 42-46")
 
+# ---------------------------------------------------------------- волна 61
+# Энкодер на минимуме GPU-часов данных, агент всегда с двумя сетями (требование 18 октября; сумма --two-nets,
+# учитель W41_TEACH["two"]) на pb2d и ns2d. Каждый арм — два обучения (сиды обучения 1 и 2) на собранном буфере
+# лидера (W33_SRC), оценка на сидах 42-46 со стражем без сбросов (free_eval, тег _g); на ns2d сиды 45-46 — отдельным
+# кернелом по модели из HF. Новые данные энкодера:
+#   procreal — MAE на смеси: 5000 процедурных цепочек (как w55proc) и свои 130 переходов случайного буфера цели (как
+#              w46 n130), половина каждой пачки — свои карты (cv_probe.py --mix-real --mix-real-frac 0.5);
+#   rdir     — карты на 8 случайных плоскостях через веса PINN с нормировкой по фильтрам (Li et al., NeurIPS 2018) у
+#              КАЖДОГО состояния буфера цели, застойные тоже (render_views.py --plane random): автокодировщик не
+#              обучается, карта — 676 оценок лосса на сетке (pb2d ~6.9 с, ns2d ~12.6 с на карту по t_surface_s
+#              оценок t3m_*), основная цена — повтор PINN (pb2d ~0.24 с, ns2d ~1.0 с на эпоху по повторам волны 55),
+#              поэтому по одной цепочке на сид (--max-per-seed 1): pb2d 5 цепочек (~3.2 GPU-ч, из них сетка ~0.8; ~55
+#              состояний, ~440 карт на плоскостях), ns2d 3 цепочки (--max-files 3; ~5.9 GPU-ч, сетка ~0.9; ~33
+#              состояния, ~260 карт); у видов автокодировщика волны 55 карта стоила ~53 с. Масштабы плоскостей 1, 0.3,
+#              0.1, 0.03 по кругу (от плоскости Li et al. до окрестности, как у карт среды); карта среды (вид 0) — из
+#              файла буфера. MAE на этих видах (cv_probe --views) — в том же кернеле;
+#   d4own    — MAE на своих 130 переходах со случайным поворотом/отражением каждой карты (--ssl-d4): плоскость
+#              автокодировщика ориентации не имеет, D4 даёт данных в 8 раз больше бесплатно (агент — без D4);
+#   maeout   — MAE + голова исхода (лучшая замена MAE волны 49) на своих 130 переходах (исходы в буфере цели есть).
+# Готовые энкодеры дешёвых армов прежних волн, которые на pb2d шли только с одной сетью: proc (процедурные карты,
+# w55proc), mvmae (виды автокодировщика pb2d, w55mvpb2d), p3n100 (3 уравнения x 100, w54p3n100) — два обучения с
+# двумя сетями, только pb2d (на ns2d они уже с двумя сетями). procsg — обрезка застрявшего действия (sg_eval, тег _sg)
+# на процедурном энкодере: pb2d — те же модели proc (пара с free_eval на одних обучениях), ns2d — готовые модели
+# w55proctwo m1, m2 (без нового обучения). Контроли есть: лидеры, волна 46 n130 (pb2d), волны 55 и 59.
+# Предобучения procreal, d4own и maeout одной задачи — один кернел (три шага cv_probe, энкодеры в HF).
+W61_SEED_H = 1.4 if NS2D else 0.7
+W61_SG_H = 1.5 if NS2D else 0.75
+W61_PRE_H = 1.5 if NS2D else 1.2
+W61_RD_TAG = f"rd_{W28_SHORT}"
+W61_RD = (("--max-per-seed 1 --max-files 3 --hours 5.0", 7.6) if NS2D else ("--max-per-seed 1 --hours 4.0", 4.5))
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _arch = "two"
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd, h=W61_SEED_H: (0.4 if NS2D else 0.3) + h * len(sd.split(","))   # noqa: E731
+    _encs = {nm: f"rl_arch/encoders/cvprobe_w61{nm}{W28_SHORT}_enc_{kind}_resnet.pt"
+             for nm, kind in (("procreal", "mae"), ("rdir", "mae"), ("d4own", "mae"), ("maeout", "maeout"))}
+    _pre = f"--pretrain-only --ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}"
+    add("w61-pre", 61, "H06",
+        [(CVPROBE, f"--tag w61procreal{W28_SHORT} --procedural 5000 --mix-real --mix-real-frac 0.5 --subdirs {SUBDIR} "
+                   f"--max-per-pde 130 --configs ssl-mae-resnet {_pre}"),
+         (CVPROBE, f"--tag w61d4own{W28_SHORT} --subdirs {SUBDIR} --max-per-pde 130 --configs ssl-mae-resnet --ssl-d4 "
+                   f"{_pre}"),
+         (CVPROBE, f"--tag w61maeout{W28_SHORT} --subdirs {SUBDIR} --max-per-pde 130 --configs ssl-maeout-resnet {_pre}")],
+        W61_PRE_H, note=f"предобучение procreal (5000 процедурных цепочек + 130 своих, половина пачки своя), d4own "
+                        f"(MAE с D4 на 130 своих), maeout (MAE + исход на 130 своих), {W46_SSL_STEPS} шагов")
+    _ra, _rh = W61_RD
+    add("w61-rdir-pre", 61, "H06",
+        [(RENDER, f"--pde {PDE} --source {W33_SRC} --plane random --planes 8 --plane-scales 1,0.3,0.1,0.03 {_ra} "
+                  f"--worker 0/1 --tag {W61_RD_TAG} --resume --save-dir runs_rl_online"),
+         (CVPROBE, f"--tag w61rdir{W28_SHORT} --subdirs {SUBDIR} --views runs_rl_online/views/{W61_RD_TAG} "
+                   f"--configs ssl-mae-resnet {_pre}")],
+        _rh, note=f"карты на 8 случайных плоскостях у всех состояний буфера цели (по цепочке на сид), затем MAE на них")
+    _arms = [("procreal", _encs["procreal"], "MAE на процедурных + своих 130 (половина пачки)"),
+             ("rdir", _encs["rdir"], "MAE на картах случайных плоскостей своих состояний"),
+             ("d4own", _encs["d4own"], "MAE с D4 на своих 130"),
+             ("maeout", _encs["maeout"], "MAE + исход на своих 130")]
+    if PREFIX == "pb2d":
+        _arms += [("proc", "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt", "MAE на процедурных картах (w55proc)"),
+                  ("mvmae", f"rl_arch/encoders/cvprobe_w55mv{W28_SHORT}_enc_mae_resnet.pt", "MAE на видах автокодировщика"),
+                  ("p3n100", "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt", "MAE на 3 уравнениях x 100")]
+    for _nm, _enc, _what in _arms:
+        _mt = f"w61{_nm}{_arch}"
+        for _m in (1, 2):
+            add(f"w61-{_nm}-m{_m}", 61, "H06",
+                [w41_train(_arch, _m, _mt, init=_enc),
+                 free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=[_enc, W41_TEACH[_arch]],
+                note=f"две сети, энкодер: {_what}, сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w61-{_nm}-m{_m}-b", 61, "H06",
+                    [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"две сети, энкодер: {_what}, сид обучения {_m}, сиды {_blocks[1]}")
+    # procsg: обрезка застрявшего действия на процедурном энкодере (pb2d — модели арма proc, ns2d — w55proctwo)
+    _src = "w61proctwo" if PREFIX == "pb2d" else "w55proctwo"
+    for _m in (1, 2):
+        _ck = w41_hf_model(_src, _m)
+        for _i, _sd in enumerate(_blocks):
+            _sfx = "" if len(_blocks) == 1 else "-" + "ab"[_i]
+            add(f"w61-procsg-m{_m}{_sfx}", 61, "H06", [sg_eval(_ck, f"t3m_w61procsg{_arch}_m{_m}", _sd)],
+                round(_eh(_sd, W61_SG_H), 2), needs=[_ck],
+                note=f"две сети, процедурный энкодер ({_src}, сид обучения {_m}), обрезка застрявшего действия, "
+                     f"сиды {_sd}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

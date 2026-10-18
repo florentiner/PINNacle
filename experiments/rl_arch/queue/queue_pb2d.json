@@ -16605,6 +16605,372 @@
    ]
   },
   {
+   "id": "pb2d-w61-pre",
+   "wave": 61,
+   "group": "H06",
+   "hours": 1.2,
+   "needs": [],
+   "note": "предобучение procreal (5000 процедурных цепочек + 130 своих, половина пачки своя), d4own (MAE с D4 на 130 своих), maeout (MAE + исход на 130 своих), 1400 шагов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w61procrealpb2d --procedural 5000 --mix-real --mix-real-frac 0.5 --subdirs poisson_boltzmann_2d --max-per-pde 130 --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w61d4ownpb2d --subdirs poisson_boltzmann_2d --max-per-pde 130 --configs ssl-mae-resnet --ssl-d4 --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w61maeoutpb2d --subdirs poisson_boltzmann_2d --max-per-pde 130 --configs ssl-maeout-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-rdir-pre",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.5,
+   "needs": [],
+   "note": "карты на 8 случайных плоскостях у всех состояний буфера цели (по цепочке на сид), затем MAE на них",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/render_views.py",
+     "args": "--pde poissonboltzmann2d --source rl_arch/buffers_new/tbuf_pb2d_w0 --plane random --planes 8 --plane-scales 1,0.3,0.1,0.03 --max-per-seed 1 --hours 4.0 --worker 0/1 --tag rd_pb2d --resume --save-dir runs_rl_online"
+    },
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w61rdirpb2d --subdirs poisson_boltzmann_2d --views runs_rl_online/views/rd_pb2d --configs ssl-mae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-procreal-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61procrealpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на процедурных + своих 130 (половина пачки), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61procrealpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61procrealtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61procrealtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61procrealtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-procreal-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61procrealpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на процедурных + своих 130 (половина пачки), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61procrealpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61procrealtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61procrealtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61procrealtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-rdir-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61rdirpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на картах случайных плоскостей своих состояний, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61rdirpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61rdirtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61rdirtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61rdirtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-rdir-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61rdirpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на картах случайных плоскостей своих состояний, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61rdirpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61rdirtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61rdirtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61rdirtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-d4own-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61d4ownpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE с D4 на своих 130, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61d4ownpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61d4owntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61d4owntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61d4owntwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-d4own-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61d4ownpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE с D4 на своих 130, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61d4ownpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61d4owntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61d4owntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61d4owntwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-maeout-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61maeoutpb2d_enc_maeout_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE + исход на своих 130, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61maeoutpb2d_enc_maeout_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61maeouttwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61maeouttwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61maeouttwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-maeout-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w61maeoutpb2d_enc_maeout_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE + исход на своих 130, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w61maeoutpb2d_enc_maeout_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61maeouttwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61maeouttwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61maeouttwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-proc-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на процедурных картах (w55proc), сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61proctwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61proctwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61proctwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-proc-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на процедурных картах (w55proc), сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61proctwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61proctwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61proctwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-mvmae-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на видах автокодировщика, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61mvmaetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61mvmaetwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61mvmaetwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-mvmae-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на видах автокодировщика, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55mvpb2d_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61mvmaetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61mvmaetwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61mvmaetwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-p3n100-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на 3 уравнениях x 100, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w61p3n100two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61p3n100two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61p3n100two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-p3n100-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.8,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, энкодер: MAE на 3 уравнениях x 100, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w54p3n100_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w61p3n100two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w61p3n100two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61p3n100two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-procsg-m1",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w61proctwo_seed1.pt"
+   ],
+   "note": "две сети, процедурный энкодер (w61proctwo, сид обучения 1), обрезка застрявшего действия, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w61proctwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61procsgtwo_m1_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w61-procsg-m2",
+   "wave": 61,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w61proctwo_seed2.pt"
+   ],
+   "note": "две сети, процедурный энкодер (w61proctwo, сид обучения 2), обрезка застрявшего действия, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w61proctwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w61procsgtwo_m2_sg"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

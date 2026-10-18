@@ -41,6 +41,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import math
 import os
@@ -207,6 +208,120 @@ def render_views(solver_models, get_model_rec, n_views, x_range, ae_epochs, ae_l
     info = dict(k=len(maps), t_ae=round(t_ae, 2), t_srf=round(time.time() - t1, 2),
                 best_epoch=ae_info.get("best_epoch"), traj=traj, rec_gap=gap, sequential=bool(sequential))
     return maps, info
+
+
+# --------------------------------------------------------------------------------------------
+# Карты на случайных плоскостях через текущие веса PINN (render_views.py --plane random, волна 61)
+# --------------------------------------------------------------------------------------------
+
+@contextlib.contextmanager
+def keep_rng():
+    """Состояние генераторов torch (и CUDA), numpy и random возвращается после блока: прогон среды тот же."""
+    import random
+    import torch
+    rs_t, rs_n, rs_p = torch.random.get_rng_state(), np.random.get_state(), random.getstate()
+    rs_c = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    try:
+        yield
+    finally:
+        torch.random.set_rng_state(rs_t)
+        np.random.set_state(rs_n)
+        random.setstate(rs_p)
+        if rs_c is not None:
+            torch.cuda.set_rng_state_all(rs_c)
+
+
+def filter_normed_direction(state, gen, bias=False):
+    """Случайное направление в пространстве весов с нормировкой по фильтрам (Li et al., NeurIPS 2018, «Visualizing
+    the loss landscape of neural nets»): гауссов шум той же формы, у каждого фильтра (строки матрицы весов слоя,
+    срез по первой оси) норма приведена к норме того же фильтра текущих весов. Смещения и прочие одномерные
+    параметры — ноль, как у авторов (ignore biasbn); bias=True — нормировка всего вектора. Шум тянется из своего
+    генератора gen на CPU: общий поток случайных чисел не трогается. state — {имя: тензор}; ответ — тот же словарь."""
+    import torch
+    out = {}
+    for k, w in state.items():
+        if not torch.is_floating_point(w):
+            out[k] = torch.zeros_like(w)
+            continue
+        r = torch.randn(tuple(w.shape), generator=gen, dtype=torch.float64)
+        wc = w.detach().to("cpu", torch.float64)
+        if w.dim() <= 1:
+            if not bias or w.numel() == 0:
+                out[k] = torch.zeros_like(w)
+                continue
+            r = r * (wc.norm() / (r.norm() + 1e-10))
+        else:
+            wn = wc.reshape(wc.shape[0], -1).norm(dim=1)
+            rn = r.reshape(r.shape[0], -1).norm(dim=1)
+            r = r * (wn / (rn + 1e-10)).view((-1,) + (1,) * (w.dim() - 1))
+        out[k] = r.to(w.device, w.dtype)
+    return out
+
+
+def plane_coords(x_range):
+    """Узлы сетки по одной оси — тем же выражением, что у PlotLossSurface (x_range [-1.25, 1.25, 25] -> 26 узлов)."""
+    import torch
+    lo, hi, num = x_range
+    step = (hi - lo) / num
+    return torch.arange(lo, hi + step, step)
+
+
+def _signed_log1p(x):
+    """Как save_equation_loss_surface(log_key=True): sign(x) * log1p(|x| + 1e-12)."""
+    return np.sign(x) * np.log1p(np.abs(x) + 1e-12)
+
+
+def loss_model(get_model_rec):
+    """Модель лоссов, как у PlotLossSurface: свежая копия задачи из второй фабрики, compile с Adam и весами лоссов
+    задачи, PINNLossData на обучающих точках (зафиксированы при первом вызове). Возвращает (модель, оценщик)."""
+    import torch
+    from landscape_visualization._aux.PINN_loss_data import PINNLossData
+    model, lw = get_model_rec()
+    model.compile(torch.optim.Adam(model.net.parameters(), lr=0.001), loss_weights=lw)
+    return model, PINNLossData(model, cache_points=True, use_train=True)
+
+
+def render_random_planes(net, get_model_rec, n_planes, x_range, seed, scales=(1.0,), bias=False):
+    """n_planes карт (3, 26, 26) на случайных двумерных плоскостях через текущие веса net: узел (a, b) сетки x_range
+    (та же, что у карт среды: [-1.25, 1.25] с шагом 0.1) — веса θ + s·(a·δ + b·η), δ и η — случайные направления с
+    нормировкой по фильтрам (filter_normed_direction), s — масштаб плоскости (scales по кругу: s = 1 — плоскость Li
+    et al., меньше — окрестность текущей точки). Лоссы — те же три, что у карты среды (общий, оператор, граница) на
+    обучающих точках свежей копии задачи (loss_model), то же преобразование sign·log1p; автокодировщик не нужен,
+    поэтому у плоской карты среды (застой: все копии весов совпали) эти карты не плоские. Направления плоскости v
+    задаются сидом (seed, v): у одной цепочки они одинаковы на каждом шаге (канал delta view_rows сравнивает ту же
+    плоскость), нормировка — по весам этого шага. Общие генераторы не трогаются (keep_rng). Возвращает
+    (список карт float32, info: k, t_srf, t_per_map, evals, scales)."""
+    import torch
+    t0 = time.time()
+    xs = plane_coords(x_range)
+    n = len(xs)
+    with keep_rng():
+        model, lc = loss_model(get_model_rec)
+        tgt = model.net
+        base = {k: v.detach().clone().to(next(tgt.parameters()).device) for k, v in net.state_dict().items()}
+        if set(base) != set(tgt.state_dict()):
+            raise ValueError("render_random_planes: параметры сети и модели лоссов не совпадают")
+        maps, used = [], []
+        for v in range(int(n_planes)):
+            gen = torch.Generator().manual_seed(int(seed) * 1009 + 7919 * v + 13)
+            d1 = filter_normed_direction(base, gen, bias)
+            d2 = filter_normed_direction(base, gen, bias)
+            s = float(scales[v % len(scales)])
+            grid = {k: np.zeros((n, n)) for k in LOSS_KEYS}
+            for i, a in enumerate(xs.tolist()):
+                for j, b in enumerate(xs.tolist()):
+                    sd = {k: (base[k] + s * (a * d1[k] + b * d2[k])) if torch.is_floating_point(base[k]) else base[k]
+                          for k in base}
+                    tgt.load_state_dict(sd)
+                    ld = lc.evaluate(save_graph=False)
+                    for key in LOSS_KEYS:
+                        grid[key][i, j] = float(ld[key])
+            maps.append(np.stack([_signed_log1p(grid[k]) for k in LOSS_KEYS]).astype(np.float32))
+            used.append(s)
+        del model, lc
+    t = time.time() - t0
+    return maps, dict(k=len(maps), t_srf=round(t, 2), t_per_map=round(t / max(1, len(maps)), 3),
+                      evals=int(len(maps) * n * n), scales=used, plane="random")
 
 
 # --------------------------------------------------------------------------------------------
