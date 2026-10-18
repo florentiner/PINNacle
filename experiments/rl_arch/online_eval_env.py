@@ -37,7 +37,9 @@ the env's delta/reward logic is replicated locally.
 каждые W эпох (StallCheck); если обучающий лосс за окно упал меньше чем на долю X, действие останавливается, и
 остаток его эпох исполняет --guard-fallback (кусками своей длины). Эпохи шага те же, состояние строится после
 всего шага, прошлое действие в контексте — запасное (как после отката стража). Срезы — stall_log и stall_spent
-в строке результата. Без флага прогон, строка и чекпоинт прежние.
+в строке результата. Без флага прогон, строка и чекпоинт прежние. --stall-opts Adam,PSO проверяет только
+действия этих оптимизаторов (застрявший L-BFGS не срезается: запасное — тоже L-BFGS, а на ns2d L-BFGS после
+250 эпох без движения сам прорывается); без флага — все оптимизаторы, строка прежняя.
 
 Виды карты (--views V, map_views.py): после каждой неплоской карты среды строятся ещё V карт того же снимка
 траектории с другими случайными стартами автокодировщика и отдаются приёмнику args._view_sink (его задают
@@ -412,6 +414,19 @@ def pick_action(agent, state, mean, std, variant):
     return int(q.argmax(1).item())
 
 
+def parse_stall_opts(spec):
+    """--stall-opts: None — все оптимизаторы; иначе множество имён из ALL_ACTIONS (Adam, LBFGS, PSO)."""
+    spec = (spec or "all").strip()
+    if spec.lower() == "all":
+        return None
+    names = {a[0] for a in ALL_ACTIONS}
+    opts = {x.strip() for x in spec.split(",") if x.strip()}
+    bad = sorted(opts - names)
+    if bad or not opts:
+        raise ValueError(f"неизвестные оптимизаторы {bad or spec!r}, есть {sorted(names)} или all")
+    return opts
+
+
 def landscape_stall_prob(state, trig):
     """Ландшафтный триггер коллеги в сильнейшей форме: логистическая модель,
     обученная на здоровом буфере (landscape_trigger.json, AUC 0.657)."""
@@ -644,6 +659,7 @@ def run_seed(seed, args, progress_cb=None):
     guard_fb = parse_action_spec(args.guard_fallback) if (args.guard_rollback or stall_on) else None
     guard_log, guard_spent = [], 0
     stall_log, stall_spent = [], 0
+    stall_opts = parse_stall_opts(getattr(args, "stall_opts", "all"))
     # щит (--shield): ансамбль суррогата среды запрещает агенту действия, у которых пессимистичный
     # прогноз изменения log10 ошибки не отрицателен; агент выбирает по своим Q среди оставшихся
     shield, shield_log = None, []
@@ -976,7 +992,7 @@ def run_seed(seed, args, progress_cb=None):
             saver = ModelSaverCallback(total_iterations=epochs, n_save_models=args.n_save_models)
             cbs, stall_cb, stall_cut = [tester, saver], None, False
             if (stall_on and (use_agent or args.policy == "random") and a != guard_fb
-                    and epochs > args.stall_window):
+                    and epochs > args.stall_window and (stall_opts is None or opt_name in stall_opts)):
                 # страж застоя: только действия агента (или случайной политики) длиннее окна; запасное
                 # действие (в том числе после отката) не срезается
                 stall_cb = StallCheck(args.stall_window, args.stall_min, epochs)
@@ -1363,6 +1379,8 @@ def run_seed(seed, args, progress_cb=None):
         sg_row = dict(stall_guard=True, stall_window=int(args.stall_window), stall_min=float(args.stall_min),
                       stall_fallback=args.guard_fallback, stall_log=stall_log, stall_spent=int(stall_spent),
                       n_stall=len(stall_log))
+        if stall_opts is not None:
+            sg_row["stall_opts"] = sorted(stall_opts)
     if save_buf:
         args._rollout = ro           # main пишет файл буфера; в строку результата карты не идут
     return dict(seed=seed, policy=args.policy, pde=args.pde, l2re=l2re,
@@ -1460,6 +1478,9 @@ def build_parser():
                     help="страж застоя: окно проверки, эпох")
     ap.add_argument("--stall-min", type=float, default=0.01,
                     help="страж застоя: минимальное относительное падение обучающего лосса за окно (0.01 = 1%%)")
+    ap.add_argument("--stall-opts", default="all",
+                    help="страж застоя: оптимизаторы, чьи действия проверяются, через запятую (Adam,LBFGS,PSO); "
+                         "all — все (по умолчанию, строка прежняя)")
     ap.add_argument("--shield", default="",
                     help="Щит: суррогат среды запрещает агенту действия без предсказанного улучшения ДО "
                          "их исполнения (страж откатывает после и тратит эпохи). Значение — файл ансамбля "
@@ -1680,6 +1701,10 @@ def main():
             sys.exit("--stall-guard действует только на действия агента и случайной политики")
         if args.stall_window < 1 or not 0.0 < args.stall_min < 1.0:
             sys.exit("--stall-window >= 1, --stall-min из (0, 1)")
+        try:
+            parse_stall_opts(args.stall_opts)
+        except ValueError as e:
+            sys.exit(f"--stall-opts: {e}")
         if args.save_buffer:
             sys.exit("--stall-guard несовместим с --save-buffer: срезанный шаг — смесь двух действий, "
                      "а не переход буфера")

@@ -19,6 +19,8 @@ Adam 1e-4 и L-BFGS 0.1 почти не снижают лосс (застой: �
   * режим tele: телеметрия срезанного шага — по последнему куску запасного (как карты);
   * журнал: stall_log, stall_spent, n_stall в строке и в чекпоинте докатки (докатка = непрерывный прогон);
   * вместе с откатом: откат судит шаг целиком (эпохи — в guard_spent), срез остаётся в stall_log;
+  * --stall-opts Adam,PSO: застрявший L-BFGS не срезается, Adam — срезается; в строке stall_opts; без флага
+    (all) поля нет;
   * отказы: --stall-guard без агента, с --save-buffer, с неверным окном или порогом.
 
     DDEBACKEND=pytorch HF_HUB_OFFLINE=1 python experiments/rl_arch/tests/test_stall_guard.py
@@ -377,6 +379,23 @@ def test_not_cut():
     print("без застоя, короткие действия и запасное — не срезаются: OK")
 
 
+def test_opts():
+    """--stall-opts: проверяются только действия названных оптимизаторов."""
+    plan = ["LBFGS:0.1:1000", "Adam:0.0001:2500", "LBFGS:0.1:1000", "Adam:0.001:1000"]
+    full, _, _, _ = run(plan, SG)
+    assert {s_[1] for s_ in full[0]["stall_log"]} == {IDX("LBFGS:0.1:1000"), IDX("Adam:0.0001:2500")}
+    assert "stall_opts" not in full[0], "без --stall-opts (all) поля нет"
+    soft, calls, _, _ = run(plan, SG + ["--stall-opts", "Adam,PSO"])
+    r = soft[0]
+    assert r["stall_log"] and all(s_[1] == IDX("Adam:0.0001:2500") for s_ in r["stall_log"]), r["stall_log"]
+    assert r["stall_opts"] == ["Adam", "PSO"] and r["spent"] == 7000 == sum(c["it"] for c in calls)
+    lb = [c for c in calls if c["name"] == "LBFGS" and c["lr"] == 0.1]
+    assert lb and all(c["n_cb"] == 2 and c["it"] == 1000 for c in lb), "L-BFGS 0.1 — без проверки и целиком"
+    same, _, _, _ = run(plan, SG + ["--stall-opts", "all"])
+    assert strip(same[0]) == strip(full[0])
+    print("--stall-opts: срезаются только названные оптимизаторы: OK")
+
+
 def test_rollback_and_resume():
     """Срез и откат: откат судит шаг целиком; журнал стража едет в чекпоинте докатки."""
     # Adam 1e-2 поднимает лосс: срез на первом окне, остаток — запасному Adam 1e-2 x 100, он тоже поднимает,
@@ -459,6 +478,7 @@ def test_refusals():
                         ((["--stall-window", "0"], "--stall-window >= 1"), "окно 0"),
                         ((["--stall-min", "1.0"], "--stall-min из (0, 1)"), "порог 1"),
                         ((["--stall-min", "0"], "--stall-min из (0, 1)"), "порог 0"),
+                        ((["--stall-opts", "SGD"], "--stall-opts: неизвестные"), "неизвестный оптимизатор"),
                         ((["--guard-fallback", "LBFGS:7:500"], "--guard-fallback: нет действия"), "неизвестное запасное")):
         must_fail(lambda e=extra: run(["Adam:0.001:1000"], SG + e[0], guard=False), extra[1], f"--stall-guard: {what}")
 
@@ -483,6 +503,7 @@ def main():
     test_default_unchanged(); lap()
     test_cut(); lap()
     test_not_cut(); lap()
+    test_opts(); lap()
     test_rollback_and_resume(); lap()
     test_tele(); lap()
     test_refusals(); lap()

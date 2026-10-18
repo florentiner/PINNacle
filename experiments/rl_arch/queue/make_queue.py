@@ -2383,6 +2383,51 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                 note=f"две сети, процедурный энкодер ({_src}, сид обучения {_m}), обрезка застрявшего действия, "
                      f"сиды {_sd}")
 
+# ---------------------------------------------------------------- волна 62
+# Один рецепт с двумя сетями на оба уравнения. Обрезка застрявшего действия (STALLG) спасает pb2d (две сети с MAE и
+# ConvNeXt без MAE — 0.0085-0.0152 на сидах 42-46), но вредит ns2d: лидер 0.0616 против 0.0444 без неё, сид 44 —
+# 0.378. Разбор сида 44: срезаны три L-BFGS подряд с лоссом ровно на месте (отношение за окно 1.0), остаток отдан
+# запасному L-BFGS 1 x 500, который тоже стоит; без обрезки на этом месте L-BFGS 1 x 500 через 250 эпох застоя сам
+# прорвался (лосс 0.023 -> 0.0008, l2re 0.378 -> 0.048). На ns2d 58 из 93 срезов — L-BFGS, на pb2d 65 из 259 (там
+# режутся в основном Adam и PSO). Мягкая обрезка (STALLS, тег _ss): проверяются только действия Adam и PSO
+# (--stall-opts Adam,PSO), окно и порог прежние. Оценки — по готовым моделям, без новых обучений:
+#   ns2d: лидер (две сети, MAE) с мягкой обрезкой (пара к t3m_ete_two_g и t3m_w51lead_sg); ConvNeXt без MAE с двумя
+#         сетями (обучения волны 51, m1 и m2) без обрезки (тег _g, пара к t3m_w51cnxtwo_m*_sg: 0.064 / 0.081) и с
+#         мягкой обрезкой; сиды 42-44 и 45-46 отдельными кернелами;
+#   pb2d: ConvNeXt без MAE с двумя сетями (волна 60, m1 и m2) и две сети с MAE (волна 41, m2: срыв 0.0876 без
+#         обрезки, 0.0095 с полной) с мягкой обрезкой, сиды 42-46 — держит ли мягкая обрезка выигрыш pb2d.
+# Решение: если мягкая обрезка на ns2d не хуже лидера без обрезки, а на pb2d не хуже полной — один рецепт на оба.
+STALLS = f"{STALLG} --stall-opts Adam,PSO"
+
+
+def ss_eval(model, tag, sd):
+    """Оценка со стражем с откатом, без сбросов (safe) и с мягкой обрезкой (только Adam и PSO); тег _ss."""
+    return (EVAL, f"--policy agent --model-file {model} {GUARD} {STALLS} {KEEPS} "
+                  + t3ev(tag + "_ss", sd, hours=MAP_EH))
+
+
+if W28_K and NS2D:
+    _blocks = (seeds(42, 44), seeds(45, 46))
+    _eh = lambda sd: 0.4 + 1.5 * len(sd.split(","))   # noqa: E731
+    _lead = f"rl_arch/models/convnext_dqn_cfix_rdelta_vb{SUBSFX}_ete_two_seed1.pt"
+    _jobs = [("lead-ss", ss_eval, _lead, "t3m_w62lead", "лидер (две сети, MAE), мягкая обрезка")]
+    for _m in (1, 2):
+        _ck = w41_hf_model("w51cnxtwo", _m)
+        _jobs += [(f"cnx-m{_m}", free_eval, _ck, f"t3m_w51cnxtwo_m{_m}",
+                   f"ConvNeXt без MAE, две сети, обучение {_m}, без обрезки"),
+                  (f"cnxss-m{_m}", ss_eval, _ck, f"t3m_w51cnxtwo_m{_m}",
+                   f"ConvNeXt без MAE, две сети, обучение {_m}, мягкая обрезка")]
+    for _nm, _fn, _ck, _tg, _what in _jobs:
+        for _i, _sd in enumerate(_blocks):
+            add(f"w62-{_nm}-{'ab'[_i]}", 62, "H06", [_fn(_ck, _tg, _sd)], round(_eh(_sd), 2), needs=[_ck],
+                note=f"ns2d: {_what}, сиды {_sd}")
+if PREFIX == "pb2d":
+    for _nm, _ck, _tg in (("cnxtwo-m1", w41_hf_model("w60cnxtwo", 1), "t3m_w60cnxtwo_m1"),
+                          ("cnxtwo-m2", w41_hf_model("w60cnxtwo", 2), "t3m_w60cnxtwo_m2"),
+                          ("two41m2", w41_hf_model("w41two", 2), "t3m_w60two41m2")):
+        add(f"w62-{_nm}-ss", 62, "H06", [ss_eval(_ck, _tg, S5)], 4.1, needs=[_ck],
+            note=f"pb2d, две сети ({_tg}): мягкая обрезка (только Adam и PSO), сиды 42-46")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
