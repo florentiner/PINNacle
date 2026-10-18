@@ -16461,6 +16461,150 @@
    ]
   },
   {
+   "id": "pb2d-w60-cnxtwo-m1",
+   "wave": 60,
+   "group": "H06",
+   "hours": 5.1,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "pb2d, две сети (сумма), ConvNeXt без MAE, сид обучения 1, обрезка застрявшего действия",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w60cnxtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w60cnxtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60cnxtwo_m1_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-cnxtwo-m2",
+   "wave": 60,
+   "group": "H06",
+   "hours": 5.1,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "pb2d, две сети (сумма), ConvNeXt без MAE, сид обучения 2, обрезка застрявшего действия",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w60cnxtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w60cnxtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60cnxtwo_m2_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-cnxauto-m1",
+   "wave": 60,
+   "group": "H06",
+   "hours": 5.1,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "pb2d, две сети (последовательный выбор), ConvNeXt без MAE, сид обучения 1, обрезка застрявшего действия",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w60cnxauto --two-nets-mode auto"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w60cnxauto_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60cnxauto_m1_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-cnxauto-m2",
+   "wave": 60,
+   "group": "H06",
+   "hours": 5.1,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "pb2d, две сети (последовательный выбор), ConvNeXt без MAE, сид обучения 2, обрезка застрявшего действия",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w60cnxauto --two-nets-mode auto"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w60cnxauto_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60cnxauto_m2_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-sg-two33",
+   "wave": 60,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_two_seed1.pt"
+   ],
+   "note": "pb2d, две сети с MAE (two33): обрезка застрявшего действия, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60two33_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-sg-two41m2",
+   "wave": 60,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed2.pt"
+   ],
+   "note": "pb2d, две сети с MAE (two41m2): обрезка застрявшего действия, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60two41m2_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-sg-two41m3",
+   "wave": 60,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed3.pt"
+   ],
+   "note": "pb2d, две сети с MAE (two41m3): обрезка застрявшего действия, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w41two_seed3.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60two41m3_sg"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w60-sg-auto48m2",
+   "wave": 60,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w48auto_seed2.pt"
+   ],
+   "note": "pb2d, две сети с MAE (auto48m2): обрезка застрявшего действия, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w48auto_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60auto48m2_sg"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

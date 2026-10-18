@@ -2277,6 +2277,28 @@ if NS2D:
         add(f"w59-proc-m{_m}-c", 59, "H06", [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", "47,48,49,50,51")],
             8.0, needs=[w41_hf_model(_mt, _m)], note=f"процедурные карты, обучение {_m}, добор сидов 47-51")
 
+# ---------------------------------------------------------------- волна 60
+# pb2d только с двумя сетями (требование: число выходов растёт линейно при добавлении параметров). Лучшее на
+# pb2d с одной сетью — ConvNeXt без MAE с обрезкой застрявшего действия. Здесь: (1) ConvNeXt без MAE с двумя
+# сетями — суммой (как лидер ns2d) и последовательным выбором (лучший из вариантов двух сетей на pb2d), по два
+# обучения, оценка с обрезкой на сидах 42-46; (2) обрезка на готовых агентах pb2d с двумя сетями и MAE (сумма:
+# обучения волн 33 и 41; последовательный выбор: волна 48, обучение 2) — что даёт обрезка двум сетям.
+if PREFIX == "pb2d":
+    for _nm, _extra in (("cnxtwo", ""), ("cnxauto", " --two-nets-mode auto")):
+        _mt = f"w60{_nm}"
+        for _m in (1, 2):
+            _scr, _a = w51_train("two", _m, _mt)
+            add(f"w60-{_nm}-m{_m}", 60, "H06",
+                [(_scr, _a + _extra), sg_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", S5)],
+                5.1, needs=[W41_TEACH["two"]],
+                note=f"pb2d, две сети ({'сумма' if not _extra else 'последовательный выбор'}), ConvNeXt без MAE, "
+                     f"сид обучения {_m}, обрезка застрявшего действия")
+    for _nm, _ck in (("two33", "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ete_two_seed1.pt"),
+                     ("two41m2", w41_hf_model("w41two", 2)), ("two41m3", w41_hf_model("w41two", 3)),
+                     ("auto48m2", w41_hf_model("w48auto", 2))):
+        add(f"w60-sg-{_nm}", 60, "H06", [sg_eval(_ck, f"t3m_w60{_nm}", S5)], 4.1, needs=[_ck],
+            note=f"pb2d, две сети с MAE ({_nm}): обрезка застрявшего действия, сиды 42-46")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
