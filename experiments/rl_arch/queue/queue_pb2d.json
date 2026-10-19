@@ -17019,6 +17019,276 @@
    ]
   },
   {
+   "id": "pb2d-w63-pre-vae",
+   "wave": 63,
+   "group": "H06",
+   "hours": 1.2,
+   "needs": [],
+   "note": "предобучение β-VAE: 5000 процедурных цепочек (vaeproc) и свои 130 (vaeown), 1400 шагов",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w63vaeproc --procedural 5000 --configs ssl-vae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    },
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w63vaeownpb2d --subdirs poisson_boltzmann_2d --max-per-pde 130 --configs ssl-vae-resnet --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-cnxfree-m1",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w60cnxtwo_seed1.pt"
+   ],
+   "note": "pb2d, ConvNeXt без MAE (две сети, обучение 1 волны 60) без обрезки, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w60cnxtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60cnxtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-cnxfree-m2",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.1,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w60cnxtwo_seed2.pt"
+   ],
+   "note": "pb2d, ConvNeXt без MAE (две сети, обучение 2 волны 60) без обрезки, сиды 42-46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w60cnxtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w60cnxtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeproc-m1",
+   "wave": 63,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w63vaeproc_enc_vae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, β-VAE на процедурных картах, сид обучения 1, без обрезки, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w63vaeproc_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w63vaeproctwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w63vaeproctwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeproctwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeproc-m1-ss",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeproctwo_seed1.pt"
+   ],
+   "note": "две сети, β-VAE на процедурных картах, сид обучения 1, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeproctwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeproctwo_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeproc-m2",
+   "wave": 63,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w63vaeproc_enc_vae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, β-VAE на процедурных картах, сид обучения 2, без обрезки, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w63vaeproc_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w63vaeproctwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w63vaeproctwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeproctwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeproc-m2-ss",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeproctwo_seed2.pt"
+   ],
+   "note": "две сети, β-VAE на процедурных картах, сид обучения 2, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeproctwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeproctwo_m2_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeown-m1",
+   "wave": 63,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w63vaeownpb2d_enc_vae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, β-VAE на своих 130, сид обучения 1, без обрезки, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w63vaeownpb2d_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w63vaeowntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w63vaeowntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeowntwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeown-m1-ss",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeowntwo_seed1.pt"
+   ],
+   "note": "две сети, β-VAE на своих 130, сид обучения 1, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeowntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeowntwo_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeown-m2",
+   "wave": 63,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w63vaeownpb2d_enc_vae_resnet.pt",
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, β-VAE на своих 130, сид обучения 2, без обрезки, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w63vaeownpb2d_enc_vae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w63vaeowntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w63vaeowntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeowntwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-vaeown-m2-ss",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeowntwo_seed2.pt"
+   ],
+   "note": "две сети, β-VAE на своих 130, сид обучения 2, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63vaeowntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63vaeowntwo_m2_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-cnxd4-m1",
+   "wave": 63,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, ConvNeXt без MAE, аугментация D4, сид обучения 1, без обрезки, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w63cnxd4two --aug d4"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w63cnxd4two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63cnxd4two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-cnxd4-m1-ss",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63cnxd4two_seed1.pt"
+   ],
+   "note": "две сети, ConvNeXt без MAE, аугментация D4, сид обучения 1, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63cnxd4two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63cnxd4two_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-cnxd4-m2",
+   "wave": 63,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_two.pt"
+   ],
+   "note": "две сети, ConvNeXt без MAE, аугментация D4, сид обучения 2, без обрезки, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_two.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w63cnxd4two --aug d4"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w63cnxd4two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63cnxd4two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w63-cnxd4-m2-ss",
+   "wave": 63,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63cnxd4two_seed2.pt"
+   ],
+   "note": "две сети, ConvNeXt без MAE, аугментация D4, сид обучения 2, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w63cnxd4two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w63cnxd4two_m2_ss"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

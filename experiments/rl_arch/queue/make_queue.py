@@ -2428,6 +2428,84 @@ if PREFIX == "pb2d":
         add(f"w62-{_nm}-ss", 62, "H06", [ss_eval(_ck, _tg, S5)], 4.1, needs=[_ck],
             note=f"pb2d, две сети ({_tg}): мягкая обрезка (только Adam и PSO), сиды 42-46")
 
+# ---------------------------------------------------------------- волна 63
+# Три вопроса после волны 62 (агент всегда с двумя сетями, сумма --two-nets, учитель W41_TEACH["two"], буфер W33_SRC).
+# (1) VAE вместо MAE на pb2d при минимуме данных: β-VAE (ssl-vae: восстановление всей нормированной карты через
+#     латент 32, β = 1) на 5000 процедурных цепочках (vaeproc, 0 GPU-ч данных, как w55proc) и на своих 130 переходах
+#     случайного буфера цели (vaeown, как w61 maeout/d4own); предобучения — один кернел, 1400 шагов. По два
+#     обучения, оценка на сидах 42-46 без обрезки (free_eval, тег _g; пара к w61) и с мягкой обрезкой (ss_eval, _ss).
+# (2) ConvNeXt без MAE: (а) без обрезки на pb2d — готовые w60cnxtwo m1, m2 (с обрезкой 0.0122 / 0.0085);
+#     (б) аугментация карт D4 при обучении Q (--aug d4: случайный поворот/отражение карт s и s' — одно на пачку, как
+#     RAD, Laskin et al. NeurIPS 2020, и DrQ, Kostrikov et al. ICLR 2021, для RL по картинкам на малых данных).
+#     Плоскость карты автокодировщика ориентации не имеет (проверка симметрии средней карты — у d4_apply), поэтому
+#     D4 — точная симметрия состояния, а 130 переходов дают 8x наблюдений. ConvNeXt без предобучения проигрывает на
+#     ns2d в 1.5-1.9 раза — похоже на нехватку данных для свёрток, D4 бьёт ровно туда. По два обучения на pb2d и
+#     ns2d, оценка без обрезки и с мягкой (ns2d — сиды 42-44 и 45-46 отдельными кернелами).
+# (3) ns2d, отбор обучения процедурного агента (w55proctwo: m1-m3 на 42-46 — 0.0558 / 0.0437 / 0.0947): ещё два
+#     обучения (m4, m5) и у всех пяти — оценка на сиде отбора 52 (вне тестовых 42-51; эталон цели и так нужен
+#     обучению — награды буфера считаются по нему). Выбранный по сиду 52 сравнивается с лидером на 42-51; m4 и m5
+#     оцениваются и на 42-46 при любом исходе — видно, угадывает ли отбор. Добор 47-51 выбранного (если это m4
+#     или m5) — после отбора.
+W63_SEED_H = 1.5 if NS2D else 0.75
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _arch = "two"
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + W63_SEED_H * len(sd.split(","))   # noqa: E731
+    _arms = []
+    if PREFIX == "pb2d":
+        _pre = f"--pretrain-only --ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}"
+        add("w63-pre-vae", 63, "H06",
+            [(CVPROBE, f"--tag w63vaeproc --procedural 5000 --configs ssl-vae-resnet {_pre}"),
+             (CVPROBE, f"--tag w63vaeown{W28_SHORT} --subdirs {SUBDIR} --max-per-pde 130 --configs ssl-vae-resnet "
+                       f"{_pre}")],
+            1.2, note=f"предобучение β-VAE: 5000 процедурных цепочек (vaeproc) и свои 130 (vaeown), {W46_SSL_STEPS} шагов")
+        for _nm, _enc, _what in (("vaeproc", "rl_arch/encoders/cvprobe_w63vaeproc_enc_vae_resnet.pt",
+                                  "β-VAE на процедурных картах"),
+                                 ("vaeown", f"rl_arch/encoders/cvprobe_w63vaeown{W28_SHORT}_enc_vae_resnet.pt",
+                                  "β-VAE на своих 130")):
+            _arms.append((_nm, w41_train, dict(init=_enc), [_enc], _what))
+        for _m in (1, 2):
+            _ck = w41_hf_model("w60cnxtwo", _m)
+            add(f"w63-cnxfree-m{_m}", 63, "H06", [free_eval(_ck, f"t3m_w60cnxtwo_m{_m}", S5)], 4.1, needs=[_ck],
+                note=f"pb2d, ConvNeXt без MAE (две сети, обучение {_m} волны 60) без обрезки, сиды 42-46")
+    _arms.append(("cnxd4", w51_train, dict(extra=" --aug d4"), [], "ConvNeXt без MAE, аугментация D4"))
+    for _nm, _fn, _kw, _needs, _what in _arms:
+        _mt = f"w63{_nm}{_arch}"
+        for _m in (1, 2):
+            if _fn is w41_train:
+                _tr = w41_train(_arch, _m, _mt, init=_kw["init"])
+            else:
+                _scr, _a = w51_train(_arch, _m, _mt)
+                _tr = (_scr, _a + _kw["extra"])
+            add(f"w63-{_nm}-m{_m}", 63, "H06",
+                [_tr, free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=list(_needs) + [W41_TEACH[_arch]],
+                note=f"две сети, {_what}, сид обучения {_m}, без обрезки, сиды {_blocks[0]}")
+            _ck = w41_hf_model(_mt, _m)
+            for _i, _sd in enumerate(_blocks):
+                _sfx = "" if len(_blocks) == 1 else "-" + "ab"[_i]
+                if _i:
+                    add(f"w63-{_nm}-m{_m}{_sfx}", 63, "H06", [free_eval(_ck, f"t3m_{_mt}_m{_m}", _sd)],
+                        round(_eh(_sd), 2), needs=[_ck], note=f"две сети, {_what}, сид обучения {_m}, без обрезки, сиды {_sd}")
+                add(f"w63-{_nm}-m{_m}-ss{_sfx}", 63, "H06", [ss_eval(_ck, f"t3m_{_mt}_m{_m}", _sd)],
+                    round(_eh(_sd), 2), needs=[_ck],
+                    note=f"две сети, {_what}, сид обучения {_m}, мягкая обрезка, сиды {_sd}")
+if NS2D:
+    _arch = W41_LEAD
+    _mt = f"w55proc{_arch}"
+    _enc = "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+    for _m in (4, 5):
+        add(f"w63-proc-m{_m}", 63, "H06",
+            [w41_train(_arch, _m, _mt, init=_enc),
+             free_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", "52,42,43,44")],
+            7.4, needs=[_enc, W41_TEACH[_arch]],
+            note=f"процедурные карты, обучение {_m}: сид отбора 52, затем 42-44")
+        add(f"w63-proc-m{_m}-b", 63, "H06", [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", "45,46")], 3.4,
+            needs=[w41_hf_model(_mt, _m)], note=f"процедурные карты, обучение {_m}, сиды 45-46")
+    for _m in (1, 2, 3):
+        add(f"w63-proc-sel-m{_m}", 63, "H06", [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", "52")], 1.9,
+            needs=[w41_hf_model(_mt, _m)], note=f"процедурные карты, обучение {_m}: сид отбора 52")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
