@@ -218,16 +218,18 @@ def lint_combo(argv):
     """Обучение полной комбинации: разбор аргументов до построения таблицы буферов."""
     import agent_combo as C
     import killswitch as K
-    saved = C.get_table, K.killed
+    import target_buffer as TB
+    saved = C.get_table, K.killed, TB.load
 
     def reached(*a, **k):
         raise Reached()
-    C.get_table = reached
+    # тяжёлая часть — таблица буферов других задач или, без них (--subdirs только с папкой цели), собранный буфер
+    C.get_table = TB.load = reached
     K.killed = lambda *a, **k: None       # отменённая задача остаётся в очереди и должна разбираться
     try:
         C.main(list(argv) + ["--no-upload", "--out-dir", tempfile.mkdtemp(prefix="lint_combo_")])
     finally:
-        C.get_table, K.killed = saved
+        C.get_table, K.killed, TB.load = saved
     if "--guide" in argv:
         import online_eval_env as E
         E.parse_chain(argv[argv.index("--guide") + 1])

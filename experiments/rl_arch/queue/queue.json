@@ -19063,6 +19063,285 @@
    ]
   },
   {
+   "id": "w64-col-0",
+   "wave": 64,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор без чужих буферов (суррогат только на собранном), сборщик 0 из 10",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --subdirs ns2d_liddriven --save-buffer --worker 0/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_own_w0"
+    }
+   ]
+  },
+  {
+   "id": "w64-col-1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор без чужих буферов (суррогат только на собранном), сборщик 1 из 10",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde ns2d_liddriven --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --subdirs ns2d_liddriven --save-buffer --worker 1/10 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_ns2d_own_w1"
+    }
+   ]
+  },
+  {
+   "id": "w64-teach-own",
+   "wave": 64,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [],
+   "note": "учитель MBPO только на собранном буфере лидера (без других задач)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --subdirs ns2d_liddriven --tag q_teach_mbpo_w64own"
+    }
+   ]
+  },
+  {
+   "id": "w64-teach-scratch",
+   "wave": 64,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/online_env/ns2d_liddriven_tbuf_ns2d_own_w0_collect.json",
+    "rl_arch/online_env/ns2d_liddriven_tbuf_ns2d_own_w1_collect.json"
+   ],
+   "note": "учитель MBPO только на новом сборе без чужих буферов (в план — после конца сбора: файл сбора пишется и по ходу)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_own_w0,rl_arch/buffers_new/tbuf_ns2d_own_w1 --subdirs ns2d_liddriven --tag q_teach_mbpo_w64scratch"
+    }
+   ]
+  },
+  {
+   "id": "w64-own-m1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_w64own.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): суррогат и учитель только на своём буфере, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs ns2d_liddriven --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_w64own.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w64owntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w64owntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w64owntwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-own-m1-b",
+   "wave": 64,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64owntwo_seed1.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): суррогат и учитель только на своём буфере, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64owntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w64owntwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-own-m2",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_w64own.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): суррогат и учитель только на своём буфере, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs ns2d_liddriven --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_w64own.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w64owntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w64owntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w64owntwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-own-m2-b",
+   "wave": 64,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64owntwo_seed2.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): суррогат и учитель только на своём буфере, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64owntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w64owntwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-none-m1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): без модельных целей и учителя, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --two-nets --seeds 1 --model-tag w64nonetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w64nonetwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w64nonetwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-none-m1-b",
+   "wave": 64,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64nonetwo_seed1.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): без модельных целей и учителя, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64nonetwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w64nonetwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-none-m2",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): без модельных целей и учителя, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --two-nets --seeds 2 --model-tag w64nonetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w64nonetwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w64nonetwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-none-m2-b",
+   "wave": 64,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64nonetwo_seed2.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): без модельных целей и учителя, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64nonetwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w64nonetwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-scratch-m1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_w64scratch.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): свой сбор без чужих буферов, суррогат и учитель только на нём, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs ns2d_liddriven --target-buffer rl_arch/buffers_new/tbuf_ns2d_own_w0,rl_arch/buffers_new/tbuf_ns2d_own_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_w64scratch.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w64scratchtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w64scratchtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w64scratchtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-scratch-m1-b",
+   "wave": 64,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64scratchtwo_seed1.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): свой сбор без чужих буферов, суррогат и учитель только на нём, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64scratchtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w64scratchtwo_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-scratch-m2",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_w64scratch.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): свой сбор без чужих буферов, суррогат и учитель только на нём, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs ns2d_liddriven --target-buffer rl_arch/buffers_new/tbuf_ns2d_own_w0,rl_arch/buffers_new/tbuf_ns2d_own_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_w64scratch.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w64scratchtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w64scratchtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w64scratchtwo_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w64-scratch-m2-b",
+   "wave": 64,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64scratchtwo_seed2.pt"
+   ],
+   "note": "с нуля (MAE на процедурных картах, две сети): свой сбор без чужих буферов, суррогат и учитель только на нём, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w64scratchtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w64scratchtwo_m2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

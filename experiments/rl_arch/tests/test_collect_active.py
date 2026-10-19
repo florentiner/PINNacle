@@ -383,6 +383,29 @@ def test_rounds_format_and_acquisition():
     print("раунды, формат, lcb против random: OK")
 
 
+def test_cold_start():
+    """Таблица только из цели (--subdirs с папкой цели, без --use-old-target): в первом раунде суррогату не на чем
+    учиться — пачка случайная, суррогат не строится; со второго раунда он учится только на собранном здесь."""
+    tab = BASE["tab"]
+    m = tab["PDE"] == 1
+    own = {k: (v[m] if isinstance(v, np.ndarray) and len(v) == len(m) else v) for k, v in tab.items()}
+    own["PDE"] = np.zeros(int(m.sum()), dtype=tab["PDE"].dtype)
+    own["CTX"], own["NAMES"], own["SUBDIRS"] = tab["CTX"][1:], [PDE], ["burgers1d"]
+    base_own = dict(BASE, tab=own)
+    with patched() as tmp:
+        C.base_table = lambda a: base_own
+        st = run(tmp, ["--acq", "lcb", "--rounds", "3", "--batch", "3", "--mask", "pso:0"], tag="cold")
+        r0, r1, r2 = st["rounds"]
+        assert r0["n_train_rows"] == 0 and r0["fit_s"] == 0.0 and r0["pred_mae"] is None
+        assert all(r["acq"] == "random" for r in st["records"][:3]), "первая пачка — случайная"
+        n0 = sum(len(r["chain"]) for r in st["records"][:3])
+        assert len(FITS) == 2 and FITS[0] == r1["n_train_rows"] == r1["n_target_rows"] == n0, \
+            "со второго раунда суррогат учится только на собранном"
+        assert r2["n_train_rows"] == sum(len(r["chain"]) for r in st["records"][:6])
+        assert all(r["acq"] == "lcb" for r in st["records"][3:]) and len(st["records"]) == 9
+    print("холодный старт без чужих буферов: OK")
+
+
 def test_prefix_sharing():
     c_b, c_c = SK + ",LBFGS:0.5:1000,LBFGS:1:500", SK + ",PSO:0:100"
     with patched() as tmp:
@@ -556,6 +579,7 @@ if __name__ == "__main__":
     test_select_batch()
     test_table_and_real_fit()
     test_rounds_format_and_acquisition()
+    test_cold_start()
     test_prefix_sharing()
     test_truncation()
     test_resume_and_limits()

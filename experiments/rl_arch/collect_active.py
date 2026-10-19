@@ -747,25 +747,33 @@ def select_round(st, a, allowed):
             base["table_s"] = 0.0                       # время сборки таблицы учитывается один раз
         t = time.time()
         tab, rows, n_new = training_table(base, st["records"], a)
-        ens = fit_surrogate(tab, rows, a, rnd)
-        sel.update(fit_s=round(time.time() - t, 1), n_train_rows=int(len(rows)), n_target_rows=int(n_new))
-        t = time.time()
-        cand = gen_candidates(ens, base["ctx"], a, allowed, best_parents(st, a), tried, rng)
-        fixed = []
-        for g in init:
-            acts, eps = norm(g, a)
-            if acts:
-                mu, sd = score_chains(ens, base["ctx"], [acts], [eps])
-                if push(acts, "init", "init", mu[0], sd[0]):
-                    fixed.append(acts)
-                cand.pop(key_of(acts, eps), None)
-        keys = list(cand)
-        if keys and len(items) < a.batch:
-            chains, eps = [cand[k][0] for k in keys], [cand[k][1] for k in keys]
-            mu, sd = score_chains(ens, base["ctx"], chains, eps)
-            for i in select_batch(chains, mu, sd, a, a.batch - len(items), fixed=fixed):
-                push(chains[i], cand[keys[i]][2], a.acq, mu[i], sd[i])
-        sel.update(sel_s=round(time.time() - t, 1), n_candidates=len(keys))
+        if not len(rows):
+            # холодный старт: таблица только из цели (--subdirs с одной папкой цели, без --use-old-target), а
+            # собранного ещё нет — суррогату не на чем учиться; пачка случайная (ниже), со следующего раунда —
+            # суррогат на собранном здесь
+            sel.update(fit_s=0.0, n_train_rows=0, n_target_rows=0)
+            for g in init:
+                push(g, "init", "init")
+        else:
+            ens = fit_surrogate(tab, rows, a, rnd)
+            sel.update(fit_s=round(time.time() - t, 1), n_train_rows=int(len(rows)), n_target_rows=int(n_new))
+            t = time.time()
+            cand = gen_candidates(ens, base["ctx"], a, allowed, best_parents(st, a), tried, rng)
+            fixed = []
+            for g in init:
+                acts, eps = norm(g, a)
+                if acts:
+                    mu, sd = score_chains(ens, base["ctx"], [acts], [eps])
+                    if push(acts, "init", "init", mu[0], sd[0]):
+                        fixed.append(acts)
+                    cand.pop(key_of(acts, eps), None)
+            keys = list(cand)
+            if keys and len(items) < a.batch:
+                chains, eps = [cand[k][0] for k in keys], [cand[k][1] for k in keys]
+                mu, sd = score_chains(ens, base["ctx"], chains, eps)
+                for i in select_batch(chains, mu, sd, a, a.batch - len(items), fixed=fixed):
+                    push(chains[i], cand[keys[i]][2], a.acq, mu[i], sd[i])
+            sel.update(sel_s=round(time.time() - t, 1), n_candidates=len(keys))
     for _ in range(400):                                # случайный сбор и добор пачки
         if len(items) >= a.batch:
             break

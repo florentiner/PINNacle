@@ -17289,6 +17289,166 @@
    ]
   },
   {
+   "id": "pb2d-w64-col-0",
+   "wave": 64,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "направленный сбор без чужих буферов (суррогат только на собранном), сборщик 0 из 4",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/collect_active.py",
+     "args": "--pde poissonboltzmann2d --budget 7000 --rounds 99 --batch 5 --share-prefix --prefix-bonus 0.1 --truncate 3 --keep-opt --keep-opt-mode safe --acq lcb --lcb-k 1 --subdirs poisson_boltzmann_2d --save-buffer --worker 0/4 --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online --tag tbuf_pb2d_own_w0"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-teach-own",
+   "wave": 64,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [],
+   "note": "учитель MBPO только на собранном буфере лидера (без других задач)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --subdirs poisson_boltzmann_2d --tag qpb2d_teach_mbpo_w64own"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-teach-scratch",
+   "wave": 64,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [
+    "rl_arch/online_env/poissonboltzmann2d_tbuf_pb2d_own_w0_collect.json"
+   ],
+   "note": "учитель MBPO только на новом сборе без чужих буферов (в план — после конца сбора: файл сбора пишется и по ходу)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde poissonboltzmann2d --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_pb2d_own_w0 --subdirs poisson_boltzmann_2d --tag qpb2d_teach_mbpo_w64scratch"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-own-m1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w64own.pt"
+   ],
+   "note": "с нуля (ConvNeXt без MAE, две сети): суррогат и учитель только на своём буфере, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs poisson_boltzmann_2d --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w64own.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w64owntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w64owntwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w64owntwo_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-own-m2",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w64own.pt"
+   ],
+   "note": "с нуля (ConvNeXt без MAE, две сети): суррогат и учитель только на своём буфере, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs poisson_boltzmann_2d --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w64own.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w64owntwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w64owntwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w64owntwo_m2_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-none-m1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [],
+   "note": "с нуля (ConvNeXt без MAE, две сети): без модельных целей и учителя, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --two-nets --seeds 1 --model-tag w64nonetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w64nonetwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w64nonetwo_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-none-m2",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [],
+   "note": "с нуля (ConvNeXt без MAE, две сети): без модельных целей и учителя, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --two-nets --seeds 2 --model-tag w64nonetwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w64nonetwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w64nonetwo_m2_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-scratch-m1",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w64scratch.pt"
+   ],
+   "note": "с нуля (ConvNeXt без MAE, две сети): свой сбор без чужих буферов, суррогат и учитель только на нём, сид обучения 1, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs poisson_boltzmann_2d --target-buffer rl_arch/buffers_new/tbuf_pb2d_own_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w64scratch.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w64scratchtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w64scratchtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w64scratchtwo_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w64-scratch-m2",
+   "wave": 64,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w64scratch.pt"
+   ],
+   "note": "с нуля (ConvNeXt без MAE, две сети): свой сбор без чужих буферов, суррогат и учитель только на нём, сид обучения 2, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs poisson_boltzmann_2d --target-buffer rl_arch/buffers_new/tbuf_pb2d_own_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w64scratch.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w64scratchtwo"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w64scratchtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w64scratchtwo_m2_ss"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

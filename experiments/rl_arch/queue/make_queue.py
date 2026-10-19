@@ -2506,6 +2506,76 @@ if NS2D:
         add(f"w63-proc-sel-m{_m}", 63, "H06", [free_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", "52")], 1.9,
             needs=[w41_hf_model(_mt, _m)], note=f"процедурные карты, обучение {_m}: сид отбора 52")
 
+# ---------------------------------------------------------------- волна 64
+# Метод с нуля: без данных других уравнений. Кроме MAE (его заменяет энкодер без чужих данных: pb2d — ConvNeXt без
+# предобучения, ns2d — MAE на процедурных картах w55proc), буферы 21 другого уравнения нужны ещё в трёх местах:
+# (1) направленный сбор 130 переходов — суррогат выбора цепочек учится на буферах остальных задач; (2) плотные
+# модельные цели (--mb-aux) — тот же суррогат; (3) учитель MBPO на скалярах — агент в этом суррогате. Три арма,
+# агент с двумя сетями (сумма), по два обучения (сиды 1, 2):
+#   own     — собранный буфер лидера (W33_SRC), суррогат целей и учитель — только на нём (--mb-subdirs и --subdirs
+#             с одной папкой цели: строк других задач в таблице ноль; исходный буфер цели тоже не берётся);
+#   none    — тот же буфер, без модельных целей и без учителя: чистый DQN по 130 переходам;
+#   scratch — новый направленный сбор, суррогат которого учится только на собранном здесь (collect_active.py
+#             --subdirs <папка цели>: первая пачка случайная — холодный старт, дальше LCB на своём), те же
+#             сборщики, сиды и 8 часов, что у W33_SRC; суррогат целей и учитель — только на нём. Это метод целиком
+#             без чужих данных.
+# Оценка: pb2d — с мягкой обрезкой (ss_eval; контроль — w60cnxtwo m1/m2 _ss 0.0122 / 0.0085), ns2d — без обрезки
+# (free_eval, сиды 42-44 и 45-46 отдельно; контроль — w55proctwo m1/m2 _g 0.0558 / 0.0437 на 42-46).
+W64_SEED_H = 1.5 if NS2D else 0.75
+W64_SCR = [f"rl_arch/buffers_new/tbuf_{W28_SHORT}_own_w{_k}" for _k in range(max(1, W28_K // 4))] if W28_K else []
+W64_TEACH = {nm: f"rl_arch/agents_online/{TEACH}_w64{nm}.pt" for nm in ("own", "scratch")}
+W64_ENC_NS = "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _arch = "two"
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + W64_SEED_H * len(sd.split(","))   # noqa: E731
+    _ev = free_eval if NS2D else ss_eval
+    _scr_src = ",".join(W64_SCR)
+    for _k, _src in enumerate(W64_SCR):
+        add(f"w64-col-{_k}", 64, "H06",
+            [(COLLECT, f"--pde {PDE} --budget {BUDGET} --rounds 99 --batch {_cbatch} --share-prefix --prefix-bonus 0.1 "
+                       f"--truncate 3 {KEEPS} --acq lcb --lcb-k 1 --subdirs {SUBDIR} --save-buffer "
+                       f"--worker {_k}/{W28_K} --hours 8.0 --kernel-hours 8.0 --resume --save-dir runs_rl_online "
+                       f"--tag tbuf_{W28_SHORT}_own_w{_k}")],
+            9.0, note=f"направленный сбор без чужих буферов (суррогат только на собранном), сборщик {_k} из {W28_K}")
+    add("w64-teach-own", 64, "H06",
+        [(COMBO, f"{TEACH_TR} --target-buffer {W33_SRC} --subdirs {SUBDIR} --tag {TEACH}_w64own")],
+        1.0, note="учитель MBPO только на собранном буфере лидера (без других задач)")
+    add("w64-teach-scratch", 64, "H06",
+        [(COMBO, f"{TEACH_TR} --target-buffer {_scr_src} --subdirs {SUBDIR} --tag {TEACH}_w64scratch")],
+        1.0, needs=[f"rl_arch/online_env/{PDE}_tbuf_{W28_SHORT}_own_w{_k}_collect.json" for _k in range(len(W64_SCR))],
+        note="учитель MBPO только на новом сборе без чужих буферов (в план — после конца сбора: файл сбора "
+             "пишется и по ходу)")
+    _enc_what = "MAE на процедурных картах" if NS2D else "ConvNeXt без MAE"
+    for _nm, _what in (("own", "суррогат и учитель только на своём буфере"),
+                       ("none", "без модельных целей и учителя"),
+                       ("scratch", "свой сбор без чужих буферов, суррогат и учитель только на нём")):
+        _mt = f"w64{_nm}{_arch}"
+        for _m in (1, 2):
+            _scr, _a = (w41_train(_arch, _m, _mt, init=W64_ENC_NS) if NS2D else w51_train(_arch, _m, _mt))
+            _tf = f"--teacher-from {W41_TEACH[_arch]} --teacher-w 0.5"
+            assert _a.count(_tf) == 1 and _a.count(MB) == 1 and _a.count(f"--target-buffer {W33_SRC} ") == 1, _a
+            if _nm == "none":
+                _a = _a.replace(_tf, "").replace(MB, "")
+                _needs = []
+            else:
+                _a = _a.replace(_tf, f"--teacher-from {W64_TEACH[_nm]} --teacher-w 0.5").replace(
+                    MB, f"{MB} --mb-subdirs {SUBDIR}")
+                _needs = [W64_TEACH[_nm]]
+            if _nm == "scratch":
+                _a = _a.replace(f"--target-buffer {W33_SRC} ", f"--target-buffer {_scr_src} ")
+            _a = " ".join(_a.split())
+            if NS2D:
+                _needs = _needs + [W64_ENC_NS]
+            add(f"w64-{_nm}-m{_m}", 64, "H06",
+                [(_scr, _a), _ev(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=_needs,
+                note=f"с нуля ({_enc_what}, две сети): {_what}, сид обучения {_m}, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w64-{_nm}-m{_m}-b", 64, "H06", [_ev(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"с нуля ({_enc_what}, две сети): {_what}, сид обучения {_m}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
