@@ -3739,6 +3739,10 @@ def main():
                     help="Модельные цели: буферы, на которых учится суррогат (all | solvable | список). "
                          "С --subdirs и --holdout отложенные папки из этого набора исключаются: суррогат "
                          "не видит задачу проверки переноса")
+    ap.add_argument("--mb-src-chains", type=int, default=0,
+                    help="Модельные цели с --target-buffer: у каждой задачи-источника из --mb-subdirs только N "
+                         "случайных цепочек (как agent_combo.py --src-chains); 0 — все")
+    ap.add_argument("--mb-src-seed", type=int, default=0, help="сид выбора цепочек --mb-src-chains")
     ap.add_argument("--mb-table", default="",
                     help="Модельные цели: готовая таблица переходов npz (локально или в HF) вместо сборки")
     ap.add_argument("--mb-members", type=int, default=5, help="Модельные цели: членов ансамбля суррогата")
@@ -3993,6 +3997,10 @@ def main():
         if args.mc_lb_mode == "target" and (args.variant not in MC_LB_TARGET_VARIANTS or args.ens > 1 or args.hlg):
             ap.error("--mc-lb-mode target меняет цель TD только у обычной головы DQN (без --ens > 1 и --hlg); "
                      "иначе --mc-lb-mode loss")
+    if args.mb_src_chains and not (args.target_buffer and args.mb_aux > 0):
+        ap.error("--mb-src-chains действует на суррогат модельных целей с --target-buffer (нужны оба и --mb-aux > 0)")
+    if args.mb_src_chains < 0:
+        ap.error("--mb-src-chains >= 0")
     # волна 58: виды карт и план шага
     if args.view_aug:
         if not args.target_buffer:
@@ -4158,7 +4166,8 @@ def main():
         if args.mb_aux > 0:
             # таблица суррогата — как у учителя agent_combo.py --target-buffer: строки цели только собранные
             tc_tab = TB.surrogate_table(episodes, subdir_to_pde(args.subdir), args.mb_subdirs, args.mb_table,
-                                        args.mb_work, log=lambda *x: print(*x, flush=True))
+                                        args.mb_work, log=lambda *x: print(*x, flush=True),
+                                        src_chains=int(args.mb_src_chains), src_seed=int(args.mb_src_seed))
     if args.target_chains > 0:
         # до всего остального: цели учителя, контекст, модельные цели и отложенная часть считаются
         # уже на оставленных цепочках
@@ -4291,6 +4300,8 @@ def main():
             arm.update(two_nets_shared_grad=args.two_nets_shared_grad)
     if args.view_aug:
         arm.update(view_aug=args.view_aug, view_aug_p=float(args.view_aug_p), view_cons=float(args.view_cons))
+    if args.mb_src_chains:
+        arm.update(mb_src_chains=int(args.mb_src_chains), mb_src_seed=int(args.mb_src_seed))
     if args.lr_schedule != "const":
         arm.update(lr_schedule=args.lr_schedule, lr_min=float(args.lr_min))
     if args.ft_mode != "full":

@@ -331,9 +331,11 @@ def table_with(tab, episodes, name, meta=None):
     return out, pi, int(len(new["A"]))
 
 
-def surrogate_table(episodes, name, subdirs="all", table="", work="agent_combo_work", log=print):
+def surrogate_table(episodes, name, subdirs="all", table="", work="agent_combo_work", log=print, src_chains=0,
+                    src_seed=0):
     """Таблица для ученика (offline_rl.py --target-buffer с --mb-aux): та же, что собирает
-    agent_combo.py --target-buffer — буферы остальных задач (кэш в work) и собранные цепочки цели."""
+    agent_combo.py --target-buffer — буферы остальных задач (кэш в work) и собранные цепочки цели.
+    src_chains/src_seed — как agent_combo.py --src-chains/--src-seed (cap_source_chains)."""
     import agent_combo as AC
     import offline_rl as O
     meta = O.pde_meta()
@@ -343,6 +345,9 @@ def surrogate_table(episodes, name, subdirs="all", table="", work="agent_combo_w
         tab = AC.get_table(argparse.Namespace(table=table, work=work), others, log)
     else:
         tab = empty_table()
+    if src_chains:
+        tab, src_info = AC.cap_source_chains(tab, src_chains, src_seed, skip=(name,))
+        log(f"источники суррогата: по {src_chains} цепочек (сид {src_seed}): {src_info}")
     tab, pi, n = table_with(tab, episodes, name, meta)
     log(f"таблица суррогата с собранным буфером цели: переходов {len(tab['A'])}, из них цели {n} "
         f"(цепочек {len(np.unique(tab['CH'][tab['PDE'] == pi]))}), задач {len(np.unique(tab['PDE']))}")

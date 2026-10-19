@@ -2576,6 +2576,59 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"с нуля ({_enc_what}, две сети): {_what}, сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 65
+# Сколько журналов других уравнений нужно модели среды (суррогат модельных целей и учитель). Волна 64 (обрывки):
+# без модели среды и учителя pb2d 0.132, с ними только на своих 130 переходах ns2d 0.32 — журналы источников
+# нужны; полные журналы 20 уравнений — тысячи GPU-часов. Журналы — скаляры без карт.
+#   (1) surr_data_study.py — без агентов: модель среды для pb2d и ns2d (их собранные буферы лидера) на журналах
+#       k уравнений x n цепочек; порядок уравнений жадный (по качеству прогноза целей) и по разнообразию
+#       (без знания целей); кривая k = 1..6, n = 5..100, опорные точки own и all. Один кернел на обе цели.
+#   (2) агент сразу в точке src3n20: 3 дешёвых уравнения разных типов — burgers1d (нелинейное 1D, ~2.7 GPU-мин
+#       на переход с картой), poisson2d_classic (эллиптическое, ~2.9), ns2d_backstep (течение, ~5.6) — по 20
+#       цепочек (~500 переходов): учитель (agent_combo --subdirs ... --src-chains 20) и суррогат целей ученика
+#       (--mb-subdirs ... --mb-src-chains 20) видят одни и те же цепочки. Энкодер без чужих данных (pb2d ConvNeXt
+#       без MAE, ns2d MAE на процедурных картах), две сети, два обучения; оценка pb2d с мягкой обрезкой, ns2d
+#       без обрезки. Контроль — те же агенты с полными журналами: pb2d w60cnxtwo m1/m2 _ss 0.0122 / 0.0085, ns2d
+#       w55proctwo m1/m2 _g 0.0558 / 0.0437 (сиды 42-46). Агент статьи в нашем протоколе: pb2d 0.0266, ns2d 0.0674.
+W65_SRC = "burgers1d,poisson2d_classic,ns2d_backstep"
+W65_N = 20
+W65_TEACH = f"rl_arch/agents_online/{TEACH}_w65src3n20.pt"
+W65_TB = {"poissonboltzmann2d": "rl_arch/buffers_new/tbuf_pb2d_w0",
+          "ns2d_liddriven": "rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1"}
+SURRSTUDY = "experiments/rl_arch/surr_data_study.py"
+if PREFIX == "pb2d":
+    add("w65-study", 65, "H06",
+        [(SURRSTUDY, "--tag w65 " + " ".join(f"--target {k}={v}" for k, v in W65_TB.items())
+                     + " --pool all --k-max 6 --sel-chains 20 --sizes 5,10,20,50,100 --seeds 0,1 --folds 5 "
+                       "--hours 6.0 --resume --out-dir /kaggle/working")],
+        7.0, note="модель среды для pb2d и ns2d на журналах k уравнений x n цепочек: жадный и разнообразный порядок")
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    assert W33_SRC == W65_TB[PDE], (W33_SRC, W65_TB[PDE])
+    _arch = "two"
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + (1.5 if NS2D else 0.75) * len(sd.split(","))   # noqa: E731
+    _ev = free_eval if NS2D else ss_eval
+    _src = f"--src-chains {W65_N} --src-seed 0"
+    add("w65-teach", 65, "H06",
+        [(COMBO, f"{TEACH_TR} --target-buffer {W33_SRC} --subdirs {W65_SRC} {_src} --tag {TEACH}_w65src3n20")],
+        1.0, note=f"учитель MBPO: журналы {W65_SRC} по {W65_N} цепочек и собранный буфер цели")
+    _mt = f"w65src3n20{_arch}"
+    for _m in (1, 2):
+        _scr, _a = (w41_train(_arch, _m, _mt, init=W64_ENC_NS) if NS2D else w51_train(_arch, _m, _mt))
+        _tf = f"--teacher-from {W41_TEACH[_arch]} --teacher-w 0.5"
+        assert _a.count(_tf) == 1 and _a.count(MB) == 1, _a
+        _a = _a.replace(_tf, f"--teacher-from {W65_TEACH} --teacher-w 0.5").replace(
+            MB, f"{MB} --mb-subdirs {W65_SRC} --mb-src-chains {W65_N} --mb-src-seed 0")
+        _needs = [W65_TEACH] + ([W64_ENC_NS] if NS2D else [])
+        add(f"w65-src3n20-m{_m}", 65, "H06",
+            [(_scr, _a), _ev(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+            round(1.0 + _eh(_blocks[0]), 2), needs=_needs,
+            note=f"журналы 3 уравнений x {W65_N} цепочек, энкодер без чужих данных, сид обучения {_m}, сиды {_blocks[0]}")
+        if len(_blocks) > 1:
+            add(f"w65-src3n20-m{_m}-b", 65, "H06", [_ev(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                note=f"журналы 3 уравнений x {W65_N} цепочек, сид обучения {_m}, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

@@ -19342,6 +19342,94 @@
    ]
   },
   {
+   "id": "w65-teach",
+   "wave": 65,
+   "group": "H06",
+   "hours": 1.0,
+   "needs": [],
+   "note": "учитель MBPO: журналы burgers1d,poisson2d_classic,ns2d_backstep по 20 цепочек и собранный буфер цели",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/agent_combo.py",
+     "args": "--pde ns2d_liddriven --mbpo-h 5 --mopo-lam 0.5 --seed 0 --offline-eval none --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --subdirs burgers1d,poisson2d_classic,ns2d_backstep --src-chains 20 --src-seed 0 --tag q_teach_mbpo_w65src3n20"
+    }
+   ]
+  },
+  {
+   "id": "w65-src3n20-m1",
+   "wave": 65,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_w65src3n20.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, энкодер без чужих данных, сид обучения 1, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w65src3n20two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w65src3n20two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w65-src3n20-m1-b",
+   "wave": 65,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, сид обучения 1, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w65src3n20two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w65-src3n20-m2",
+   "wave": 65,
+   "group": "H06",
+   "hours": 5.9,
+   "needs": [
+    "rl_arch/agents_online/q_teach_mbpo_w65src3n20.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, энкодер без чужих данных, сид обучения 2, сиды 42,43,44",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir ns2d_liddriven --chain-fix --reward-form delta --init-err 0.49 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_ns2d_w0,rl_arch/buffers_new/tbuf_ns2d_w1 --teacher-from rl_arch/agents_online/q_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w65src3n20two"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 42,43,44 --tag t3m_w65src3n20two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w65-src3n20-m2-b",
+   "wave": 65,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, сид обучения 2, сиды 45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 45,46 --tag t3m_w65src3n20two_m2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",

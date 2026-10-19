@@ -99,7 +99,8 @@ def lint_offline(argv):
         argv = argv[:i] + argv[i + 2:]
         # виды карт сопоставляются с файлами того же собранного буфера (и пишутся той же ночью): флаги
         # проверяются на наличие в разборе аргументов и уходят вместе с --target-buffer
-        for flag in ("--view-aug", "--view-aug-p", "--view-cons"):
+        # и предел цепочек источников суррогата (--mb-src-chains действует только с собранным буфером)
+        for flag in ("--view-aug", "--view-aug-p", "--view-cons", "--mb-src-chains", "--mb-src-seed"):
             if flag in argv:
                 assert f'"{flag}"' in open(O.__file__).read(), f"offline_rl.py не знает {flag}"
                 j = argv.index(flag)
@@ -235,6 +236,21 @@ def lint_combo(argv):
         E.parse_chain(argv[argv.index("--guide") + 1])
 
 
+def lint_surrstudy(argv):
+    """Анализ журналов для модели среды: разбор аргументов и целей до таблицы буферов."""
+    import agent_combo as C
+    import surr_data_study as SD
+    saved = C.get_table
+
+    def reached(*a, **k):
+        raise Reached()
+    C.get_table = reached
+    try:
+        SD.main(list(argv) + ["--no-upload", "--out-dir", tempfile.mkdtemp(prefix="lint_surr_")])
+    finally:
+        C.get_table = saved
+
+
 def lint_collect(argv):
     """Сбор данных: разбор аргументов до таблицы буферов или первого прогона среды."""
     import collect_active as A
@@ -330,7 +346,7 @@ def lint_select(argv):
         SA.run = saved
 
 
-LINTERS = {"mae_data_study.py": lint_maestudy, "render_views.py": lint_render, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+LINTERS = {"surr_data_study.py": lint_surrstudy, "mae_data_study.py": lint_maestudy, "render_views.py": lint_render, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}

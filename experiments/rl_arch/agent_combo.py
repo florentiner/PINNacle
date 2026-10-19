@@ -278,6 +278,37 @@ def target_chain_rows(tab, pi, n, seed):
     return (tab["PDE"] != pi) | np.isin(tab["CH"], pick), pick
 
 
+def cap_source_chains(tab, n, seed, skip=()):
+    """--src-chains N --src-seed K: у каждой задачи таблицы, кроме имён skip (цель), остаются N случайных
+    записанных цепочек. Единственное место выбора: его зовут учитель (agent_combo.py), суррогат модельных целей
+    ученика (offline_rl.py --mb-src-chains через target_buffer.surrogate_table) и анализ surr_data_study.py,
+    поэтому при тех же папках, N и K все видят одни цепочки. Выбор у задачи зависит только от её имени, числа
+    её цепочек и K (позиции в отсортированном списке CH), а не от состава остальных папок. N = 0 — все цепочки;
+    N больше числа цепочек — тоже все. Возвращает (таблица, сводка: задача -> оставлено цепочек)."""
+    if not n:
+        return tab, {}
+    keep = np.ones(len(tab["A"]), dtype=bool)
+    info = {}
+    for pi, name in enumerate(tab["NAMES"]):
+        if name in skip:
+            continue
+        m = tab["PDE"] == pi
+        chs = np.unique(tab["CH"][m])
+        if not len(chs):
+            continue
+        pick = pick_source_chains(chs, name, n, seed)
+        keep &= ~m | np.isin(tab["CH"], pick)
+        info[name] = int(len(pick))
+    return subset(tab, keep), info
+
+
+def pick_source_chains(chs, name, n, seed):
+    """Выбор cap_source_chains у одной задачи: n из её отсортированных номеров цепочек chs (сид — K и имя)."""
+    chs = np.sort(np.asarray(chs))
+    rng = np.random.default_rng([int(seed), zlib.crc32(str(name).encode())])
+    return chs[np.sort(rng.choice(len(chs), min(int(n), len(chs)), replace=False))]
+
+
 def ensure_pde(tab, name, meta):
     """Номер задачи в таблице; если её буфера нет (только --extra-data) — добавить строку CTX."""
     if name not in tab["NAMES"]:
@@ -1142,6 +1173,9 @@ def build_parser():
     g.add_argument("--subdirs", default="all", help="all | solvable | папки буферов через запятую")
     g.add_argument("--target-chains", type=int, default=0, help="N случайных цепочек цели (0 — все)")
     g.add_argument("--target-only", action="store_true")
+    g.add_argument("--src-chains", type=int, default=0,
+                   help="у каждой задачи-источника (не цели) только N случайных цепочек (cap_source_chains); 0 — все")
+    g.add_argument("--src-seed", type=int, default=0, help="сид выбора цепочек --src-chains")
     g.add_argument("--extra-data", default="", help="JSON новых цепочек цели, локально или в HF; через запятую")
     g.add_argument("--extra-only-target", action="store_true")
     g.add_argument("--extra-allow-partial", action="store_true",
@@ -1269,6 +1303,13 @@ def run(args, log=None):
     if args.target_chains > 0 and not drop_old:
         keep &= target_chain_rows(tab, pi, args.target_chains, args.data_seed)[0]
     tab = subset(tab, keep)
+    if args.src_chains:
+        # источники — малое число цепочек каждой задачи, кроме цели (её строки — свои, ниже)
+        tab, src_info = cap_source_chains(tab, args.src_chains, args.src_seed, skip=(name,))
+        sizes.update(src_chains=int(args.src_chains), src_seed=int(args.src_seed), src_kept=src_info,
+                     src_rows=int((tab["PDE"] != pi).sum()) if name in tab["NAMES"] else int(len(tab["A"])))
+        log(f"источники: по {args.src_chains} цепочек (сид {args.src_seed}): {src_info}; строк источников "
+            f"{sizes['src_rows']}")
     tb_info = None
     if tbuf:
         # строки цели — только из собранных файлов (та же функция собирает таблицу ученику)
