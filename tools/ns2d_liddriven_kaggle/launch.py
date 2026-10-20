@@ -52,9 +52,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    hf_token = os.environ.get("HF_TOKEN_WRITE")
+    hf_token = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     if not hf_token and not args.dry_run:
-        sys.exit("ERROR: set HF_TOKEN_WRITE (needed for DB upload to HF).")
+        sys.exit("ERROR: set HF_TOKEN_WRITE (or HF_TOKEN) — needed for DB upload to HF.")
 
     accounts = load_accounts()
     missing = [a for a in args.accounts if a not in accounts]

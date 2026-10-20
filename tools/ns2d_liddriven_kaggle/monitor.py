@@ -76,7 +76,8 @@ def main():
     args = ap.parse_args()
 
     accounts = load_accounts()
-    hf_token = open(HF_FILE).read().strip() if os.path.exists(HF_FILE) else ""
+    hf_token = (open(HF_FILE).read().strip() if os.path.exists(HF_FILE) else "") \
+        or os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN") or ""
     printed_header = set()
 
     for vt, plan in PLAN.items():
