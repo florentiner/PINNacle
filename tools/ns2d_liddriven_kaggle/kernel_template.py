@@ -6,6 +6,8 @@ CONFIG = json.loads(r'''__CONFIG_JSON__''')
 
 HF_REPO_ID   = CONFIG["hf_repo"]
 HF_TOKEN     = CONFIG["hf_token"]
+os.environ["HF_TOKEN"] = HF_TOKEN          # so huggingface_hub picks it up automatically
+os.environ["HF_TOKEN_WRITE"] = HF_TOKEN
 PDE          = CONFIG["pde"]
 VALUE_TYPE   = CONFIG["value_type"]
 N_TRIALS     = CONFIG["n_trials"]

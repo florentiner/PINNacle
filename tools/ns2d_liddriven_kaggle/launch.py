@@ -53,6 +53,10 @@ def main():
     args = ap.parse_args()
 
     hf_token = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
+    if not hf_token:
+        _f = os.path.expanduser("~/.kaggle/hf_write_token")
+        if os.path.exists(_f):
+            hf_token = open(_f).read().strip()
     if not hf_token and not args.dry_run:
         sys.exit("ERROR: set HF_TOKEN_WRITE (or HF_TOKEN) — needed for DB upload to HF.")
 
