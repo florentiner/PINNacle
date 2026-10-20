@@ -2645,6 +2645,33 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
             add(f"w66-src3n20-m{_m}{_sfx}", 66, "H06", [_ev(_ck, f"t3m_{_mt}_m{_m}", _sd)], round(_eh(_sd), 2),
                 needs=[_ck], note=f"журналы 3 уравнений x 20 цепочек, обучение {_m}: добор сидов {_sd}")
 
+# ---------------------------------------------------------------- волна 67
+# Один метод на все уравнения: ResNet + MAE на процедурных картах (W64_ENC_NS, данных ноль), две сети, модель среды
+# и учитель на журналах 3 уравнений x 20 цепочек (W65), развёртывание с откатом и мягкой обрезкой (ss_eval) на обоих.
+#   pb2d — новые обучения с процедурным энкодером (сиды обучения 1, 2; учитель W65_TEACH уже в HF);
+#   ns2d — готовые модели волны 65 (тот же рецепт) с мягкой обрезкой (сиды 42-44 и 45-46 отдельно).
+# Волна 66 (ConvNeXt на pb2d, ns2d без обрезки) заменена этой: в ней не единый метод.
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _arch, _mt = "two", "w67proc3n20two"
+    if PREFIX == "pb2d":
+        for _m in (1, 2):
+            _scr, _a = w41_train(_arch, _m, _mt, init=W64_ENC_NS)
+            _tf = f"--teacher-from {W41_TEACH[_arch]} --teacher-w 0.5"
+            assert _a.count(_tf) == 1 and _a.count(MB) == 1, _a
+            _a = _a.replace(_tf, f"--teacher-from {W65_TEACH} --teacher-w 0.5").replace(
+                MB, f"{MB} --mb-subdirs {W65_SRC} --mb-src-chains {W65_N} --mb-src-seed 0")
+            add(f"w67-proc3n20-m{_m}", 67, "H06",
+                [(_scr, _a), ss_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", S5)],
+                5.05, needs=[W65_TEACH, W64_ENC_NS],
+                note=f"единый метод на pb2d: процедурный MAE, журналы 3 x 20, мягкая обрезка, сид обучения {_m}")
+    else:
+        for _m in (1, 2):
+            _ck = w41_hf_model("w65src3n20two", _m)
+            for _i, _sd in enumerate((seeds(42, 44), seeds(45, 46))):
+                add(f"w67-ss-m{_m}-{'ab'[_i]}", 67, "H06", [ss_eval(_ck, f"t3m_w65src3n20two_m{_m}", _sd)],
+                    round(0.4 + 1.5 * len(_sd.split(",")), 2), needs=[_ck],
+                    note=f"единый метод на ns2d (модель волны 65, обучение {_m}) с мягкой обрезкой, сиды {_sd}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
