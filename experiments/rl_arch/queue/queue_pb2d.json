@@ -17517,6 +17517,38 @@
    ]
   },
   {
+   "id": "pb2d-w66-src3n20-m1",
+   "wave": 66,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w65src3n20two_seed1.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, обучение 1: добор сидов 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w65src3n20two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w65src3n20two_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w66-src3n20-m2",
+   "wave": 66,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w65src3n20two_seed2.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, обучение 2: добор сидов 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w65src3n20two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w65src3n20two_m2_ss"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

@@ -2629,6 +2629,22 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                 round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                 note=f"журналы 3 уравнений x {W65_N} цепочек, сид обучения {_m}, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 66
+# Подтверждение метода без больших данных (волна 65: журналы 3 уравнений x 20 цепочек, энкодер без чужих данных)
+# на сидах 47-51, чтобы сравнение с агентом статьи шло по тем же 10 сидам: pb2d — оба обучения (мягкая обрезка),
+# ns2d — оба обучения без обрезки (сиды 47-49 и 50-51 отдельными кернелами).
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _mt = "w65src3n20two"
+    _blocks = ((seeds(47, 49), seeds(50, 51)) if NS2D else (seeds(47, 51),))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + (1.5 if NS2D else 0.75) * len(sd.split(","))   # noqa: E731
+    _ev = free_eval if NS2D else ss_eval
+    for _m in (1, 2):
+        _ck = w41_hf_model(_mt, _m)
+        for _i, _sd in enumerate(_blocks):
+            _sfx = "" if len(_blocks) == 1 else "-" + "ab"[_i]
+            add(f"w66-src3n20-m{_m}{_sfx}", 66, "H06", [_ev(_ck, f"t3m_{_mt}_m{_m}", _sd)], round(_eh(_sd), 2),
+                needs=[_ck], note=f"журналы 3 уравнений x 20 цепочек, обучение {_m}: добор сидов {_sd}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

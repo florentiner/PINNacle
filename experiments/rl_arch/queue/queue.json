@@ -19430,6 +19430,70 @@
    ]
   },
   {
+   "id": "w66-src3n20-m1-a",
+   "wave": 66,
+   "group": "H06",
+   "hours": 4.9,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, обучение 1: добор сидов 47,48,49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49 --tag t3m_w65src3n20two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w66-src3n20-m1-b",
+   "wave": 66,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, обучение 1: добор сидов 50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50,51 --tag t3m_w65src3n20two_m1_g"
+    }
+   ]
+  },
+  {
+   "id": "w66-src3n20-m2-a",
+   "wave": 66,
+   "group": "H06",
+   "hours": 4.9,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, обучение 2: добор сидов 47,48,49",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 47,48,49 --tag t3m_w65src3n20two_m2_g"
+    }
+   ]
+  },
+  {
+   "id": "w66-src3n20-m2-b",
+   "wave": 66,
+   "group": "H06",
+   "hours": 3.4,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt"
+   ],
+   "note": "журналы 3 уравнений x 20 цепочек, обучение 2: добор сидов 50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_ns2d_w65src3n20two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde ns2d_liddriven --budget 7000 --hours 3.5 --resume --ckpt-every 10 --seeds 50,51 --tag t3m_w65src3n20two_m2_g"
+    }
+   ]
+  },
+  {
    "id": "w23-modal",
    "wave": 23,
    "group": "H06",
