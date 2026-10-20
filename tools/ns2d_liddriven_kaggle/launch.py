@@ -62,6 +62,9 @@ def main():
         sys.exit(f"ERROR: accounts not in {ACCOUNTS}: {missing}")
 
     per = math.ceil(args.trials / len(args.accounts))
+    # Each of the N_PROCESSES workers runs its own optimize(n_trials=...) against the
+    # shared local DB, so the account total is processes * per_worker.
+    per_worker = max(1, math.ceil(per / args.processes))
     tmpl = open(TEMPLATE).read()
     os.makedirs(BUILD, exist_ok=True)
 
@@ -74,7 +77,7 @@ def main():
         config = {
             "pde": "ns2d_liddriven",
             "value_type": args.value_type,
-            "n_trials": per,
+            "n_trials": per_worker,
             "n_processes": args.processes,
             "timeout_hours": args.timeout_hours,
             "db_filename": f"ns2d_liddriven_{args.value_type}__{acct}.db",
