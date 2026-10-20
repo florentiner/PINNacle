@@ -1,0 +1,2 @@
+# Generated kernel dirs contain embedded HF tokens — never commit.
+_build/
