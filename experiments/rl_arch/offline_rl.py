@@ -2486,6 +2486,19 @@ def d4_apply(x, g: int):
     return torch.rot90(x, k, dims=[-2, -1]) if k else x
 
 
+def d4_rows(x, g):
+    """--aug drq: своё преобразование D4 у каждой строки пачки (g — номера 0..7 по строкам, как у d4_apply).
+    Новый тензор, вход не меняется."""
+    g = np.asarray(g)
+    out = torch.empty_like(x)
+    for k in range(8):
+        idx = np.where(g == k)[0]
+        if len(idx):
+            t = torch.as_tensor(idx, device=x.device).long()
+            out[t] = d4_apply(x[t], k)
+    return out
+
+
 # --------------------------------------------------------------------------
 # Training
 # --------------------------------------------------------------------------
@@ -2864,6 +2877,10 @@ def train_variant(variant, data, train_mask, args, seed):
     # дистилляция: ученик регрессирует Q учителя по всем 27 действиям, без TD-цели
     QT = to_t(data["QT"]).float() if "QT" in data else None
     aug_n = 8 if getattr(args, "aug", "none") == "d4" else 1
+    # --aug drq (DrQ, Kostrikov et al. ICLR 2021; RAD, Laskin et al. NeurIPS 2020): своё преобразование D4 у
+    # каждого перехода, s и s' — независимо; цель TD обычной головы — среднее по --aug-k преобразованиям s'
+    drq = getattr(args, "aug", "none") == "drq"
+    aug_k = int(getattr(args, "aug_k", 2) or 1) if drq else 1
     w_margin = float(getattr(args, "dqfd", 0.0) or 0.0)
     # --- приёмы для агента на картах (по умолчанию выключены: прежний лосс) ---
     # модельные цели: Q_mb(s, .) по всем 27 действиям, посчитаны заранее (mb_targets.py)
@@ -2995,7 +3012,11 @@ def train_variant(variant, data, train_mask, args, seed):
                 rows_np = order[k:k + bs]
                 s = va.pick(s.clone(), rows_np, "s")
                 s2 = va.pick(s2, nidx_np[rows_np], "s2")
-            if aug_n > 1:                  # одно преобразование на батч, общее для s и s'
+            s2_clean = s2                  # s' до аугментации: из него --aug drq строит ещё K-1 видов цели
+            if drq:                        # своё преобразование у каждой строки, s и s' независимо
+                s = d4_rows(s, rng.integers(8, size=len(s)))
+                s2 = d4_rows(s2, rng.integers(8, size=len(s2)))
+            elif aug_n > 1:                # одно преобразование на батч, общее для s и s'
                 g = int(rng.integers(aug_n))
                 s = d4_apply(s, g); s2 = d4_apply(s2, g)
 
@@ -3070,6 +3091,15 @@ def train_variant(variant, data, train_mask, args, seed):
                     else:
                         a2 = net.q_online(s2).masked_fill(~allow[None], -1e9).argmax(1)
                     q2 = net.q_target(s2).gather(1, a2[:, None]).squeeze(1)
+                    if aug_k > 1:
+                        # DrQ: цель — среднее двойного DQN по K независимым преобразованиям s'
+                        for _ in range(aug_k - 1):
+                            s2k = d4_rows(s2_clean, rng.integers(8, size=len(s2_clean)))
+                            qo = net.q_online(s2k)
+                            if allow is not None:
+                                qo = qo.masked_fill(~allow[None], -1e9)
+                            q2 = q2 + net.q_target(s2k).gather(1, qo.argmax(1)[:, None]).squeeze(1)
+                        q2 = q2 / aug_k
                     if vbound:
                         q2 = torch.minimum(q2.clamp_min(0.0), UB[b])
                     tgt = r + gm * (1 - d) * q2
@@ -3195,6 +3225,9 @@ def train_variant(variant, data, train_mask, args, seed):
                     _, xa, xb = pr
                     if aug_n > 1:
                         xa, xb = d4_apply(xa, g), d4_apply(xb, g)
+                    elif drq:
+                        gv = rng.integers(8, size=len(xa))
+                        xa, xb = d4_rows(xa, gv), d4_rows(xb, gv)
                     l_vc = view_cons_loss(net, xa, xb)
                     loss = loss + w_vc * l_vc
                     aux_acc.setdefault("view_cons_loss", []).append(l_vc.item())
@@ -3595,8 +3628,12 @@ def main():
     ap.add_argument("--cpu", action="store_true")
     ap.add_argument("--smoke", action="store_true")
     # --- методы из статей (по умолчанию всё выключено: прежнее поведение) ---
-    ap.add_argument("--aug", default="none", choices=["none", "d4"],
-                    help="D4-аугментация карт: 8 симметрий квадратной латентной сетки")
+    ap.add_argument("--aug", default="none", choices=["none", "d4", "drq"],
+                    help="D4-аугментация карт: 8 симметрий квадратной латентной сетки. d4 — одно преобразование на "
+                         "пачку, общее для s и s'; drq — как DrQ/RAD: своё у каждого перехода, s и s' независимо, "
+                         "цель TD обычной головы усреднена по --aug-k преобразованиям s'")
+    ap.add_argument("--aug-k", type=int, default=2,
+                    help="--aug drq: сколько преобразований s' усредняет цель TD (1 — без усреднения)")
     ap.add_argument("--n-step", type=int, default=1,
                     help="n-шаговые возвраты внутри эпизода (1 = как раньше)")
     ap.add_argument("--dqfd", type=float, default=0.0,
@@ -3997,6 +4034,10 @@ def main():
         if args.mc_lb_mode == "target" and (args.variant not in MC_LB_TARGET_VARIANTS or args.ens > 1 or args.hlg):
             ap.error("--mc-lb-mode target меняет цель TD только у обычной головы DQN (без --ens > 1 и --hlg); "
                      "иначе --mc-lb-mode loss")
+    if args.aug_k < 1:
+        ap.error("--aug-k >= 1")
+    if args.aug_k != 2 and args.aug != "drq":
+        ap.error("--aug-k задаётся только с --aug drq")
     if args.mb_src_chains and not (args.target_buffer and args.mb_aux > 0):
         ap.error("--mb-src-chains действует на суррогат модельных целей с --target-buffer (нужны оба и --mb-aux > 0)")
     if args.mb_src_chains < 0:
@@ -4302,6 +4343,8 @@ def main():
         arm.update(view_aug=args.view_aug, view_aug_p=float(args.view_aug_p), view_cons=float(args.view_cons))
     if args.mb_src_chains:
         arm.update(mb_src_chains=int(args.mb_src_chains), mb_src_seed=int(args.mb_src_seed))
+    if args.aug == "drq":
+        arm.update(aug_k=int(args.aug_k))
     if args.lr_schedule != "const":
         arm.update(lr_schedule=args.lr_schedule, lr_min=float(args.lr_min))
     if args.ft_mode != "full":

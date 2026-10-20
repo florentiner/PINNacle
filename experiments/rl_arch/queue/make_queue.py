@@ -2676,6 +2676,36 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                 add(f"w67-ss-m{_m}-s{_x}", 67, "H06", [ss_eval(_ck, f"t3m_w65src3n20two_m{_m}", str(_x))], 1.9,
                     needs=[_ck], note=f"единый метод на ns2d, обучение {_m}, мягкая обрезка, сид {_x} отдельно")
 
+# ---------------------------------------------------------------- волна 68
+# Итоговый метод (волна 67: процедурный MAE, две сети, журналы 3 x 20, откат и мягкая обрезка) + аугментация D4
+# в духе DrQ (--aug drq --aug-k 2: своё преобразование у каждого перехода, s и s' независимо, цель TD — среднее по
+# двум преобразованиям s'). D4 — точная симметрия карты (плоскость автокодировщика ориентации не имеет). По два
+# обучения на pb2d и ns2d, оценка с мягкой обрезкой на сидах 42-46 (ns2d — блоками 42-44 и 45-46). Контроль — тот же
+# метод без аугментации: pb2d w67proc3n20two m1/m2 _ss, ns2d w65src3n20two m1/m2 _ss (те же сиды обучения).
+def w68_train(m, mt):
+    """Итоговый метод (процедурный MAE, две сети, журналы 3 x 20) — строка обучения."""
+    scr, a = w41_train("two", m, mt, init=W64_ENC_NS)
+    tf = f"--teacher-from {W41_TEACH['two']} --teacher-w 0.5"
+    assert a.count(tf) == 1 and a.count(MB) == 1, a
+    return scr, a.replace(tf, f"--teacher-from {W65_TEACH} --teacher-w 0.5").replace(
+        MB, f"{MB} --mb-subdirs {W65_SRC} --mb-src-chains {W65_N} --mb-src-seed 0")
+
+
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _mt = "w68drqtwo"
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + (1.5 if NS2D else 0.75) * len(sd.split(","))   # noqa: E731
+    for _m in (1, 2):
+        _scr, _a = w68_train(_m, _mt)
+        add(f"w68-drq-m{_m}", 68, "H06",
+            [(_scr, _a + " --aug drq --aug-k 2"), ss_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+            round(1.0 + _eh(_blocks[0]), 2), needs=[W65_TEACH, W64_ENC_NS],
+            note=f"итоговый метод + D4 (DrQ, K=2), сид обучения {_m}, мягкая обрезка, сиды {_blocks[0]}")
+        if len(_blocks) > 1:
+            add(f"w68-drq-m{_m}-b", 68, "H06", [ss_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                note=f"итоговый метод + D4 (DrQ, K=2), сид обучения {_m}, мягкая обрезка, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

@@ -17591,6 +17591,48 @@
    ]
   },
   {
+   "id": "pb2d-w68-drq-m1",
+   "wave": 68,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "итоговый метод + D4 (DrQ, K=2), сид обучения 1, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w68drqtwo --aug drq --aug-k 2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w68drqtwo_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w68drqtwo_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w68-drq-m2",
+   "wave": 68,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt",
+    "rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt"
+   ],
+   "note": "итоговый метод + D4 (DrQ, K=2), сид обучения 2, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder resnet --encoder-init rl_arch/encoders/cvprobe_w55proc_enc_mae_resnet.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w68drqtwo --aug drq --aug-k 2"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w68drqtwo_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w68drqtwo_m2_ss"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
