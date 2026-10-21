@@ -2706,6 +2706,27 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                 round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                 note=f"итоговый метод + D4 (DrQ, K=2), сид обучения {_m}, мягкая обрезка, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 69
+# Итоговый метод + прежняя аугментация D4 (--aug d4: одно преобразование на пачку, общее для s и s'). Волна 68
+# (--aug drq) помогла pb2d (0.0106 / 0.0118 против 0.0120 / 0.0272), но ухудшила ns2d в 1.5-1.7 раза (сиды 42-44:
+# 0.0868 / 0.0677 против 0.0503 / 0.0460); у ConvNeXt без MAE на ns2d --aug d4 помогала (0.079 -> 0.059 в одном
+# обучении). Разница с drq — общее преобразование s и s' и цель без усреднения. Те же два обучения, оценка с мягкой
+# обрезкой на сидах 42-46 (ns2d — блоками 42-44 и 45-46); контроль тот же, что у волны 68.
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _mt = "w69d4two"
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + (1.5 if NS2D else 0.75) * len(sd.split(","))   # noqa: E731
+    for _m in (1, 2):
+        _scr, _a = w68_train(_m, _mt)
+        add(f"w69-d4-m{_m}", 69, "H06",
+            [(_scr, _a + " --aug d4"), ss_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+            round(1.0 + _eh(_blocks[0]), 2), needs=[W65_TEACH, W64_ENC_NS],
+            note=f"итоговый метод + D4 на пачку, сид обучения {_m}, мягкая обрезка, сиды {_blocks[0]}")
+        if len(_blocks) > 1:
+            add(f"w69-d4-m{_m}-b", 69, "H06", [ss_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                note=f"итоговый метод + D4 на пачку, сид обучения {_m}, мягкая обрезка, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
