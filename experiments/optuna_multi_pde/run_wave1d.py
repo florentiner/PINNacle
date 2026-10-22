@@ -220,6 +220,9 @@ def _append_and_upload(rows: list[dict], value_type: str, hf_write_token):
 
 
 def main():
+    # CLI overrides target module-level config; the global statement must precede
+    # any use of these names in this scope (Python 3.13 raises SyntaxError otherwise).
+    global N_SEEDS, N_PROCESSES, SEED_BASE, TEST_EPOCHS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hf-token",    default=None, help="HF write token (or set HF_TOKEN_WRITE env)")
     parser.add_argument("--n-seeds",     type=int, default=N_SEEDS)
@@ -232,8 +235,6 @@ def main():
                         help="Which value types to run (default: both)")
     args = parser.parse_args()
 
-    # apply CLI overrides to module-level config
-    global N_SEEDS, N_PROCESSES, SEED_BASE, TEST_EPOCHS
     N_SEEDS      = args.n_seeds
     N_PROCESSES  = args.n_processes
     SEED_BASE    = args.seed_base
