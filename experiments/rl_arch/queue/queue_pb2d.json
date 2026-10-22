@@ -17675,6 +17675,86 @@
    ]
   },
   {
+   "id": "pb2d-w70-orig-ss-a",
+   "wave": 70,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt"
+   ],
+   "note": "агент статьи с откатом и мягкой обрезкой (как итоговый метод), сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_orig_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w70-orig-ss-b",
+   "wave": 70,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt"
+   ],
+   "note": "агент статьи с откатом и мягкой обрезкой (как итоговый метод), сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_orig_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w70-orig-g-b",
+   "wave": 70,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt"
+   ],
+   "note": "агент статьи только с откатом, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/agents_online/their_dqn_pb2d_verify_seed42.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_orig_g"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w70-our-m1-a",
+   "wave": 70,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w67proc3n20two_seed1.pt"
+   ],
+   "note": "итоговый метод, обучение 1, мягкая обрезка, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w67proc3n20two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w67proc3n20two_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w70-our-m2-a",
+   "wave": 70,
+   "group": "H06",
+   "hours": 4.05,
+   "needs": [
+    "rl_arch/models/convnext_dqn_cfix_rdelta_vb_w67proc3n20two_seed2.pt"
+   ],
+   "note": "итоговый метод, обучение 2, мягкая обрезка, сиды 47,48,49,50,51",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file rl_arch/models/convnext_dqn_cfix_rdelta_vb_w67proc3n20two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 47,48,49,50,51 --tag t3m_w67proc3n20two_m2_ss"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

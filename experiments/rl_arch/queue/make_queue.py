@@ -2727,6 +2727,32 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                 round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                 note=f"итоговый метод + D4 на пачку, сид обучения {_m}, мягкая обрезка, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 70
+# Агент статьи (ORIG_CK: их архитектура, буфер и дообучение онлайн) с теми же правилами развёртывания, что у
+# итогового метода: откат при росте лосса и мягкая обрезка застрявшего Adam/PSO (ss_eval, тег _ss), среда та же
+# (keep-opt safe, бюджет 7000, все 27 действий). Сиды 42-51 — те же 10, что у его контроля без правил
+# (t3m_orig_free: pb2d 0.0266, ns2d 0.0674). Плюс на ns2d только откат (t3m_orig_g; на pb2d он уже есть, сиды
+# 42-46) — разделить вклад двух правил. Вопрос ревьюера: сколько выигрыша итогового метода дают правила, а не агент.
+if NS2D or PREFIX == "pb2d":
+    _blocks = ((seeds(42, 44), seeds(45, 47), seeds(48, 49), seeds(50, 51)) if NS2D
+               else (seeds(42, 46), seeds(47, 51)))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + (1.5 if NS2D else 0.75) * len(sd.split(","))   # noqa: E731
+    for _i, _sd in enumerate(_blocks):
+        add(f"w70-orig-ss-{'abcd'[_i]}", 70, "H06", [ss_eval(ORIG_CK, "t3m_orig", _sd)], round(_eh(_sd), 2),
+            needs=[ORIG_CK], note=f"агент статьи с откатом и мягкой обрезкой (как итоговый метод), сиды {_sd}")
+        if NS2D or _i:          # pb2d: только откат на 42-46 уже посчитан (t3m_orig_g)
+            add(f"w70-orig-g-{'abcd'[_i]}", 70, "H06", [free_eval(ORIG_CK, "t3m_orig", _sd, guard=True)],
+                round(_eh(_sd), 2), needs=[ORIG_CK], note=f"агент статьи только с откатом, сиды {_sd}")
+    # итоговый метод на тех же 10 сидах: добор 47-51 у обоих обучений (pb2d — w67, ns2d — модели волны 65 с
+    # мягкой обрезкой) и недосчитанные сиды 43-44 у ns2d, обучение 2
+    _ours = (("w65src3n20two", "ns2d") if NS2D else ("w67proc3n20two", "pb2d"))[0]
+    _bl = (seeds(47, 49), seeds(50, 51)) if NS2D else (seeds(47, 51),)
+    for _m in (1, 2):
+        _ck = w41_hf_model(_ours, _m)
+        for _i, _sd in enumerate(_bl + (("43,44",) if NS2D and _m == 2 else ())):
+            add(f"w70-our-m{_m}-{'abc'[_i]}", 70, "H06", [ss_eval(_ck, f"t3m_{_ours}_m{_m}", _sd)],
+                round(_eh(_sd), 2), needs=[_ck], note=f"итоговый метод, обучение {_m}, мягкая обрезка, сиды {_sd}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "
