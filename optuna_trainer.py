@@ -280,51 +280,74 @@ def train_chain(get_model, chain_config, display_every, save_path, experiment, t
     rmse = float("inf")
     brmse = float("inf")
     mse = float("inf")
+    l2re = float("inf")
+    bc_l2re = float("inf")
+
+    import copy
 
     for stage_idx, stage in enumerate(chain_config):
         opt_type = _stage_optimizer_name(stage)
-        lr = stage["lr"]
+        base_lr = float(stage["lr"])
         epochs = int(stage["epochs"])
 
-        print(f"\n{'='*70}")
-        print(
-            f"Trial {trial_number} | Stage {stage_idx}: {opt_type} | lr={lr} | epochs={epochs}"
-        )
-        print(f"Time: {datetime.datetime.now()}")
-        print(f"{'='*70}\n")
+        # A stage can overflow to NaN/Inf on stiff PDEs (huge residuals, e.g.
+        # wave2d_longtime starts at ~1e8, with an aggressive lr). Roll back to
+        # the last finite weights and retry the stage with a smaller lr instead
+        # of poisoning the whole chain and emitting NaN metrics.
+        prev_state = copy.deepcopy(model.net.state_dict())
+        prev_rmse, prev_brmse, prev_mse, prev_l2re, prev_bc = rmse, brmse, mse, l2re, bc_l2re
+        ok = False
+        lr = base_lr
+        for attempt in range(3):
+            print(f"\n{'='*70}")
+            print(
+                f"Trial {trial_number} | Stage {stage_idx}: {opt_type} | "
+                f"lr={lr} | epochs={epochs}" + (f" | retry {attempt}" if attempt else "")
+            )
+            print(f"Time: {datetime.datetime.now()}")
+            print(f"{'='*70}\n")
 
-        torch_opt = _build_torch_optimizer(opt_type, model.net.parameters(), lr)
-        model.compile(torch_opt, loss_weights=loss_weights)
-        model.optimizer = torch_opt
+            torch_opt = _build_torch_optimizer(opt_type, model.net.parameters(), lr)
+            model.compile(torch_opt, loss_weights=loss_weights)
+            model.optimizer = torch_opt
 
-        tester = TesterCallback(log_every=display_every)
-        saver = ModelSaverCallback(total_iterations=epochs, n_save_models=1)
-        callbacks = [tester, saver]
+            tester = TesterCallback(log_every=display_every)
+            saver = ModelSaverCallback(total_iterations=epochs, n_save_models=1)
+            callbacks = [tester, saver]
 
-        model.train(
-            iterations=epochs,
-            display_every=display_every,
-            callbacks=callbacks,
-            model_save_path=save_path,
-            save_model=False,
-        )
+            model.train(
+                iterations=epochs,
+                display_every=display_every,
+                callbacks=callbacks,
+                model_save_path=save_path,
+                save_model=False,
+            )
 
-        rmse = tester.rmse
-        brmse = tester.brmse
-        mse = float(rmse) ** 2 if np.isfinite(rmse) else float("inf")
-        l2re = getattr(tester, "l2re", float("inf"))
-        bc_l2re = getattr(tester, "bc_l2re", float("inf"))
+            rmse = tester.rmse
+            brmse = tester.brmse
+            mse = float(rmse) ** 2 if np.isfinite(rmse) else float("inf")
+            l2re = getattr(tester, "l2re", float("inf"))
+            bc_l2re = getattr(tester, "bc_l2re", float("inf"))
 
-        print(f"After {opt_type} (stage {stage_idx}): MSE={mse}, RMSE={rmse}, BRMSE={brmse}, L2RE={l2re}, BC_L2RE={bc_l2re}")
+            print(f"After {opt_type} (stage {stage_idx}): MSE={mse}, RMSE={rmse}, BRMSE={brmse}, L2RE={l2re}, BC_L2RE={bc_l2re}")
+
+            if np.isfinite(rmse) and np.isfinite(brmse):
+                ok = True
+                break
+
+            print(f"NaN/Inf after {opt_type} (attempt {attempt}); rolling back, lr -> {lr * 0.1:g}")
+            model.net.load_state_dict(prev_state)
+            rmse, brmse, mse, l2re, bc_l2re = prev_rmse, prev_brmse, prev_mse, prev_l2re, prev_bc
+            lr = lr * 0.1
+
+        if not ok:
+            print(f"Stage {stage_idx} ({opt_type}) skipped: still non-finite after retries.")
+            break
 
         tag = f"stage_{stage_idx}_{opt_type.lower()}"
         _comet_log_metric(experiment, f"rmse_after_{tag}", rmse, step=trial_number)
         _comet_log_metric(experiment, f"brmse_after_{tag}", brmse, step=trial_number)
         _comet_log_metric(experiment, f"l2re_after_{tag}", l2re, step=trial_number)
-
-        if not np.isfinite(rmse) or not np.isfinite(brmse):
-            print(f"NaN/Inf detected after {opt_type}. Stopping chain early.")
-            break
 
     return mse, rmse, brmse, l2re, bc_l2re
 
