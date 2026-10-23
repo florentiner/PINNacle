@@ -152,7 +152,8 @@ def _run_seeds(chain: list[dict], value_type: str, results_dir: str, hf_write_to
         mse_tot = mse_op + mse_bnd if (math.isfinite(mse_op) and math.isfinite(mse_bnd)) else float("nan")
         l2re_op  = r.get("l2re", float("nan"))
         l2re_bnd = r.get("bc_l2re", float("nan"))
-        l2re_tot = l2re_op + l2re_bnd if (math.isfinite(l2re_op) and math.isfinite(l2re_bnd)) else float("nan")
+        # Combined relative error is quadrature-summed, not a plain sum
+        l2re_tot = math.hypot(l2re_op, l2re_bnd) if (math.isfinite(l2re_op) and math.isfinite(l2re_bnd)) else float("nan")
 
         rows.append({
             "run_timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
