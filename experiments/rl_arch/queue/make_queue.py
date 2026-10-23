@@ -2753,6 +2753,53 @@ if NS2D or PREFIX == "pb2d":
             add(f"w70-our-m{_m}-{'abc'[_i]}", 70, "H06", [ss_eval(_ck, f"t3m_{_ours}_m{_m}", _sd)],
                 round(_eh(_sd), 2), needs=[_ck], note=f"итоговый метод, обучение {_m}, мягкая обрезка, сиды {_sd}")
 
+# ---------------------------------------------------------------- волна 71
+# ConvNeXt вместо ResNet в итоговом методе (две сети, журналы 3 x 20, учитель W65_TEACH, откат и мягкая обрезка).
+# Цена метода та же: сбор, журналы, учитель, два обучения и выбор одинаковы; предобучение процедурного MAE для
+# ConvNeXt — 0.6 GPU-ч один раз, как у ResNet. На pb2d ConvNeXt без MAE с журналами 3 x 20 уже лучше (w65:
+# 0.0094 / 0.0077 против 0.0117 / 0.0264), на ns2d он во всех прежних вариантах хуже в 1.2-1.7 раза, но с
+# журналами 3 x 20 и с D4 на пачку (помогала ConvNeXt на ns2d, 0.079 -> 0.059) не проверялся. Варианты:
+#   cnxd4   — ConvNeXt без предобучения + --aug d4 (pb2d и ns2d);
+#   pcnxd4  — ConvNeXt, MAE на 5000 процедурных цепочках (как w55proc, энкодер ConvNeXt) + --aug d4;
+#   cnx     — ConvNeXt без предобучения и без аугментации, только ns2d (pb2d — это w65src3n20two): отделить вклад
+#             журналов 3 x 20 от D4 (необязательный, ~19 GPU-ч).
+# По два обучения (сиды 1, 2), оценка с мягкой обрезкой на сидах 42-46 (ns2d — блоками 42-44 и 45-46).
+W71_ENC = "rl_arch/encoders/cvprobe_w71proccnx_enc_mae_convnext.pt"
+
+
+def w71_train(m, mt, init=None):
+    """Итоговый метод (журналы 3 x 20, учитель W65_TEACH) с ConvNeXt; init — файл энкодера или None."""
+    scr, a = w68_train(m, mt)
+    old = f"--encoder resnet --encoder-init {W64_ENC_NS}"
+    assert a.count(old) == 1, a
+    return scr, a.replace(old, "--encoder convnext" + (f" --encoder-init {init}" if init else ""))
+
+
+if PREFIX == "pb2d":
+    add("w71-pre-cnx", 71, "H06",
+        [(CVPROBE, f"--tag w71proccnx --procedural 5000 --configs ssl-mae-convnext --pretrain-only "
+                   f"--ssl-steps {W46_SSL_STEPS} --save-encoder --out-dir {W33_CV}")],
+        0.6, note=f"MAE на 5000 процедурных цепочках, энкодер ConvNeXt, {W46_SSL_STEPS} шагов (ноль реальных данных)")
+if W28_K and (NS2D or PREFIX == "pb2d"):
+    _blocks = ((seeds(42, 44), seeds(45, 46)) if NS2D else (S5,))
+    _eh = lambda sd: (0.4 if NS2D else 0.3) + (1.5 if NS2D else 0.75) * len(sd.split(","))   # noqa: E731
+    _arms = [("cnxd4", None, " --aug d4", "ConvNeXt без предобучения + D4"),
+             ("pcnxd4", W71_ENC, " --aug d4", "ConvNeXt + процедурный MAE + D4")]
+    if NS2D:
+        _arms.append(("cnx", None, "", "ConvNeXt без предобучения, без аугментации"))
+    for _nm, _init, _aug, _what in _arms:
+        _mt = f"w71{_nm}two"
+        for _m in (1, 2):
+            _scr, _a = w71_train(_m, _mt, _init)
+            add(f"w71-{_nm}-m{_m}", 71, "H06",
+                [(_scr, _a + _aug), ss_eval(off_model("convnext_dqn", _mt, _m), f"t3m_{_mt}_m{_m}", _blocks[0])],
+                round(1.0 + _eh(_blocks[0]), 2), needs=[W65_TEACH] + ([_init] if _init else []),
+                note=f"{_what}, журналы 3 x 20, сид обучения {_m}, мягкая обрезка, сиды {_blocks[0]}")
+            if len(_blocks) > 1:
+                add(f"w71-{_nm}-m{_m}-b", 71, "H06", [ss_eval(w41_hf_model(_mt, _m), f"t3m_{_mt}_m{_m}", _blocks[1])],
+                    round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
+                    note=f"{_what}, журналы 3 x 20, сид обучения {_m}, мягкая обрезка, сиды {_blocks[1]}")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

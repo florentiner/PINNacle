@@ -17755,6 +17755,102 @@
    ]
   },
   {
+   "id": "pb2d-w71-pre-cnx",
+   "wave": 71,
+   "group": "H06",
+   "hours": 0.6,
+   "needs": [],
+   "note": "MAE на 5000 процедурных цепочках, энкодер ConvNeXt, 1400 шагов (ноль реальных данных)",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/cv_probe.py",
+     "args": "--tag w71proccnx --procedural 5000 --configs ssl-mae-convnext --pretrain-only --ssl-steps 1400 --save-encoder --out-dir /kaggle/working"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w71-cnxd4-m1",
+   "wave": 71,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt"
+   ],
+   "note": "ConvNeXt без предобучения + D4, журналы 3 x 20, сид обучения 1, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w71cnxd4two --aug d4"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w71cnxd4two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w71cnxd4two_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w71-cnxd4-m2",
+   "wave": 71,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt"
+   ],
+   "note": "ConvNeXt без предобучения + D4, журналы 3 x 20, сид обучения 2, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w71cnxd4two --aug d4"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w71cnxd4two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w71cnxd4two_m2_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w71-pcnxd4-m1",
+   "wave": 71,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt",
+    "rl_arch/encoders/cvprobe_w71proccnx_enc_mae_convnext.pt"
+   ],
+   "note": "ConvNeXt + процедурный MAE + D4, журналы 3 x 20, сид обучения 1, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w71proccnx_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 1 --model-tag w71pcnxd4two --aug d4"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w71pcnxd4two_seed1.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w71pcnxd4two_m1_ss"
+    }
+   ]
+  },
+  {
+   "id": "pb2d-w71-pcnxd4-m2",
+   "wave": 71,
+   "group": "H06",
+   "hours": 5.05,
+   "needs": [
+    "rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt",
+    "rl_arch/encoders/cvprobe_w71proccnx_enc_mae_convnext.pt"
+   ],
+   "note": "ConvNeXt + процедурный MAE + D4, журналы 3 x 20, сид обучения 2, мягкая обрезка, сиды 42,43,44,45,46",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/offline_rl.py",
+     "args": "--variant convnext_dqn --subdir poisson_boltzmann_2d --chain-fix --reward-form delta --init-err 0.811 --value-bound --gamma 0.99 --episode-budget 7000 --ctx-kmax 70 --save-model --scalar-ctx --encoder convnext --encoder-init rl_arch/encoders/cvprobe_w71proccnx_enc_mae_convnext.pt --mb-aux 0.5 --mb-h 3 --mb-lam 0.5 --mb-subdirs burgers1d,poisson2d_classic,ns2d_backstep --mb-src-chains 20 --mb-src-seed 0 --target-buffer rl_arch/buffers_new/tbuf_pb2d_w0 --teacher-from rl_arch/agents_online/qpb2d_teach_mbpo_w65src3n20.pt --teacher-w 0.5 --two-nets --seeds 2 --model-tag w71pcnxd4two --aug d4"
+    },
+    {
+     "script": "experiments/rl_arch/online_eval_env.py",
+     "args": "--policy agent --model-file /tmp/agent_convnext_dqn_cfix_rdelta_vb_w71pcnxd4two_seed2.pt --guard-rollback 1.0 --guard-fallback LBFGS:1:500 --stall-guard --stall-window 250 --stall-min 0.01 --stall-opts Adam,PSO --keep-opt --keep-opt-mode safe --pde poissonboltzmann2d --budget 7000 --hours 2.0 --resume --ckpt-every 10 --seeds 42,43,44,45,46 --tag t3m_w71pcnxd4two_m2_ss"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",

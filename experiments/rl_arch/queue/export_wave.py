@@ -41,6 +41,14 @@ def load_jobs(queues, wave=None, only=None):
 
 def producer(jobs, need):
     """Задача списка, которая заливает модель need (…_<тег>_seed<m>.pt): её обучение с --model-tag <тег> --seeds <m>."""
+    e = re.search(r"cvprobe_([A-Za-z0-9]+)_enc_", need)
+    if e:                                # энкодер: предобучение cv_probe.py --tag <тег> --save-encoder
+        for j in jobs:
+            for st in j["steps"]:
+                a = " " + st["args"] + " "
+                if f" --tag {e.group(1)} " in a and " --save-encoder " in a:
+                    return j["id"]
+        return None
     m = re.search(r"_([A-Za-z0-9]+)_seed(\d+)\.pt$", need)
     if not m:
         return None
