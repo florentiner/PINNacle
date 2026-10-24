@@ -251,6 +251,17 @@ def lint_surrstudy(argv):
         C.get_table = saved
 
 
+def lint_flags_only(script):
+    """Скрипты, которым в кернеле нужна сеть или внешний код (клон CoCoNet): каждый флаг строки есть в исходнике."""
+    def lint(argv):
+        src = open(os.path.join(os.path.dirname(HERE), script)).read()
+        bad = [x for x in argv if x.startswith("--") and f'"{x}"' not in src]
+        if bad:
+            raise ValueError(f"{script}: нет флагов {bad}")
+        raise Reached()
+    return lint
+
+
 def lint_collect(argv):
     """Сбор данных: разбор аргументов до таблицы буферов или первого прогона среды."""
     import collect_active as A
@@ -346,7 +357,8 @@ def lint_select(argv):
         SA.run = saved
 
 
-LINTERS = {"surr_data_study.py": lint_surrstudy, "mae_data_study.py": lint_maestudy, "render_views.py": lint_render, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
+LINTERS = {"conformal_check.py": lint_flags_only("conformal_check.py"),
+           "fetch_coconet.py": lint_flags_only("fetch_coconet.py"), "surr_data_study.py": lint_surrstudy, "mae_data_study.py": lint_maestudy, "render_views.py": lint_render, "select_agents.py": lint_select, "wait_hf.py": lint_wait, "cv_probe.py": lint_cvprobe, "agent_combo.py": lint_combo, "collect_active.py": lint_collect,
            "offline_rl.py": lint_offline, "online_train_env.py": lint_train,
            "online_eval_env.py": lint_eval, "run_chain_pde.py": lint_chain,
            "ga_chains.py": lint_ga, "branch_endings.py": lint_branch}

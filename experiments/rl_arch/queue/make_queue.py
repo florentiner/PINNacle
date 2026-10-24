@@ -2800,6 +2800,21 @@ if W28_K and (NS2D or PREFIX == "pb2d"):
                     round(_eh(_blocks[1]), 2), needs=[w41_hf_model(_mt, _m)],
                     note=f"{_what}, журналы 3 x 20, сид обучения {_m}, мягкая обрезка, сиды {_blocks[1]}")
 
+# ---------------------------------------------------------------- волна 72
+# CoCoNet ICNN (Moradi et al., arXiv 2610.24246) для неопределённости модели среды на GPU — псевдоцели полной таблицы
+# журналов (conformal_check.py --pseudo): уравнение по очереди цель, свои — 20 его цепочек, тест — остальные; режимы
+# realistic (функция несоответствия только на своих) и generous (на части остальных цепочек). Локально считаются
+# остальные методы (разброс ансамбля, эллипсоид, Spline); ICNN на CPU ~35 мин на подгонку — здесь, один кернел.
+if PREFIX == "pb2d":
+    _cc = "/kaggle/working/CoCoNet"
+    add("w72-coconet-icnn", 72, "H06",
+        [("experiments/rl_arch/fetch_coconet.py", f"--dir {_cc}"),
+         ("experiments/rl_arch/conformal_check.py",
+          f"--coconet-dir {_cc} --pseudo --methods icnn,spline,global_ellipsoid --icnn-targets 99 "
+          "--pseudo-targets poisson_boltzmann_2d,ns2d_liddriven,heat2d_multiscale,wave1d,poissoninv,grayscott "
+          "--device cuda --work /kaggle/working/combo_work_full --out /kaggle/working/conformal_pseudo_icnn.json --upload")],
+        9.0, note="CoCoNet ICNN на псевдоцелях (6 уравнений), GPU; результат в HF rl_arch/conformal/")
+
 MODAL = "Adam:0.001:2500,LBFGS:0.5:1000,LBFGS:1:500"
 add("w23-modal", 23, "H06",
     [(EVAL, f"--policy script --script {MODAL} --script-tail repeat --no-state {KEEPS} "

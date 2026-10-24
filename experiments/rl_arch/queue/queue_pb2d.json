@@ -17851,6 +17851,24 @@
    ]
   },
   {
+   "id": "pb2d-w72-coconet-icnn",
+   "wave": 72,
+   "group": "H06",
+   "hours": 9.0,
+   "needs": [],
+   "note": "CoCoNet ICNN на псевдоцелях (6 уравнений), GPU; результат в HF rl_arch/conformal/",
+   "steps": [
+    {
+     "script": "experiments/rl_arch/fetch_coconet.py",
+     "args": "--dir /kaggle/working/CoCoNet"
+    },
+    {
+     "script": "experiments/rl_arch/conformal_check.py",
+     "args": "--coconet-dir /kaggle/working/CoCoNet --pseudo --methods icnn,spline,global_ellipsoid --icnn-targets 99 --pseudo-targets poisson_boltzmann_2d,ns2d_liddriven,heat2d_multiscale,wave1d,poissoninv,grayscott --device cuda --work /kaggle/working/combo_work_full --out /kaggle/working/conformal_pseudo_icnn.json --upload"
+    }
+   ]
+  },
+  {
    "id": "pb2d-w23-modal",
    "wave": 23,
    "group": "H06",
