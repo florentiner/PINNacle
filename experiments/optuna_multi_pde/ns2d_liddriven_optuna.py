@@ -14,7 +14,7 @@ from src.utils.args import parse_hidden_layers
 from optuna_trainer import run_optuna_study
 
 
-def build_get_model(hidden_layers: str, datapath: str, a: float, nu: float):
+def build_get_model(hidden_layers: str, datapath: str = "ref/lid_driven_a4.dat", a: float = 4.0, nu: float = 1e-2):
     def get_model():
         pde = NS2D_LidDriven(datapath=datapath, a=a, nu=nu)
         layers = [pde.input_dim] + parse_hidden_layers(argparse.Namespace(hidden_layers=hidden_layers)) + [pde.output_dim]
