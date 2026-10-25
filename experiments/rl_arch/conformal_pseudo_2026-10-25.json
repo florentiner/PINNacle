@@ -1,0 +1,950 @@
+{
+ "grayscott": {
+  "n_own": 151,
+  "n_test": 1500,
+  "mae": [
+   0.193,
+   0.241,
+   0.262
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.344,
+    "size": 0.4228901213173538,
+    "adapt": 0.33625975567880634
+   },
+   "ens_conf": {
+    "coverage": 0.9533333333333334,
+    "size": 2.606620998601523,
+    "adapt": 0.33625975567880634
+   },
+   "absolute_residual": {
+    "coverage": 0.9113333333333333,
+    "size": 1.5151194334030154,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9033333333333333,
+    "size": 1.3513171571981715,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9213333333333333,
+    "size": 1.6200949871838726,
+    "adapt": 0.4235605236008386,
+    "seconds": 12.5
+   },
+   "_n": {
+    "score": 100,
+    "cal": 51,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.3384615384615385,
+    "size": 0.41925284021171627,
+    "adapt": 0.33478569373085443
+   },
+   "ens_conf": {
+    "coverage": 0.8897435897435897,
+    "size": 1.9603272498059376,
+    "adapt": 0.33478569373085443
+   },
+   "absolute_residual": {
+    "coverage": 0.8897435897435897,
+    "size": 1.4044122695922852,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8743589743589744,
+    "size": 1.2012913268678775,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9051282051282051,
+    "size": 1.1352643255486463,
+    "adapt": 0.5467514832191787,
+    "seconds": 47.0
+   },
+   "_n": {
+    "score": 668,
+    "cal": 442,
+    "test": 390
+   }
+  }
+ },
+ "heat2d_complexgeometry": {
+  "n_own": 199,
+  "n_test": 1500,
+  "mae": [
+   0.094,
+   0.128,
+   0.145
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.42866666666666664,
+    "size": 0.3256204786723136,
+    "adapt": 0.29615410548387644
+   },
+   "ens_conf": {
+    "coverage": 0.9213333333333333,
+    "size": 1.0404151397136439,
+    "adapt": 0.29615410548387644
+   },
+   "absolute_residual": {
+    "coverage": 0.9506666666666667,
+    "size": 0.829044282436371,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.866,
+    "size": 0.5632487917096156,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.932,
+    "size": 0.8274106735534726,
+    "adapt": -0.04628672287638656,
+    "seconds": 9.5
+   },
+   "_n": {
+    "score": 119,
+    "cal": 80,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.44274809160305345,
+    "size": 0.31931472503320235,
+    "adapt": 0.31699969870538214
+   },
+   "ens_conf": {
+    "coverage": 0.9007633587786259,
+    "size": 0.9321148336892165,
+    "adapt": 0.31699969870538214
+   },
+   "absolute_residual": {
+    "coverage": 0.9007633587786259,
+    "size": 0.6926194429397582,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9185750636132316,
+    "size": 0.6029819668911255,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8854961832061069,
+    "size": 0.5282360526384465,
+    "adapt": 0.25089992985608245,
+    "seconds": 66.9
+   },
+   "_n": {
+    "score": 671,
+    "cal": 436,
+    "test": 393
+   }
+  }
+ },
+ "heat2d_multiscale": {
+  "n_own": 152,
+  "n_test": 1500,
+  "mae": [
+   0.117,
+   0.162,
+   0.192
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.328,
+    "size": 0.357710852316046,
+    "adapt": 0.3020325736162839
+   },
+   "ens_conf": {
+    "coverage": 0.9433333333333334,
+    "size": 1.3679929439404537,
+    "adapt": 0.3020325736162839
+   },
+   "absolute_residual": {
+    "coverage": 0.9706666666666667,
+    "size": 1.206678032875061,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9466666666666667,
+    "size": 0.9814221109032631,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.984,
+    "size": 1.8749913387246993,
+    "adapt": 0.3095228133963818,
+    "seconds": 15.7
+   },
+   "_n": {
+    "score": 97,
+    "cal": 55,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.35584415584415585,
+    "size": 0.35696441696017706,
+    "adapt": 0.33549306910705873
+   },
+   "ens_conf": {
+    "coverage": 0.8935064935064935,
+    "size": 1.0773492894966097,
+    "adapt": 0.33549306910705873
+   },
+   "absolute_residual": {
+    "coverage": 0.8857142857142857,
+    "size": 0.9482152462005615,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8987012987012987,
+    "size": 0.8279899259207971,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9090909090909091,
+    "size": 0.7681285999444232,
+    "adapt": 0.1932953704326761,
+    "seconds": 79.5
+   },
+   "_n": {
+    "score": 650,
+    "cal": 465,
+    "test": 385
+   }
+  }
+ },
+ "heat2d_varyingcoef": {
+  "n_own": 175,
+  "n_test": 1500,
+  "mae": [
+   0.082,
+   0.101,
+   0.11
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.548,
+    "size": 0.3016477224207699,
+    "adapt": 0.39275793811463916
+   },
+   "ens_conf": {
+    "coverage": 0.9573333333333334,
+    "size": 1.1516493229228915,
+    "adapt": 0.39275793811463916
+   },
+   "absolute_residual": {
+    "coverage": 0.9746666666666667,
+    "size": 1.013157248497009,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.976,
+    "size": 0.9412966302637735,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9666666666666667,
+    "size": 0.9831496406319125,
+    "adapt": 0.2964470473097989,
+    "seconds": 24.7
+   },
+   "_n": {
+    "score": 101,
+    "cal": 74,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.5093833780160858,
+    "size": 0.3013253371324892,
+    "adapt": 0.3920357714839098
+   },
+   "ens_conf": {
+    "coverage": 0.9222520107238605,
+    "size": 0.8666796711660977,
+    "adapt": 0.3920357714839098
+   },
+   "absolute_residual": {
+    "coverage": 0.9195710455764075,
+    "size": 0.6276819109916688,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9249329758713136,
+    "size": 0.6117648034080309,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9142091152815014,
+    "size": 0.5763413222457129,
+    "adapt": 0.4634492464207935,
+    "seconds": 110.4
+   },
+   "_n": {
+    "score": 668,
+    "cal": 459,
+    "test": 373
+   }
+  }
+ },
+ "heatinv": {
+  "n_own": 174,
+  "n_test": 1500,
+  "mae": [
+   0.111,
+   0.146,
+   0.165
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.3606666666666667,
+    "size": 0.3149039821887363,
+    "adapt": 0.3348448317842318
+   },
+   "ens_conf": {
+    "coverage": 0.9426666666666667,
+    "size": 1.2325946408998105,
+    "adapt": 0.3348448317842318
+   },
+   "absolute_residual": {
+    "coverage": 0.944,
+    "size": 0.9425894021987915,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9293333333333333,
+    "size": 0.8288620239598192,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9133333333333333,
+    "size": 0.8246712051955583,
+    "adapt": 0.27718265879617304,
+    "seconds": 12.2
+   },
+   "_n": {
+    "score": 110,
+    "cal": 64,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.37755102040816324,
+    "size": 0.3267795909483373,
+    "adapt": 0.36103136906936684
+   },
+   "ens_conf": {
+    "coverage": 0.9285714285714286,
+    "size": 1.057043227933453,
+    "adapt": 0.36103136906936684
+   },
+   "absolute_residual": {
+    "coverage": 0.9005102040816326,
+    "size": 0.831751048564911,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9362244897959183,
+    "size": 0.7978753855886153,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9362244897959183,
+    "size": 0.7780891272892333,
+    "adapt": 0.38190370738404883,
+    "seconds": 69.3
+   },
+   "_n": {
+    "score": 654,
+    "cal": 454,
+    "test": 392
+   }
+  }
+ },
+ "heatnd": {
+  "n_own": 175,
+  "n_test": 1500,
+  "mae": [
+   0.339,
+   0.401,
+   0.4
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.21266666666666667,
+    "size": 0.6635035596209887,
+    "adapt": 0.3009175846752977
+   },
+   "ens_conf": {
+    "coverage": 0.89,
+    "size": 2.6713396863424292,
+    "adapt": 0.3009175846752977
+   },
+   "absolute_residual": {
+    "coverage": 0.902,
+    "size": 2.2277233600616455,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.898,
+    "size": 2.082087882862047,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.904,
+    "size": 2.1519035703565743,
+    "adapt": 0.39500486568661136,
+    "seconds": 12.0
+   },
+   "_n": {
+    "score": 104,
+    "cal": 71,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.20351758793969849,
+    "size": 0.6709651577511102,
+    "adapt": 0.3502744113933429
+   },
+   "ens_conf": {
+    "coverage": 0.9396984924623115,
+    "size": 3.0887897753272355,
+    "adapt": 0.3502744113933429
+   },
+   "absolute_residual": {
+    "coverage": 0.8944723618090452,
+    "size": 2.2780327796936035,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8919597989949749,
+    "size": 2.131648287252447,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8919597989949749,
+    "size": 1.8143269404560136,
+    "adapt": 0.4683500645592691,
+    "seconds": 54.8
+   },
+   "_n": {
+    "score": 640,
+    "cal": 462,
+    "test": 398
+   }
+  }
+ },
+ "ns2d_liddriven": {
+  "n_own": 192,
+  "n_test": 1500,
+  "mae": [
+   0.099,
+   0.132,
+   0.154
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.30866666666666664,
+    "size": 0.26137992576041524,
+    "adapt": 0.33211248064041354
+   },
+   "ens_conf": {
+    "coverage": 0.9113333333333333,
+    "size": 0.9730225089139869,
+    "adapt": 0.33211248064041354
+   },
+   "absolute_residual": {
+    "coverage": 0.8793333333333333,
+    "size": 0.7521862983703613,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.886,
+    "size": 0.678060489379368,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.904,
+    "size": 0.7516147615199376,
+    "adapt": 0.25916833786889387,
+    "seconds": 10.2
+   },
+   "_n": {
+    "score": 115,
+    "cal": 77,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.3324175824175824,
+    "size": 0.27153692437327026,
+    "adapt": 0.38053876385134167
+   },
+   "ens_conf": {
+    "coverage": 0.9423076923076923,
+    "size": 1.0599993947459483,
+    "adapt": 0.38053876385134167
+   },
+   "absolute_residual": {
+    "coverage": 0.9093406593406593,
+    "size": 0.8589867353439331,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9258241758241759,
+    "size": 0.7467386467450945,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9478021978021978,
+    "size": 0.7670240521562691,
+    "adapt": 0.45093287783200603,
+    "seconds": 63.6
+   },
+   "_n": {
+    "score": 701,
+    "cal": 435,
+    "test": 364
+   }
+  }
+ },
+ "poisson3d_complexgeometry": {
+  "n_own": 163,
+  "n_test": 1500,
+  "mae": [
+   0.111,
+   0.156,
+   0.189
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.30933333333333335,
+    "size": 0.2973366890286129,
+    "adapt": 0.245950374418789
+   },
+   "ens_conf": {
+    "coverage": 0.9766666666666667,
+    "size": 1.8616477200708976,
+    "adapt": 0.245950374418789
+   },
+   "absolute_residual": {
+    "coverage": 0.902,
+    "size": 0.8878856897354126,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9386666666666666,
+    "size": 0.8608777943371961,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8986666666666666,
+    "size": 0.9080048143756692,
+    "adapt": 0.23098492460925962,
+    "seconds": 15.3
+   },
+   "_n": {
+    "score": 106,
+    "cal": 57,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.3172043010752688,
+    "size": 0.2974838365500067,
+    "adapt": 0.30792263547195914
+   },
+   "ens_conf": {
+    "coverage": 0.9327956989247311,
+    "size": 1.2649919736826378,
+    "adapt": 0.30792263547195914
+   },
+   "absolute_residual": {
+    "coverage": 0.9005376344086021,
+    "size": 0.8838682174682617,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8736559139784946,
+    "size": 0.7113247565645635,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8817204301075269,
+    "size": 0.7227807896070091,
+    "adapt": 0.3986118003959558,
+    "seconds": 59.9
+   },
+   "_n": {
+    "score": 682,
+    "cal": 446,
+    "test": 372
+   }
+  }
+ },
+ "poisson_boltzmann_2d": {
+  "n_own": 185,
+  "n_test": 1500,
+  "mae": [
+   0.136,
+   0.184,
+   0.206
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.32866666666666666,
+    "size": 0.3679682088846026,
+    "adapt": 0.3502216688542721
+   },
+   "ens_conf": {
+    "coverage": 0.9013333333333333,
+    "size": 1.529141778268483,
+    "adapt": 0.3502216688542721
+   },
+   "absolute_residual": {
+    "coverage": 0.9446666666666667,
+    "size": 1.2643519639968872,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9513333333333334,
+    "size": 1.1974633323827149,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9346666666666666,
+    "size": 1.4620649692240046,
+    "adapt": 0.23320920430027678,
+    "seconds": 10.7
+   },
+   "_n": {
+    "score": 105,
+    "cal": 80,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.3324607329842932,
+    "size": 0.3646659416581635,
+    "adapt": 0.4130323986045427
+   },
+   "ens_conf": {
+    "coverage": 0.8586387434554974,
+    "size": 1.4527811608604706,
+    "adapt": 0.4130323986045427
+   },
+   "absolute_residual": {
+    "coverage": 0.8507853403141361,
+    "size": 1.0076358318328857,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8586387434554974,
+    "size": 0.9118921819200302,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8926701570680629,
+    "size": 1.0028720226614842,
+    "adapt": 0.4144439585203313,
+    "seconds": 59.7
+   },
+   "_n": {
+    "score": 683,
+    "cal": 435,
+    "test": 382
+   }
+  }
+ },
+ "poissoninv": {
+  "n_own": 200,
+  "n_test": 1500,
+  "mae": [
+   0.136,
+   0.169,
+   0.191
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.31933333333333336,
+    "size": 0.3021245044140066,
+    "adapt": 0.35020295062371404
+   },
+   "ens_conf": {
+    "coverage": 0.9053333333333333,
+    "size": 1.3631964027429744,
+    "adapt": 0.35020295062371404
+   },
+   "absolute_residual": {
+    "coverage": 0.8226666666666667,
+    "size": 0.8504693508148193,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8406666666666667,
+    "size": 0.8312715063025072,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8533333333333334,
+    "size": 0.8647997209136726,
+    "adapt": 0.6046695848350774,
+    "seconds": 10.5
+   },
+   "_n": {
+    "score": 120,
+    "cal": 80,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.3523035230352303,
+    "size": 0.30463811640927113,
+    "adapt": 0.29043783974855025
+   },
+   "ens_conf": {
+    "coverage": 0.924119241192412,
+    "size": 1.4294374969559422,
+    "adapt": 0.29043783974855025
+   },
+   "absolute_residual": {
+    "coverage": 0.943089430894309,
+    "size": 1.202097773551941,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9214092140921409,
+    "size": 1.0446138801205955,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9132791327913279,
+    "size": 0.9816732890252875,
+    "adapt": 0.5663750441852244,
+    "seconds": 65.0
+   },
+   "_n": {
+    "score": 683,
+    "cal": 448,
+    "test": 369
+   }
+  }
+ },
+ "poissonnd": {
+  "n_own": 166,
+  "n_test": 1500,
+  "mae": [
+   0.312,
+   0.355,
+   0.376
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.25133333333333335,
+    "size": 0.6962309937677781,
+    "adapt": 0.3422394626328629
+   },
+   "ens_conf": {
+    "coverage": 0.9806666666666667,
+    "size": 4.88366001041517,
+    "adapt": 0.3422394626328629
+   },
+   "absolute_residual": {
+    "coverage": 0.9926666666666667,
+    "size": 3.381875276565551,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9826666666666667,
+    "size": 2.650811458361725,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9893333333333333,
+    "size": 3.3914879266645963,
+    "adapt": 0.34819879684230864,
+    "seconds": 15.0
+   },
+   "_n": {
+    "score": 110,
+    "cal": 56,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.23796033994334279,
+    "size": 0.7009262664531042,
+    "adapt": 0.34129566297245273
+   },
+   "ens_conf": {
+    "coverage": 0.8810198300283286,
+    "size": 2.604665213895771,
+    "adapt": 0.34129566297245273
+   },
+   "absolute_residual": {
+    "coverage": 0.8980169971671388,
+    "size": 2.0532081127166744,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8895184135977338,
+    "size": 1.9002689235427612,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.8725212464589235,
+    "size": 1.5904972792931371,
+    "adapt": 0.5014480765789164,
+    "seconds": 61.0
+   },
+   "_n": {
+    "score": 681,
+    "cal": 466,
+    "test": 353
+   }
+  }
+ },
+ "wave1d": {
+  "n_own": 197,
+  "n_test": 1500,
+  "mae": [
+   0.113,
+   0.175,
+   0.216
+  ],
+  "realistic": {
+   "ens_raw": {
+    "coverage": 0.29133333333333333,
+    "size": 0.331576666363444,
+    "adapt": 0.37069257930398425
+   },
+   "ens_conf": {
+    "coverage": 0.918,
+    "size": 1.3499088914599542,
+    "adapt": 0.37069257930398425
+   },
+   "absolute_residual": {
+    "coverage": 0.9326666666666666,
+    "size": 1.2532540559768677,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.9313333333333333,
+    "size": 1.0272913714369725,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9606666666666667,
+    "size": 1.3765638741913289,
+    "adapt": 0.4484496130428944,
+    "seconds": 15.9
+   },
+   "_n": {
+    "score": 120,
+    "cal": 77,
+    "test": 1500
+   }
+  },
+  "generous": {
+   "ens_raw": {
+    "coverage": 0.2849462365591398,
+    "size": 0.3329344787848182,
+    "adapt": 0.4063365046004858
+   },
+   "ens_conf": {
+    "coverage": 0.8978494623655914,
+    "size": 1.2253377564462868,
+    "adapt": 0.4063365046004858
+   },
+   "absolute_residual": {
+    "coverage": 0.8951612903225806,
+    "size": 1.0860117673873901,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "global_ellipsoid": {
+    "coverage": 0.8978494623655914,
+    "size": 0.8727518832441412,
+    "adapt": NaN,
+    "seconds": 0.0
+   },
+   "spline": {
+    "coverage": 0.9005376344086021,
+    "size": 0.8079689061463087,
+    "adapt": 0.3707513019616198,
+    "seconds": 62.1
+   },
+   "_n": {
+    "score": 685,
+    "cal": 443,
+    "test": 372
+   }
+  }
+ }
+}
