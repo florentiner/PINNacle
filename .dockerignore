@@ -14,7 +14,6 @@ agent_combo_work
 runs_*
 optuna_studies
 db_files
-landscape_visualization
 *.pt
 *.ipynb
 node_modules
