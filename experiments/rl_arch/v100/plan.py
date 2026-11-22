@@ -33,8 +33,10 @@ PDES = {
     "b1d": dict(pde="burgers_1d", subdir="burgers1d", src="B", env={"RL_LBFGS_LONG": "1500"}, flags=""),
     "hinv": dict(pde="heatinv", subdir="heatinv", src="A", flags="--plain-fnn"),
     "p3dcg": dict(pde="poisson3d_complexgeometry", subdir="poisson3d_complexgeometry", src="A", flags=""),
-    "ns2dlt": dict(pde="ns2d_longtime", subdir="ns2d_longtime", src="A", flags=""),
-    "ks": dict(pde="kuramoto_sivashinsky", subdir="kuramoto_sivashinsky", src="A", flags="--hidden-layers 50*5"),
+    # переход у NS 2D longtime и KS в разы дороже: сборщикам больше часов
+    "ns2dlt": dict(pde="ns2d_longtime", subdir="ns2d_longtime", src="A", flags="", collect_hours=12.0),
+    "ks": dict(pde="kuramoto_sivashinsky", subdir="kuramoto_sivashinsky", src="A", flags="--hidden-layers 50*5",
+               collect_hours=12.0),
 }
 TRAIN_SEEDS = (1234, 4321, 2718)
 EVAL_SEEDS = "101,202,303"
@@ -55,13 +57,14 @@ def jobs_for(key, a):
     py = "python -u /app/experiments/rl_arch"
     out = []
     bufs = []
+    hrs = p.get("collect_hours", a.collect_hours)
     for k in range(a.collectors):
         tag = f"tbuf_{key}_w{k}"
         bufs.append(f"{base}/collect/buffers_new/{tag}")
         out.append(dict(id=f"col-{key}-{k}", pde=key, cwd=cwd, env=env, needs=[], cmds=[
             f"{py}/collect_active.py --pde {pde} --budget 7000 --rounds 99 --batch 3 --share-prefix --prefix-bonus 0.1 "
             f"--truncate 3 --acq lcb --lcb-k 1 --table {table} --src-chains 20 --src-seed 0 --save-buffer "
-            f"--worker {k}/{a.collectors} --hours {a.collect_hours} --kernel-hours {a.collect_hours} --resume "
+            f"--worker {k}/{a.collectors} --hours {hrs} --kernel-hours {hrs} --resume "
             f"--save-dir {base}/collect --tag {tag} {fl}".strip()]))
     col_ids = [j["id"] for j in out]
     buf = ",".join(bufs)
@@ -98,7 +101,8 @@ def smokify(j):
         elif "agent_combo.py" in c:
             c += " --smoke"
         elif "offline_rl.py" in c:
-            c = c.replace("--episode-budget 7000", "--episode-budget 300") + " --smoke --epochs 2"
+            # без --smoke: в этом режиме тренер модель не сохраняет, а она нужна оценкам
+            c = c.replace("--episode-budget 7000", "--episode-budget 300") + " --epochs 2 --fqe-epochs 2"
         elif "online_eval_env.py" in c:
             c = (c.replace("--budget 7000", "--budget 300").replace(f"--seeds {EVAL_SEEDS}", "--seeds 101")
                  .replace(f"--seeds {SEL_SEEDS}", "--seeds 42"))
@@ -128,9 +132,9 @@ def main():
         jobs += jobs_for(k, a)
     if a.smoke:
         jobs = [smokify(j) for j in jobs if not any(j["id"].endswith(f"-{m}") for m in TRAIN_SEEDS[1:])]
-    # порядок запуска: сначала сбор всех уравнений (самое долгое), затем остальное — по порядку уравнений;
-    # run_jobs берёт задачи в порядке списка, когда их зависимости готовы
-    jobs.sort(key=lambda j: (0 if j["id"].startswith("col-") else 1, keys.index(j["pde"])))
+    # порядок: по уравнениям в порядке --pdes (последние — последними), внутри — сбор, учитель, обучения, оценки;
+    # run_jobs берёт первую готовую задачу списка, поэтому ранние уравнения доводятся до конца раньше поздних
+    jobs.sort(key=lambda j: keys.index(j["pde"]))
     with open(a.out, "w") as f:
         json.dump(jobs, f, indent=1, ensure_ascii=False)
     print(f"задач {len(jobs)} -> {a.out}")
