@@ -1,0 +1,21 @@
+# Образ итогового метода для a-dgx (experiments/rl_arch/v100/Dockerfile): только код и ref/.
+# Секреты (токены Kaggle и HF) в образ не попадают.
+.git
+**/.DS_Store
+**/__pycache__
+experiments/chain_eval/accounts.json
+experiments/chain_eval/kaggle_build
+experiments/chain_eval/accounts*.json
+paper
+vpinn
+agents_eval
+5_pde
+agent_combo_work
+runs_*
+optuna_studies
+db_files
+landscape_visualization
+*.pt
+*.ipynb
+node_modules
+!experiments/rl_arch/v100/assets/*.pt

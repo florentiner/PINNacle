@@ -181,3 +181,7 @@ experiments/chain_eval/accounts.json
 experiments/chain_eval/kaggle_build/
 runs_chain_eval/
 .env
+
+# ресурсы образа a-dgx (таблицы журналов, энкодер) — собираются на маке, в git не идут
+experiments/rl_arch/v100/assets/
+experiments/rl_arch/v100/results_local/

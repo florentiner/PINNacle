@@ -494,7 +494,7 @@ def base_table(a):
     """Таблица переходов буферов (surrogate.build_table с кэшем .npz) и описатель целевой задачи.
     Возвращает dict(tab, ctx, k_l2re, table_s). Буферы берутся из RL_BUFFER_DIR, иначе
     скачиваются из HF (snapshot_download), как это делает загрузчик offline_rl."""
-    key = (a.pde, a.table, a.subdirs)
+    key = (a.pde, a.table, a.subdirs, getattr(a, "src_chains", 0), getattr(a, "src_seed", 0))
     if _BASE.get("key") == key:
         return _BASE
     import offline_rl as O
@@ -524,6 +524,12 @@ def base_table(a):
         tab = S.build_table(subdirs=subs, root=root)
         S.save_table(tab, path)
     tab = S.load_table(path)
+    if getattr(a, "src_chains", 0):
+        # журналы источников — по N цепочек каждой задачи (тот же выбор, что у учителя agent_combo.py
+        # --src-chains и суррогата ученика offline_rl.py --mb-src-chains); цель в таблицу не входит
+        import agent_combo as AC
+        tab, src_info = AC.cap_source_chains(AC.with_epa(tab), a.src_chains, a.src_seed, skip=(a.pde,))
+        print(f"источники суррогата сбора: по {a.src_chains} цепочек (сид {a.src_seed}): {src_info}", flush=True)
     m = meta[a.pde]
     k = float(m["init_l2re"]) / float(m["init_err"]) if m.get("init_l2re") and m.get("init_err") else 1.0
     _BASE.clear()
@@ -979,7 +985,7 @@ SETTINGS = ("budget", "fidelity_note", "acq", "lcb_k", "batch", "rounds", "share
             "keep_opt_mode", "lbfgs_tol", "plain_fnn", "hidden_layers", "seed_pool", "collect_seed",
             "use_old_target", "consistent", "members", "quick", "plan_width", "plan_cap", "plan_top",
             "n_parents", "n_mut", "n_cross", "n_random", "min_dist", "subdirs", "init", "no_clip", "save_buffer",
-            "worker")
+            "worker", "src_chains", "src_seed")
 SAME = ("budget", "acq", "keep_opt", "keep_opt_mode", "lbfgs_tol", "plain_fnn", "hidden_layers", "mask")
 
 
@@ -1047,6 +1053,9 @@ def build_parser():
     ap.add_argument("--table", default="", help="кэш таблицы переходов (.npz); по умолчанию <save-dir>/surrogate_table.npz")
     ap.add_argument("--table-hf", default="", help="путь готовой таблицы в датасете результатов HF (если есть)")
     ap.add_argument("--subdirs", default="", help="папки буферов для таблицы через запятую (по умолчанию все)")
+    ap.add_argument("--src-chains", type=int, default=0,
+                    help="у каждой задачи таблицы только N случайных цепочек (agent_combo.cap_source_chains); 0 — все")
+    ap.add_argument("--src-seed", type=int, default=0, help="сид выбора цепочек --src-chains")
     ap.add_argument("--keep-opt", action="store_true")
     ap.add_argument("--keep-opt-mode", default="all", choices=["all", "safe"])
     ap.add_argument("--lbfgs-tol", type=float, default=None)

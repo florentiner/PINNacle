@@ -92,7 +92,7 @@ GAMMA = 0.9   # их значение (rl_agent_params в poisson_boltzmann2d_ch
 N_ACTIONS = 27
 # эпохи на действие: a -> (opt=a//9, lr=(a//3)%3, ep=a%3); таблица и индексация
 # те же, что в online_train_env.py (иначе SMDP-дисконт разойдётся с онлайном)
-EPOCHS_TABLE = [100, 1000, 2500, 100, 500, 1000, 100, 200, 300]
+EPOCHS_TABLE = [100, 1000, 2500, 100, 500, int(os.environ.get("RL_LBFGS_LONG", "0") or 0) or 1000, 100, 200, 300]
 REPO = "danil-e/rlpinn-ablation-buffers"
 SUBDIR = "poisson_boltzmann_2d"
 OUT_REPO = "danil-e/pinnacle-optuna-db"
@@ -224,7 +224,7 @@ REWARD_FORMS = ("logged", "level", "delta", "model", "dlog")
 STATE_MODES = ("full", "blind", "level", "shape", "shuffle", "loss", "tasknorm", "tele")
 SCALAR_CH = 5
 PDE_DESC_CH = 6
-_EPOCHS_TABLE = [100, 1000, 2500, 100, 500, 1000, 100, 200, 300]
+_EPOCHS_TABLE = [100, 1000, 2500, 100, 500, int(os.environ.get("RL_LBFGS_LONG", "0") or 0) or 1000, 100, 200, 300]
 
 
 def apply_state_mode(S, mode: str = "full", seed: int = 0, pde: str | None = None):

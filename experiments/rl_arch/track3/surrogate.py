@@ -55,8 +55,10 @@ BUDGET = 7000
 K_MAX = 12                      # шагов в цепочке буфера
 L_LO, L_HI = -6.0, 4.0          # пределы log10 ошибки
 # та же таблица и тот же порядок, что ACTION_TABLE в online_eval_env.py (a = opt*9 + lr*3 + ep)
+# RL_LBFGS_LONG — длительность длинного L-BFGS, как в online_eval_env.py (протокол статьи: 1500 у части задач)
+LBFGS_LONG = int(os.environ.get("RL_LBFGS_LONG", "0") or 0) or 1000
 ACTIONS = [(o, lr, ep) for o, lrs, eps in (("Adam", (1e-2, 1e-3, 1e-4), (100, 1000, 2500)),
-                                            ("LBFGS", (1.0, 5e-1, 1e-1), (100, 500, 1000)),
+                                            ("LBFGS", (1.0, 5e-1, 1e-1), (100, 500, LBFGS_LONG)),
                                             ("PSO", (0.0, 1e-3, 1e-4), (100, 200, 300)))
            for lr in lrs for ep in eps]
 EPOCHS = np.array([a[2] for a in ACTIONS], dtype=np.int64)
@@ -326,9 +328,12 @@ def featurize(ctx, step, spent, spf, pa, l, a, lv=None, ep=None):
 
 def table_features(tab, rows=None, level=False):
     rows = np.arange(len(tab["A"])) if rows is None else rows
+    # с RL_LBFGS_LONG номинальные эпохи длинного L-BFGS другие, а журналы источников записаны с 1000:
+    # тогда признак эпох берётся из фактических эпох строки (EPA)
+    ep = tab["EPA"][rows] if (LBFGS_LONG != 1000 and "EPA" in tab) else None
     return featurize(tab["CTX"][tab["PDE"][rows]], tab["STEP"][rows], tab["SPENT"][rows],
                      tab["SPF"][rows], tab["PA"][rows], tab["L"][rows], tab["A"][rows],
-                     lv=(tab["LV"][rows] if level else None))
+                     lv=(tab["LV"][rows] if level else None), ep=ep)
 
 
 def _hgb(seed, max_iter, lr, leaves, l2):

@@ -74,10 +74,14 @@ import deepxde as dde  # noqa: E402
 OUT_REPO = "danil-e/pinnacle-optuna-db"
 GRID_RANGE = [-1.25, 1.25, 25]
 
+# RL_LBFGS_LONG — длительность длинного L-BFGS (третий слот): по протоколу статьи у burgers1d и
+# poisson_boltzmann_2d 1500 вместо 1000 (experiments/agent_ablation/pde_registry.py, lbfgs_epochs).
+# Задаётся переменной окружения, чтобы среда, сбор, тренер и модель среды видели одну таблицу.
+LBFGS_LONG = int(os.environ.get("RL_LBFGS_LONG", "0") or 0) or 1000
 ACTION_TABLE = []
 for _opt, _lrs, _eps in [
     ("Adam", [1e-2, 1e-3, 1e-4], [100, 1000, 2500]),
-    ("LBFGS", [1.0, 5e-1, 1e-1], [100, 500, 1000]),
+    ("LBFGS", [1.0, 5e-1, 1e-1], [100, 500, LBFGS_LONG]),
     ("PSO", [0.0, 1e-3, 1e-4], [100, 200, 300]),
 ]:
     for _lr in _lrs:
@@ -1409,7 +1413,16 @@ def run_seed(seed, args, progress_cb=None):
 def result_done(name):
     """Есть ли в HF законченная строка этого сида (не промежуточная и не оборванная). При
     повторном запуске задачи с --resume такие сиды пропускаются: иначе кернел, перезапущенный
-    ради недосчитанных сидов, заново считал бы готовые (в двойной точности это часы на сид)."""
+    ради недосчитанных сидов, заново считал бы готовые (в двойной точности это часы на сид).
+    С RL_LOCAL_RESULTS (офлайн-контейнер) сначала смотрится локальный файл."""
+    loc = os.environ.get("RL_LOCAL_RESULTS")
+    if loc and os.path.exists(os.path.join(loc, f"{name}.json")):
+        try:
+            d = json.load(open(os.path.join(loc, f"{name}.json")))
+            if not d.get("partial") and not d.get("unfinished"):
+                return True
+        except Exception:
+            pass
     url = f"https://huggingface.co/datasets/{OUT_REPO}/resolve/main/rl_arch/online_env/{name}.json"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -1421,6 +1434,15 @@ def result_done(name):
 
 
 def upload(row, name):
+    loc = os.environ.get("RL_LOCAL_RESULTS")
+    if loc:
+        # офлайн-контейнер (a-dgx): строка пишется в том, на HF её выгружает мак
+        os.makedirs(loc, exist_ok=True)
+        tmp = os.path.join(loc, f".{name}.json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(row, f, indent=1)
+        os.replace(tmp, os.path.join(loc, f"{name}.json"))
+        print(f"saved {loc}/{name}.json", flush=True)
     tok = os.environ.get("HF_TOKEN_WRITE") or os.environ.get("HF_TOKEN")
     if not tok:
         print("no HF token — result printed only", flush=True)
